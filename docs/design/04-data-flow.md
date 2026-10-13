@@ -1,9 +1,9 @@
 # 04 — Data Flow
 
-> **TL;DR** — Producers publish to `/jarvis/ingest`. The recorder validates, persists and then
-> republishes on `/jarvis/events`. Every decision Jarvis makes (fault transitions, rule matches,
-> recovery steps, insights) loops back through the recorder as a new event, with `causation_id`
-> pointing at its cause. The dashboard and the agent read the same log.
+> **TL;DR** — Producers publish to `/jarvis/ingest`. The event hub validates, sequences and republishes on
+> `/jarvis/events`. Every decision Jarvis makes (fault transitions, rule matches, recovery steps, insights)
+> loops back through the hub as a new event, with `causation_id` pointing at its cause. rosbag2 records the
+> stream, and the lake turns recordings into queryable Parquet.
 
 ---
 
@@ -11,19 +11,12 @@
 
 ```mermaid
 flowchart LR
-  P["Producers<br/>reporter libs · bridges"] -->|"/jarvis/ingest"| ING
+  P["Producers<br/>reporter libs · bridges"] -->|"/jarvis/ingest"| HUB["/jarvis/event_hub<br/>validate · dedupe · shed · seq"]
+  HUB -->|"/jarvis/events"| EV{{"canonical stream"}}
 
-  subgraph REC["/jarvis/recorder — single writer"]
-    ING["IngestPipeline<br/>validate · normalize · shed · seq"]
-    FM["FaultManager"]
-    IT["IncidentTracker"]
-    ING --> FM --> IT
-    FM -->|"FAULT_STATE"| ING
-  end
-
-  ING -->|"append batch"| S[("EventStore")]
-  ING -->|"/jarvis/events"| EV{{"canonical stream"}}
-  FM -->|"/jarvis/faults"| FS{{"latched snapshot"}}
+  EV --> FM["/jarvis/fault_manager"]
+  FM -->|"FAULT_STATE"| P1["→ /jarvis/ingest"]
+  FM -->|"/jarvis/faults (latched)"| FS{{"active faults"}}
 
   EV --> RE["/jarvis/rule_engine"]
   FS --> RE
@@ -31,16 +24,22 @@ flowchart LR
   RE -->|"ExecuteRecovery"| RO["/jarvis/recovery"]
   RO -->|"actuate"| ACT["Actuators → robot"]
   RO -->|"RECOVERY"| P3["→ /jarvis/ingest"]
+  RO -->|"/jarvis/executions (latched)"| XS{{"executions"}}
 
   EV --> AG["/jarvis/agent"]
   AG -->|"INSIGHT"| P4["→ /jarvis/ingest"]
-  AG -->|"proposal: ExecuteRecovery, requester=AGENT"| RO
+  AG -->|"proposal (requester AGENT)"| RO
+
+  EV --> REC["/jarvis/recorder<br/>rosbag2"]
+  FS --> REC
+  XS --> REC
+  REC --> LAKE["jarvis_lake<br/>Parquet · DuckDB"]
 
   EV --> GW["/jarvis/gateway"]
-  S --> GW
   FS --> GW
+  LAKE --> GW
   GW <-->|"REST · WS"| UI["Dashboard"]
-  GW -->|"ack · clear · trigger · approve"| REC
+  GW -->|"ack · clear"| FM
   GW -->|"trigger · approve · cancel · mode"| RO
 ```
 
@@ -51,54 +50,53 @@ sequenceDiagram
   autonumber
   participant App as App (reporter lib)
   participant In as /jarvis/ingest
-  participant P as IngestPipeline
-  participant W as Store writer thread
-  participant DB as SQLite (WAL)
+  participant H as EventHub
+  participant RB as Ring buffer
   participant Out as /jarvis/events
+  participant R as rosbag2 recorder
 
-  App->>In: Event (id=UUIDv7, seq=0)
-  In->>P: callback (core input group)
-  P->>P: validate schema, sizes, code format
-  P->>P: dedupe by id, rate-limit per (source, code)
-  P->>P: fill recv_stamp, defaults from catalog, seq = last + 1
-  P->>W: enqueue (bounded, severity-aware)
-  W->>DB: group commit (≤ 20 ms or 256 events)
-  DB-->>W: committed up to seq N
-  W-->>P: ack N
-  P->>Out: publish events up to seq N (persist-then-publish)
+  App->>App: client-side debounce and rate limit
+  App->>In: Event (id = UUIDv7, seq = 0)
+  In->>H: callback (core input group)
+  H->>H: validate schema, sizes, code format
+  H->>H: dedupe by id, rate-limit per (source, code)
+  H->>H: fill recv_stamp and catalog defaults, assign seq
+  H->>RB: append (severity-aware eviction)
+  H->>Out: publish
+  Out-->>R: recorded to the current MCAP split
 ```
 
-Details:
-- **Rejections** (bad schema, oversize, depth > 16) produce a rate-limited `jarvis.ingest.rejected` SYSTEM event that carries the reason.
-- **Suppression**: after the token bucket empties, the pipeline counts instead of storing, then emits one `jarvis.ingest.suppressed` event (`attrs.code`, `attrs.count`, `attrs.window_s`).
-- **Load shedding**: when the writer queue is above the high-water mark, DEBUG and then INFO are dropped and counted. ≥ ERROR always enqueues; if needed the producer callback blocks briefly.
+- **Rejections** (bad schema, oversize, causal depth > 16) produce a rate-limited `jarvis.ingest.rejected` event with the reason.
+- **Suppression**: once the token bucket is empty, the hub counts instead of forwarding, then emits one `jarvis.ingest.suppressed` event (`attrs.code`, `attrs.count`, `attrs.window_s`).
+- **Load shedding**: above the high-water mark, DEBUG and then INFO are dropped and counted. ≥ ERROR is always forwarded.
 
 ## 2. Fault confirmation, incident & black box
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant B as Bridge or app
-  participant P as IngestPipeline
+  participant B as Topic watchdog (bridge)
+  participant H as EventHub
   participant F as FaultManager
-  participant I as IncidentTracker
-  participant K as rosbag2 recorder (snapshot mode)
+  participant K as /jarvis/blackbox (snapshot mode)
   participant FS as /jarvis/faults
+  participant ST as State snapshot
 
-  B->>P: FAULT_RAISE ros.topic.stale (component=lidar_front)
-  P->>F: on_report
-  F->>F: no open episode, create PENDING (debounce persist 1 s)
-  F->>P: emit FAULT_STATE PENDING
-  Note over F: timer fires at +1 s, no CLEAR received
-  F->>F: confirm, state ACTIVE, capture freeze frame
-  F->>I: fault confirmed (severity ERROR)
-  I->>I: open incident (or join one on the same component within 120 s)
-  F->>P: emit FAULT_STATE ACTIVE (correlation_id = incident)
-  F->>K: catalog capture=true, call ~/snapshot
+  B->>H: FAULT_RAISE ros.topic.stale (component lidar)
+  H-->>F: via /jarvis/events
+  F->>F: open episode PENDING (debounce persist 1 s)
+  F->>H: FAULT_STATE PENDING
+  Note over F: timer fires at +1 s with no CLEAR
+  F->>F: confirm ACTIVE, sample freeze-frame topics, open incident
+  F->>ST: persist open episodes and incident (atomic)
+  F->>H: FAULT_STATE ACTIVE (correlation_id = incident)
+  F->>FS: publish snapshot (TRANSIENT_LOCAL) and /diagnostics
+  F->>K: catalog blackbox = true, call ~/snapshot
   K-->>F: bag path
-  F->>P: emit SYSTEM jarvis.blackbox.captured (attrs.path)
-  F->>FS: publish snapshot (TRANSIENT_LOCAL)
+  F->>H: SYSTEM jarvis.blackbox.captured (attrs.path)
 ```
+
+Correlation: if `safety.estop.engaged` is ACTIVE and `drive.*` faults confirm within 1 s, they are marked `muted_by` the e-stop episode. They're still recorded, but hidden from the active list, and cleared together with it.
 
 ## 3. Rule match → recovery → verify → escalate
 
@@ -109,13 +107,13 @@ sequenceDiagram
   participant RE as RuleEngine
   participant RO as Orchestrator
   participant A as Actuator (lifecycle)
-  participant N as lidar driver (managed node)
+  participant N as scan_relay (managed node)
   participant IN as /jarvis/ingest
 
-  EV->>RE: FAULT_STATE ACTIVE ros.topic.stale (seq 1042)
-  RE->>RE: rule lidar-stale-restart matches, guard ok, cooldown ok
-  RE->>IN: RULE_MATCH (causation = event 1042)
-  RE->>RO: ExecuteRecovery goal (plan restart-lifecycle-node, requester RULE)
+  EV->>RE: FAULT_STATE ACTIVE ros.topic.stale
+  RE->>RE: rule scan-stale-restart matches, guard ok, cooldown ok
+  RE->>IN: RULE_MATCH (causation = fault event)
+  RE->>RO: ExecuteRecovery (plan restart-lifecycle-node, requester RULE)
   RO->>RO: gates: mode, params, requester, preconditions, rate, locks
   RO->>IN: RECOVERY STARTED
   RO->>A: step restart, lifecycle.restart
@@ -133,8 +131,8 @@ When verification times out, the escalation ladder runs:
 
 ```mermaid
 flowchart LR
-  L1["L1 · targeted fix<br/>restart node"] -->|"failed"| L2["L2 · broader fix<br/>restart subsystem"]
-  L2 -->|"failed"| L3["L3 · safe state<br/>safe-stop plan"]
+  L1["L1 · targeted fix<br/>restart node"] -->|"failed"| L2["L2 · broader fix<br/>Nav2 lifecycle reset"]
+  L2 -->|"failed"| L3["L3 · safe state<br/>cancel goals + stop"]
   L3 -->|"always"| L4["L4 · human<br/>incident ESCALATED + notify"]
 ```
 
@@ -147,22 +145,22 @@ sequenceDiagram
   participant T as TriggerPolicy
   participant W as WindowManager
   participant G as Triage (deterministic)
-  participant L as Analyst (LLM + tools)
-  participant Q as Query tools (read-only)
+  participant L as Analyst (LiteLLM + tools)
+  participant Q as Query tools (hub, lake)
   participant H as Harness checks
   participant IN as /jarvis/ingest
 
   EV->>T: FAULT_STATE ACTIVE opens incident inc-42
   T->>T: coalesce triggers for inc-42 (30 s), check budget
-  T->>W: build window(inc-42, plus or minus 5 min context)
+  T->>W: build window (inc-42 plus or minus 5 min)
   W->>G: 214 events
   G->>G: collapse repeats, rank, stats, redact attrs
-  G->>L: compact context (cached prefix + window)
+  G->>L: compact context (stable prefix + window)
   loop investigation (max 12 tool calls)
     L->>Q: query_events / get_fault_history / get_runbook / ...
     Q-->>L: results
   end
-  L->>H: submit_insight (strict schema) and maybe propose_recovery
+  L->>H: submit_insight (schema-validated) and maybe propose_recovery
   H->>H: validate evidence ids, plan exists, autonomy policy
   H->>IN: INSIGHT event (payload = Insight, correlation = inc-42)
 ```
@@ -182,7 +180,7 @@ sequenceDiagram
   RO->>RO: gates pass, plan agent_policy = supervised, approval required
   RO->>IN: RECOVERY PENDING_APPROVAL (TTL 5 min)
   RO-->>AG: feedback state PENDING_APPROVAL
-  IN-->>GW: event via /jarvis/events
+  IN-->>GW: event via /jarvis/events and /jarvis/executions
   GW-->>OP: WS push, approval card with rationale and evidence
   OP->>GW: POST /recoveries/exec-77:approve
   GW->>RO: DecideApproval (approve, user)
@@ -192,50 +190,80 @@ sequenceDiagram
 
 If nobody decides before the TTL, the execution ends as `EXPIRED`. Nothing runs.
 
-## 6. Dashboard live stream with gap-free resume
+## 6. Recording → lake
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant R as /jarvis/recorder (rosbag2)
+  participant FS as Bag directory
+  participant L as jarvis_lake
+  participant PQ as Parquet + DuckDB
+
+  R->>FS: write split N (MCAP, zstd chunks)
+  Note over R: every 5 min or 256 MiB
+  R->>FS: close split N, open split N+1
+  R-->>L: events/write_split (closed file path)
+  L->>FS: read split N (indexed, schemas embedded)
+  L->>L: decode Event, Fault, Execution (no ROS needed)
+  L->>PQ: write events/date=.../part-N.parquet
+  L->>PQ: refresh DuckDB views
+  L->>FS: mark split N converted (eligible for retention)
+```
+
+On startup the lake also scans for splits it hasn't converted yet, including unfinalized ones left by a crash. Those are recovered first.
+
+## 7. Dashboard live stream with gap-free resume
 
 ```mermaid
 sequenceDiagram
   autonumber
   participant UI as Dashboard
   participant GW as Gateway
-  participant DB as SQLite (read-only)
+  participant HB as event_hub query_events
+  participant LK as Lake (DuckDB)
   participant EV as /jarvis/events
 
-  UI->>GW: WS subscribe (since_seq 9000, filter min_severity WARN)
+  UI->>GW: WS subscribe (since_seq S, filter min_severity WARN)
   GW->>GW: start buffering live events from EV
-  GW->>DB: SELECT where seq > 9000 (paged)
-  DB-->>GW: rows up to seq 9120
-  GW-->>UI: backfill events up to 9120
-  GW-->>UI: buffered live events with seq > 9120 (dedupe by seq)
-  GW-->>UI: backfill_done (seq 9131)
+  GW->>HB: query_events after_seq S
+  alt ring buffer covers S
+    HB-->>GW: events up to seq N (complete = true)
+  else S is older than the ring buffer
+    HB-->>GW: complete = false
+    GW->>LK: SELECT where seq > S (older part)
+    LK-->>GW: rows
+    GW->>HB: query_events for the rest
+  end
+  GW-->>UI: backfill, then buffered live events with seq > N (dedupe by seq)
+  GW-->>UI: backfill_done
   EV-->>GW: live events
-  GW-->>UI: live events and fault snapshots
-  Note over UI: on reconnect, resubscribe with the last seq seen
+  GW-->>UI: live events, fault and execution snapshots
 ```
 
-## 7. Offline replay & backtesting
+## 8. Offline replay & backtesting
 
 ```mermaid
 flowchart LR
-  DB[("incident.db<br/>or events.jsonl")] --> RR["Replay reader<br/>(ordered by seq)"]
+  BAG[("Recorded MCAP<br/>/jarvis/events")] --> RR["Replay reader<br/>(ordered by seq)"]
   RR --> CORE["jarvis_core<br/>FaultManager · RuleEngine · Orchestrator"]
   CK["FakeClock<br/>driven by recv_stamp"] --> CORE
   CORE --> FX["Effects log"]
   FX --> DIFF["Report: rules fired · plans requested<br/>diff vs. what really happened"]
 ```
 
-- `jarvis backtest --rules ./rules --plans ./plans --events incident.db`
-- Actuators are replaced by a **simulated actuator** that returns the outcomes recorded in the log (or `success`, configurable).
-- The same harness is used for **regression tests**: every incident fixed in the field becomes a test case.
+- `jarvis backtest --rules ./rules --plans ./plans --bag ./bags/2026-10-13/`
+- Actuators are replaced by a **simulated actuator** that returns the outcomes recorded in the bag (or `success`, configurable).
+- Every incident fixed in the field becomes a regression test: keep its bag, assert the decisions.
 
-## 8. Delivery guarantees
+## 9. Delivery guarantees
 
 | Path | Guarantee | Mechanism |
 |------|-----------|-----------|
-| Producer → recorder | At-least-once while the recorder is up | RELIABLE QoS, KEEP_LAST 1000, de-duplication by `id` |
-| Recorder → store | Exactly-once per `id` | UNIQUE(`id`), transaction per batch |
-| Store → `/jarvis/events` | In-order, persisted first | Publish after commit, monotonic `seq` |
-| `/jarvis/events` → consumers | Gap-detectable | Consumers track `seq` and backfill via `query_events` |
+| Producer → hub | At-least-once while the hub is up | RELIABLE QoS, KEEP_LAST 1000, de-dupe by `id` |
+| Hub → `/jarvis/events` | In-order, sequenced | Single publisher, monotonic `seq` |
+| `/jarvis/events` → consumers | Gap-detectable | Consumers track `seq` and backfill via `query_events` / lake |
+| `/jarvis/events` → bag | Recorded unless the process dies (last chunk ≤ ~1 s at risk) | Recorder in the same container, RELIABLE, MCAP recovery |
+| Open faults / executions | Survive restarts and power cuts | fsynced atomic state snapshots |
 | Orchestrator actions | At-most-once per step attempt | No automatic resume after a crash (`jarvis.recovery.interrupted`) |
-| Gateway WS | Gap-free on reconnect | `since_seq` resume protocol |
+| Gateway WS | Gap-free on reconnect | `since_seq` resume across ring buffer and lake |

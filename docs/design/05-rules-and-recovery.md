@@ -67,7 +67,7 @@ event:
 
 ### Semantics (exact)
 
-- **Time base**: `recv_stamp` by default (one monotonic recorder clock, so no cross-host clock skew). Per rule, `time_basis: source` switches to `stamp`.
+- **Time base**: `recv_stamp` by default (one monotonic event-hub clock, so no cross-host clock skew). Per rule, `time_basis: source` switches to `stamp`.
 - **Order**: events are processed in `seq` order, the same order everywhere (live, replay, backtest).
 - **Partitioning**: `partition_by` keys (`source.component`, `source.node`, `attrs.<key>`, …) create independent matcher instances. If no key is given, there is a single global instance.
 - **Selection**: skip-till-next-match. Each partition holds **at most one partial match per rule**. The earliest start wins. After the rule fires, the partition's partial matches are reset.
@@ -109,42 +109,41 @@ guard:
 | `priority` | `0` | Ordering when several rules fire on the same event (higher first) |
 | `dry_run` | `false` | Shadow mode: `RULE_MATCH` is recorded with `attrs.dry_run=true` and no actions run |
 
-## 7. Rule examples
+## 7. Rule examples (Nav2 simulation demo)
 
 ```yaml
 schema: jarvis.rules/v1
 rules:
   # 1. Single event → targeted recovery
-  - id: lidar-stale-restart
-    description: Lidar topic stale → restart its driver.
+  - id: scan-stale-restart
+    description: /scan went stale → restart the scan relay (managed node).
     partition_by: [source.component]
     when:
-      event: { kind: FAULT_STATE, code: ros.topic.stale, attrs.state: ACTIVE, source.component: { glob: "lidar_*" } }
+      event: { kind: FAULT_STATE, code: ros.topic.stale, attrs.state: ACTIVE, attrs.topic: /scan }
     guard: { faults_inactive: [safety.estop.engaged] }
     then:
       - recover: { plan: restart-lifecycle-node, args: { node: "{{ event.attrs.node }}", component: "{{ event.source.component }}" } }
     policy: { cooldown: 30s, max_fires: { count: 3, per: 1h } }
 
   # 2. Escalate when the rule above keeps firing
-  - id: lidar-restart-exhausted
+  - id: scan-restart-exhausted
     when:
-      event: { kind: SYSTEM, code: jarvis.rule.suppressed, attrs.rule: lidar-stale-restart }
+      event: { kind: SYSTEM, code: jarvis.rule.suppressed, attrs.rule: scan-stale-restart }
     then:
       - recover: { plan: safe-stop }
       - incident: { escalate: true }
-      - notify: { channel: ops, message: "Lidar on {{ robot }} keeps stalling. Robot stopped safely." }
+      - notify: { channel: ops, message: "Lidar keeps stalling on {{ robot }}. Navigation stopped." }
 
-  # 3. Count in window → composite fault + ask the agent
-  - id: drive-overcurrent-burst
-    partition_by: [source.component]
+  # 3. Count in window → clear costmaps + ask the agent (action status bridge input)
+  - id: nav-goal-aborts
     when:
-      count: { event: { kind: FAULT_RAISE, code: drive.motor.overcurrent }, threshold: 5, within: 2m }
+      count: { event: { kind: FAULT_RAISE, code: ros.action.navigate_to_pose.aborted }, threshold: 3, within: 5m }
     then:
-      - emit: { kind: FAULT_RAISE, code: drive.motor.overcurrent_burst, severity: ERROR,
-                message: "{{ count }} overcurrent events on {{ partition.source.component }} in 2 min" }
-      - ask_agent: { focus: "Mechanical binding or controller tuning?" }
+      - recover: { plan: clear-costmaps }
+      - ask_agent: { focus: "Why does NavigateToPose keep aborting? Planner, controller or map?" }
+    policy: { cooldown: 2m }
 
-  # 4. Sequence with absence: "recovery didn't fix it"
+  # 4. Sequence with absence: "relocalization didn't fix it"
   - id: localization-unrecoverable
     when:
       sequence:
@@ -161,18 +160,15 @@ rules:
       - recover: { plan: safe-stop }
       - incident: { escalate: true }
 
-  # 5. Correlation in any order + state guard
-  - id: wifi-then-localization
+  # 5. Nav2 server dropped out of its lifecycle → reset the Nav2 stack
+  - id: nav2-server-error
+    partition_by: [source.component]
     when:
-      all:
-        within: 10s
-        of:
-          - event: { code: net.wifi.degraded }
-          - event: { kind: FAULT_STATE, code: nav.localization.lost, attrs.state: ACTIVE }
-    guard: { state: { robot.mode: AUTONOMOUS } }
+      event: { kind: FAULT_STATE, code: ros.lifecycle.error, attrs.state: ACTIVE,
+               source.component: { in: [controller_server, planner_server, bt_navigator, behavior_server] } }
     then:
-      - ask_agent: { focus: "Is localization loss caused by network-delivered map/odom?" }
-    policy: { dry_run: true }   # shadow mode while we learn
+      - recover: { plan: nav2-reset }
+    policy: { cooldown: 60s, max_fires: { count: 2, per: 1h }, dry_run: true }   # shadow mode first
 ```
 
 ## 8. Recovery plans
@@ -204,18 +200,46 @@ plans:
         with: { fault: { code: ros.topic.stale, component: "{{ params.component }}" }, state: CLEARED }
         timeout: 15s
     on_failure:
-      - run: { plan: restart-perception-stack }
+      - run: { plan: nav2-reset }
       - escalate: operator
 
+  - id: nav2-reset
+    description: Reset and restart the Nav2 stack through its lifecycle manager.
+    locks: [nav2]
+    agent_policy: supervised
+    steps:
+      - { id: reset,   action: nav2.manage_lifecycle, with: { manager: /lifecycle_manager_navigation, command: RESET },   timeout: 20s }
+      - { id: startup, action: nav2.manage_lifecycle, with: { manager: /lifecycle_manager_navigation, command: STARTUP }, timeout: 30s }
+      - id: verify
+        action: wait_for
+        with: { event: { kind: STATE, code: nav.stack.state, attrs.value: ACTIVE } }
+        timeout: 20s
+    on_failure:
+      - run: { plan: safe-stop }
+      - escalate: operator
+
+  - id: clear-costmaps
+    locks: [nav2]
+    agent_policy: autonomous
+    steps:
+      - { id: local,  action: nav2.clear_costmaps, with: { which: local },  timeout: 5s }
+      - { id: global, action: nav2.clear_costmaps, with: { which: global }, timeout: 5s }
+
+  - id: relocalize
+    agent_policy: supervised
+    steps:
+      - { id: reinit, action: service.empty, with: { service: /reinitialize_global_localization }, timeout: 5s }
+      - id: verify
+        action: wait_for
+        with: { fault: { code: nav.localization.lost, component: amcl }, state: CLEARED }
+        timeout: 30s
+
   - id: safe-stop
-    description: Ask the navigation stack to stop and wait until the robot is still.
+    description: Cancel navigation goals and wait until the robot is still.
     allowed_requesters: [RULE, OPERATOR, AGENT]
     agent_policy: supervised
     steps:
-      - id: stop
-        action: service.trigger
-        with: { service: /nav/stop }
-        timeout: 5s
+      - { id: cancel, action: nav2.cancel_navigation, timeout: 5s }
       - id: still
         action: wait_for
         with: { event: { kind: STATE, code: robot.motion, attrs.value: STOPPED } }
@@ -252,7 +276,11 @@ plans:
 | `service.empty` | jarvis_ros | `service` | `std_srvs/srv/Empty` |
 | `param.set` | jarvis_ros | `node`, `name`, `value` | `rcl_interfaces/srv/SetParameters` |
 | `bag.snapshot` | jarvis_ros | `service` | rosbag2 `~/snapshot` |
-| `<vendor>.<name>` | **pluginlib** | plugin-defined | Custom actuators (`jarvis_ros::Actuator` base class), e.g. `nav2.clear_costmaps` |
+| `nav2.manage_lifecycle` | jarvis_nav2 (plugin) | `manager`, `command` | `nav2_msgs/srv/ManageLifecycleNodes` (STARTUP / PAUSE / RESUME / RESET / SHUTDOWN) |
+| `nav2.clear_costmaps` | jarvis_nav2 (plugin) | `which: local\|global` | `nav2_msgs/srv/ClearEntireCostmap` |
+| `nav2.cancel_navigation` | jarvis_nav2 (plugin) | — | Cancels all `NavigateToPose` / `NavigateThroughPoses` goals |
+| `nav2.navigate_to_pose` | jarvis_nav2 (plugin) | `pose`, `frame` | Sends a goal and waits for the result (e.g. go to dock) |
+| `<vendor>.<name>` | **pluginlib** | plugin-defined | Custom actuators (`jarvis_ros::Actuator` base class) |
 
 Planned later: a generic `action.goal` and a generic typed `service.call` (via dynamic type support), `process.restart` (systemd over D-Bus), `bt.run` (BehaviorTree.CPP).
 

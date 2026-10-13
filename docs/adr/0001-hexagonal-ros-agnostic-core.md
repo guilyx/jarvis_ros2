@@ -7,7 +7,7 @@
 Jarvis must be "ROS 2 oriented but ROS 2 agnostic". We want to test decision logic without a ROS graph, replay recorded incidents, and possibly add other transports later (Zenoh, MQTT, gRPC).
 
 ## Decision
-- Ports & adapters. `core/` (C++ `jarvis_core`, `jarvis_store_sqlite`; Python `jarvis_agent.core`) has **zero** ROS dependencies.
+- Ports & adapters. `core/` (C++ `jarvis_core`; Python `jarvis_agent.core`, `jarvis_lake`) has **zero** ROS dependencies.
 - Core services follow **functional core / imperative shell**: deterministic `input → effects`. Adapters do I/O, timers and actuation.
 - ROS 2 lives in `ros/` packages: interfaces, type adapters, lifecycle components, actuators and bridges.
 - CI enforces the boundary (grep for `rclcpp`/`rclpy` in `core/`, plus a ROS-free build job).

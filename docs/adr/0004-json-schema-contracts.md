@@ -4,7 +4,7 @@
 - **Date**: 2026-10-13
 
 ## Context
-The same data crosses C++, Python, TypeScript, ROS messages, SQLite, REST and YAML configs. Drift between these is a classic source of bugs.
+The same data crosses C++, Python, TypeScript, ROS messages, MCAP/Parquet, REST and YAML configs. Drift between these is a classic source of bugs.
 
 ## Decision
 - `schemas/*.schema.json` is canonical for Event, Fault, Incident, Execution, Insight, Rule, Plan and FaultCatalog.
@@ -15,7 +15,7 @@ The same data crosses C++, Python, TypeScript, ROS messages, SQLite, REST and YA
 
 ## Alternatives considered
 - **ROS `.msg` as source of truth**: couples every consumer (dashboard, agent) to ROS tooling.
-- **Protobuf**: strong codegen and evolution rules, but it adds a heavy dependency to the core, and JSON is needed anyway for REST, SQLite JSON1 and human-edited YAML.
+- **Protobuf**: strong codegen and evolution rules, but it adds a heavy dependency to the core, and JSON is needed anyway for REST, DuckDB/Parquet JSON columns and human-edited YAML.
 
 ## Consequences
 - ➕ One contract, many bindings; configs and APIs validated identically everywhere.

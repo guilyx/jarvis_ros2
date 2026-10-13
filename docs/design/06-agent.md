@@ -7,7 +7,8 @@
 >   that cites real event ids.
 > - It can only **propose** plans from the catalog. Proposals go through the orchestrator's gates
 >   under an autonomy level (default: **advise**, so a human clicks "run").
-> - Provider-agnostic port. Default: Claude (`claude-opus-5-5`). Works offline with a heuristic analyst.
+> - **Cloud-ready, provider-agnostic** through **LiteLLM** (OpenRouter, direct providers or a local model).
+>   Works offline with a heuristic analyst.
 
 ---
 
@@ -17,7 +18,7 @@
 flowchart LR
   subgraph ADP["Adapters"]
     SRC["EventSource<br/>ros2 · gateway WS · replay"]
-    QRY["EventQuery<br/>ros2 services · gateway REST · SQLite"]
+    QRY["EventQuery<br/>event hub (recent) · lake/DuckDB (history)"]
     REC["RecoveryClient<br/>ExecuteRecovery action · REST"]
     SNK["InsightSink<br/>/jarvis/ingest · REST"]
   end
@@ -33,7 +34,7 @@ flowchart LR
   end
 
   subgraph LLM["LLM port"]
-    CL["ClaudeClient<br/>Anthropic SDK"]
+    CL["LiteLLMClient<br/>OpenRouter · providers · local"]
     HE["HeuristicAnalyst<br/>offline fallback"]
   end
 
@@ -50,7 +51,7 @@ flowchart LR
 agent/jarvis_agent/
 ├── jarvis_agent/
 │   ├── core/          triggers.py · windows.py · triage.py · context.py · analyst.py · policy.py · checks.py
-│   ├── llm/           base.py (LLMClient protocol) · anthropic.py · heuristic.py · fake.py (tests)
+│   ├── llm/           base.py (LLMClient protocol) · litellm_client.py · heuristic.py · fake.py (tests)
 │   ├── tools/         event_tools.py · fault_tools.py · plan_tools.py · runbook_tools.py
 │   ├── adapters/      ros2.py (lazy rclpy) · gateway.py · replay.py
 │   ├── app.py         wiring + config (pydantic-settings)
@@ -107,20 +108,35 @@ agent/jarvis_agent/
 
 Deliberately **absent**: shell, arbitrary service calls, parameter writes, file access. Breadth comes from the plan catalog, which humans review.
 
-## 6. LLM integration (Claude adapter)
+## 6. LLM integration (LiteLLM, cloud-ready)
+
+```mermaid
+flowchart LR
+  AN["Analyst<br/>tool loop"] --> PORT{{"LLMClient port"}}
+  PORT --> LL["LiteLLMClient<br/>(litellm Python SDK, in-process)"]
+  PORT --> HE["HeuristicAnalyst"]
+  PORT --> FK["FakeLLM (tests)"]
+  LL --> OR["OpenRouter<br/>one key, many models"]
+  LL --> DP["Direct providers<br/>Anthropic · OpenAI · Gemini · …"]
+  LL --> LOC["Local / LAN<br/>Ollama · vLLM"]
+  LL -. "optional" .-> PX["LiteLLM proxy on the LAN<br/>keys · budgets · logs"]
+```
 
 | Concern | Design |
 |---------|--------|
-| SDK | Official `anthropic` Python SDK. Tool loop via the SDK **tool runner** with a per-turn hook (enforces the tool-call cap, intercepts `propose_recovery`). A manual loop is the fallback if hooks don't fit. |
-| Model | `claude-opus-5-5` by default, configurable per trigger. Switching to a cheaper model (e.g. Sonnet/Haiku for digests) is a config change. |
-| Reasoning | Adaptive thinking. Effort `high` for incident root-cause analysis, `medium` for digests and chat. |
-| Output | Final answer through a `strict: true` `submit_insight` tool (schema = `Insight`), parsed and validated with pydantic. Forced `tool_choice` isn't used; the prompt instructs the model to finish with `submit_insight`. |
-| Caching | Stable prefix = tool definitions + system prompt + fault catalog + plan catalog, with a cache breakpoint. The volatile window comes after it. Deterministic rendering (sorted keys, no timestamps in the prefix). |
-| Long calls | Streaming + final-message helper. Per-analysis task budget. |
-| Refusals / errors | Check `stop_reason` (including `refusal`) before reading content. Server-side fallback enabled by default. Typed error chain: rate limit → back off, connection → offline mode. |
-| Observability | Each analysis writes a trace (prompt hash, tool calls, token usage, latency, cost estimate) to `agent_traces/` and attaches the usage to the `INSIGHT` event. |
+| Library | **LiteLLM Python SDK** behind our `LLMClient` port: one OpenAI-style interface for OpenRouter, direct providers and local models. Optional: point `api_base` at a LiteLLM **proxy** on the LAN to centralize keys, budgets and logs. |
+| Model | A config string per trigger, e.g. `openrouter/<vendor>/<model>`, `anthropic/<model>`, `ollama/<model>`. No code change to switch. At startup the agent checks the model supports tool calling (`litellm.supports_function_calling`) and refuses to start otherwise. |
+| Tool loop | Our own small loop (no framework): call → run read-only tools → append results → repeat. Max 12 tool calls. `propose_recovery` is intercepted by the harness. |
+| Output | Final answer through a `submit_insight` tool whose JSON schema = `Insight`. pydantic validates it. If it's invalid, there is **one** repair turn with the validation errors; if that fails too, the heuristic analyst answers. Provider "strict"/structured-output modes are used when the model supports them, but nothing depends on them. |
+| Portability rules | Use only the common denominator (messages, tools, JSON). Provider extras (prompt caching hints, reasoning effort) pass through LiteLLM when supported and are no-ops otherwise. |
+| Caching | Stable prefix first (tools + system prompt + fault/plan catalogs, rendered deterministically), volatile window last. This gets provider-side prompt caching where it exists (automatic on some providers, `cache_control` passthrough on others). |
+| Budgets & cost | LiteLLM cost tracking (`completion_cost`) feeds the per-hour and per-day budgets and the `INSIGHT` usage fields. |
+| Errors | Timeouts and retries with back-off on rate limits; connection errors → offline mode (heuristic). Empty or refused responses are treated as failures, not insights. |
+| Secrets | API keys from env or a mounted secret file. Never in YAML, never logged, never sent to the dashboard. |
+| Supply chain | Pin `litellm` to an exact version with a hash-locked lockfile (`uv lock` / `--require-hashes`) and update deliberately. LiteLLM had two malicious PyPI releases (1.82.7 / 1.82.8) in March 2026. |
+| Observability | Each analysis writes a trace (prompt hash, tool calls, tokens, latency, cost) to `agent_traces/` and attaches usage to the `INSIGHT` event. |
 
-> Exact SDK calls and parameter names are verified against the current SDK at implementation time (M4).
+> Exact LiteLLM calls and parameter names are verified against the pinned version at implementation time (M4).
 
 ### Prompt outline (system)
 

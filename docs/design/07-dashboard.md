@@ -1,7 +1,7 @@
 # 07 — Gateway & Dashboard
 
 > **TL;DR**
-> - **Gateway** (`jarvis_gateway`, FastAPI): REST + WebSocket over the store and the ROS layer.
+> - **Gateway** (`jarvis_gateway`, FastAPI): REST + WebSocket over the ROS graph and the lake.
 >   OpenAPI-documented, role-based auth, delivers notifications, serves the dashboard bundle.
 >   No Node.js runs on the robot.
 > - **Dashboard** (React + TypeScript + Vite): 8 views. The core view is the **Incident timeline**:
@@ -12,10 +12,11 @@
 ## 1. Gateway
 
 ### Responsibilities
-- Read path: SQLite **read-only** (`mode=ro`) for history; `/jarvis/events` + `/jarvis/faults` for live data.
-- Write path: never writes the store. Commands go to ROS services and actions (single writer stays the recorder).
+- Read path: live from `/jarvis/events`, `/jarvis/faults`, `/jarvis/executions`; recent history from the event hub (`query_events`); older history from the lake (DuckDB over Parquet, read-only).
+- Write path: the gateway never writes data itself. Commands go to ROS services and actions (`fault_manager`, `recovery`, `rule_engine`), so the graph stays the single source of truth.
+- Bags: lists recorded MCAP splits and black-box snapshots per incident, with download links (open them in Foxglove).
 - Notifications: subscribes to `jarvis.notify` events and delivers them to webhooks (Slack, PagerDuty, generic HTTP) with retries.
-- Auth: bearer tokens with roles `viewer` / `operator` / `admin` from config (OIDC later). Binds to `127.0.0.1` by default; TLS through a reverse proxy.
+- Network: **LAN-only**. Binds to a configured LAN interface (default `127.0.0.1` until configured), with no internet exposure planned. Roles `viewer` / `operator` / `admin` via simple static tokens from config, mainly so writes are attributed in the audit trail. OIDC/TLS are out of scope for v1.
 - Metrics: Prometheus `/metrics` (ingest rate, active faults, executions, agent cost).
 
 ### REST API (`/api/v1`)
@@ -42,6 +43,7 @@
 | `GET /insights` · `GET /insights/{id}` | viewer | Agent insights |
 | `POST /agent/ask` | operator | Question → SSE stream of phases and the final insight |
 | `GET /stats?window=24h` | viewer | KPIs (below) |
+| `GET /bags` · `GET /bags/{id}` | viewer | Recorded splits and black-box snapshots (time range, size, linked incidents) + download |
 | `GET /health` | — | Liveness/readiness of gateway + Jarvis components |
 
 ### WebSocket `/api/v1/stream`
@@ -57,7 +59,7 @@
 { "type": "heartbeat",     "seq": 9140 }
 ```
 
-Gap-free resume protocol: see [04-data-flow §6](04-data-flow.md#6-dashboard-live-stream-with-gap-free-resume).
+Gap-free resume protocol: see [04-data-flow §7](04-data-flow.md#7-dashboard-live-stream-with-gap-free-resume).
 
 ### KPIs (`/stats`)
 
@@ -84,7 +86,7 @@ Gap-free resume protocol: see [04-data-flow §6](04-data-flow.md#6-dashboard-liv
 | Routing | TanStack Router (typed routes, URL = filter state, so views are shareable) |
 | UI | Tailwind CSS + shadcn/ui (Radix primitives, accessible) |
 | Charts | Apache ECharts (sparklines, histograms, timeline/Gantt) |
-| Live | Single WS connection, store-backed resume |
+| Live | Single WS connection, resume backed by the event hub and the lake |
 | Tests | Vitest + Testing Library; Playwright e2e against `jarvis_demo` |
 | Delivery | Static bundle served by the gateway; dark mode default (ops console), light mode supported |
 
@@ -92,7 +94,7 @@ Gap-free resume protocol: see [04-data-flow §6](04-data-flow.md#6-dashboard-liv
 
 ```text
 ┌──────────────┬──────────────────────────────────────────────────────────────────────────┐
-│ JARVIS  amr-07│  ● LIVE   Recovery: ENABLED ▾   Agent: advise    🔔 3     user (operator) │
+│ JARVIS tb4-sim│  ● LIVE   Recovery: ENABLED ▾   Agent: advise    🔔 3     user (operator) │
 ├──────────────┼──────────────────────────────────────────────────────────────────────────┤
 │ ◉ Overview   │                                                                          │
 │ ≡ Events     │                         (view content)                                   │
@@ -204,7 +206,7 @@ Detail: YAML (read-only v1, editor v2) · match history · backtest results
 
 ### View 8 — System
 
-- Jarvis component lifecycle states, ingest rate, drops/suppressions, queue depth, store size/retention watermark, rule-engine latency, agent status. This mirrors `/diagnostics` (hardware_id `jarvis`).
+- Jarvis component lifecycle states, ingest rate, drops/suppressions, queue depth, recorder health and disk usage (bags, lake), lake conversion lag, rule-engine latency, agent status. This mirrors `/diagnostics` (hardware_id `jarvis`).
 
 ## 3. UX principles
 

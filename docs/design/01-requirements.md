@@ -24,6 +24,7 @@
 - Not a general log aggregator (not a replacement for Loki/ELK). It records *events*, not every log line.
 - Not a time-series database for high-rate signals (use rosbag2/MCAP; Jarvis links to snapshots).
 - No fleet backend in v1. The schema is fleet-ready (`robot` id on every event), but v1 targets **one robot**.
+- No real hardware in v1: the robot is **simulated** (Gazebo + Nav2 TurtleBot 4). Real-robot bring-up comes later.
 - No visual rule editor in v1 (read-only YAML view plus validation API; editor in v2).
 
 ## 3. Personas
@@ -37,19 +38,20 @@
 ## 4. Functional requirements
 
 ### Recording
-- **FR-R1** Ingest events from: reporter libraries (C++/Python), `/diagnostics`, `/rosout`, lifecycle transitions, topic/node watchdogs.
+- **FR-R1** Ingest events from: reporter libraries (C++/Python), `/diagnostics`, `/rosout`, lifecycle transitions, action goal status (e.g. Nav2 aborts), topic/node watchdogs.
 - **FR-R2** Validate and normalize every event (schema, size limits, code format) and assign a monotonic sequence number.
-- **FR-R3** Persist events durably before publishing them on the canonical stream (persist-then-publish).
+- **FR-R3** Publish every canonical event on the ROS graph and record it with rosbag2 (MCAP). State that must survive restarts (open faults, running executions) is kept in fsynced snapshots.
 - **FR-R4** Flood control: per-(source, code) rate limiting with summary events, and severity-aware load shedding (never drop ≥ `ERROR`).
-- **FR-R5** Query by time range, sequence cursor, kind, code glob, severity, component and correlation id.
+- **FR-R5** Query by time range, sequence cursor, kind, code glob, severity, component and correlation id: recent events from the event hub, history from Parquet via DuckDB.
 - **FR-R6** Black-box capture: on configured faults, trigger a rosbag2 snapshot and link it to the fault.
-- **FR-R7** Retention by age and severity class, plus a hard disk-size cap.
+- **FR-R7** Retention for bags, Parquet and black-box snapshots by age and size. Bags are deleted only after conversion.
 
 ### Faults
 - **FR-F1** Fault catalog (YAML) defines known codes: severity, debounce, heal, latch, capture, runbook.
 - **FR-F2** Fault lifecycle state machine: `PENDING → ACTIVE → (LATCHED) → CLEARED`, with occurrence counting and freeze-frame.
 - **FR-F3** Operator acknowledge and clear, both audited.
-- **FR-F4** Latched snapshot of active faults available to late joiners.
+- **FR-F4** Latched snapshot of active faults for late joiners, also exported on `/diagnostics` for standard tools.
+- **FR-F6** Correlation: root-cause/symptom muting and clear-with-root (catalog-driven).
 - **FR-F5** Incidents group correlated events (fault, rule matches, recoveries, insights) into one timeline.
 
 ### Rules & recovery
@@ -67,31 +69,31 @@
 - **FR-A2** Build bounded windows of events with context (active faults, state, plan catalog, runbooks).
 - **FR-A3** Investigate with **read-only** tools; produce a structured `Insight` with evidence that links to real event ids.
 - **FR-A4** Propose recoveries only from the plan catalog; proposals go through the same actuation gate, under an autonomy policy.
-- **FR-A5** Work offline (heuristic analyst) when no LLM is reachable. Cost and rate budgets.
+- **FR-A5** Cloud LLMs through LiteLLM (OpenRouter, direct providers, local models), selected by config. Work offline (heuristic analyst) when no LLM is reachable. Cost and rate budgets.
 
 ### Dashboard & API
 - **FR-D1** REST + WebSocket API (OpenAPI documented). Live stream with gap-free resume.
 - **FR-D2** Views: Overview, Live events, Faults, Incidents (timeline), Recovery (incl. approvals), Rules, Agent, System health.
 - **FR-D3** Operator actions: ack/clear fault, trigger/cancel/approve/reject recovery, toggle rules, switch recovery mode.
-- **FR-D4** Role-based access (viewer / operator / admin). Every write is audited as an `OPERATOR` event.
+- **FR-D4** LAN-only access with simple roles (viewer / operator / admin). Every write is audited as an `OPERATOR` event.
 
 ## 5. Non-functional requirements
 
 | ID | Area | Target (v1) |
 |----|------|-------------|
-| NFR-1 | Ingest throughput | ≥ 2 000 events/s sustained on ARM64 (Orin-class), ≥ 10 000 on x86; bursts of 20 000 buffered |
+| NFR-1 | Ingest throughput | ≥ 10 000 events/s sustained on an x86 dev machine (simulation); bursts of 20 000 buffered. ARM64 targets are set at real-robot bring-up. |
 | NFR-2 | Ingest → publish latency | p99 ≤ 50 ms (group commit ≤ 20 ms) |
 | NFR-3 | Rule evaluation | p99 ≤ 5 ms per event with 200 rules |
 | NFR-4 | Match → first actuation | p99 ≤ 100 ms (excluding approval wait) |
 | NFR-5 | Footprint | Runtime container ≤ 100 MB RSS; ≤ 5 % of one core at 500 events/s |
-| NFR-6 | Durability | No loss of events the recorder has persisted; safe on power loss (SQLite WAL) |
-| NFR-7 | Storage | Bounded: default 2 GiB cap with severity-aware eviction |
+| NFR-6 | Durability | Open faults/executions survive crashes and power loss (fsynced snapshots). Recorded events: at most the last unflushed MCAP chunk (≤ ~1 s) lost on a hard crash. |
+| NFR-7 | Storage | Bounded: bags 10 GiB / 7 days, Parquet 5 GiB / 180 days, black box 2 GiB (defaults) |
 | NFR-8 | Dashboard freshness | Live event visible in UI ≤ 1 s after ingest |
 | NFR-9 | Agent latency | Incident insight p90 ≤ 60 s when online |
 | NFR-10 | Portability | Core builds with plain CMake/pip on Linux x86_64/ARM64 without ROS |
 | NFR-11 | Middleware | Works on Fast DDS, Cyclone DDS and rmw_zenoh (no vendor-specific code) |
 | NFR-12 | Sim time | Everything follows the node clock (`use_sim_time` supported) |
-| NFR-13 | Security | Dashboard auth + roles; LLM data redaction; SROS2 compatible |
+| NFR-13 | Security | LAN-only dashboard with roles; LLM API keys from secrets only; data redaction before LLM calls; hash-pinned Python deps; SROS2 compatible |
 | NFR-14 | Operability | Jarvis reports its own health on `/diagnostics` and Prometheus metrics |
 
 ## 6. Glossary

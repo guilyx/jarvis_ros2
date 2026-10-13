@@ -7,7 +7,8 @@
 Operators and engineers need a live, linkable, role-aware UI, without installing ROS tooling on their machines.
 
 ## Decision
-- `jarvis_gateway` (FastAPI): REST + WS (gap-free resume), auth/roles, notifier, Prometheus. It reads SQLite read-only and commands through ROS services/actions.
+- `jarvis_gateway` (FastAPI): REST + WS (gap-free resume), simple roles, notifier, Prometheus. It reads live data from the ROS graph, recent history from the event hub and older history from the lake (DuckDB, read-only), and commands through ROS services/actions.
+- **LAN-only** (decided in review): no internet exposure, so no OIDC/TLS work in v1. Static role tokens exist mainly to attribute writes in the audit trail.
 - Dashboard: React + TypeScript + Vite, TanStack (Query/Table/Router), Tailwind + shadcn/ui, ECharts. Shipped as a static bundle served by the gateway.
 
 ## Alternatives considered

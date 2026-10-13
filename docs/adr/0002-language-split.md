@@ -10,7 +10,7 @@ The runtime (recorder, rules, recovery, bridges) runs on the robot next to perce
 | Part | Language | Reason |
 |------|----------|--------|
 | Runtime (`jarvis_core`, `jarvis_ros`, bridges) | **C++20** | Composable components, intra-process zero-copy, type adapters (C++ only), small footprint, the norm in commercial ROS stacks |
-| Agent, gateway, CLI, lint/backtest wrappers | **Python 3.12** | LLM SDKs, FastAPI, fast iteration; off the hot path |
+| Agent, gateway, lake (MCAP → Parquet), CLI, lint/backtest wrappers | **Python 3.12** | LLM SDKs, FastAPI, fast iteration; off the hot path |
 | Dashboard | **TypeScript** (React) | Standard for web UIs; types generated from OpenAPI |
 
 ## Alternatives considered

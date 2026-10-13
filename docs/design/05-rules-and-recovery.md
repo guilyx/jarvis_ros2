@@ -1,0 +1,337 @@
+# 05 — Rules & Recovery
+
+> **TL;DR**
+> - **Rules** = `when` (pattern over events) + `guard` (current state) + `then` (actions) + `policy` (cooldown, limits, dry-run).
+> - Patterns: `event`, `count`, `sequence` (with `absent` steps), `all`, `any`. Matching is per partition (e.g. per component).
+> - **Plans** = ordered steps (`action`, `timeout`, `retry`) with a verification step and an `on_failure` escalation chain.
+> - Every recovery request passes the **same 7 gates**, whoever sent it.
+> - New rules roll out in **dry-run (shadow) mode** and are **backtested** on recorded incidents.
+
+---
+
+## 1. Rule file format
+
+```yaml
+schema: jarvis.rules/v1
+rules:
+  - id: lidar-stale-restart              # unique, kebab-case
+    description: Lidar topic stale → restart its driver.
+    labels: { subsystem: perception, owner: perception-team }
+    enabled: true
+    dry_run: false                       # true = record matches, run no actions (shadow mode)
+    partition_by: [source.component]     # one matcher instance per component
+    when:   { … pattern … }
+    guard:  { … state conditions … }     # optional
+    then:   [ … actions … ]
+    policy: { cooldown: 30s, max_fires: { count: 3, per: 1h } }
+```
+
+Files are loaded from `config/rules/*.yaml`, validated against `schemas/rule.schema.json`, and hot-reloaded atomically through `~/reload`.
+
+## 2. Matchers
+
+A matcher selects events. All listed fields must match (AND).
+
+```yaml
+event:
+  kind: FAULT_STATE                 # enum
+  code: ros.topic.*                 # glob (* and ?) on dotted codes
+  severity: ">=ERROR"               # comparison on the severity order
+  source.component: { glob: "lidar_*" }
+  attrs.state: ACTIVE               # any attribute by path
+  attrs.expected_hz: { gte: 5 }
+  tags: [perception]                # event has all of these tags
+```
+
+| Operator | Example | Meaning |
+|----------|---------|---------|
+| scalar | `code: nav.localization.lost` | Equals (strings with `*`/`?` become globs) |
+| `in` | `{ in: [ACTIVE, LATCHED] }` | One of |
+| `not` | `{ not: MANUAL }` | Not equal (or `not: { in: [...] }`) |
+| `glob` | `{ glob: "/sensors/*/scan" }` | Explicit glob |
+| `regex` | `{ regex: "^lidar_(front\|rear)$" }` | RE2-compatible regex |
+| `gt` `gte` `lt` `lte` | `{ lt: 0.2 }` | Numeric comparison |
+| `exists` | `{ exists: true }` | Attribute present |
+| severity string | `">=WARN"`, `"<ERROR"` | Severity order |
+
+## 3. Patterns (`when`)
+
+| Pattern | Shape | Fires when |
+|---------|-------|-----------|
+| `event` | `event: <matcher>` | One matching event arrives |
+| `count` | `count: { event: <matcher>, threshold: N, within: T }` | N matching events within a sliding window T |
+| `sequence` | `sequence: { within: T, steps: [ … ] }` | Steps match **in order**, all within T of the first. Unrelated events in between are ignored. |
+| `absent` (step) | `{ absent: <matcher>, for: T }` | Inside a sequence: **no** matching event for T after the previous step (timer driven) |
+| `all` | `all: { within: T, of: [ patterns ] }` | All sub-patterns match, in any order, within T |
+| `any` | `any: [ patterns ]` | Any sub-pattern matches |
+
+### Semantics (exact)
+
+- **Time base**: `recv_stamp` by default (one monotonic recorder clock, so no cross-host clock skew). Per rule, `time_basis: source` switches to `stamp`.
+- **Order**: events are processed in `seq` order, the same order everywhere (live, replay, backtest).
+- **Partitioning**: `partition_by` keys (`source.component`, `source.node`, `attrs.<key>`, …) create independent matcher instances. If no key is given, there is a single global instance.
+- **Selection**: skip-till-next-match. Each partition holds **at most one partial match per rule**. The earliest start wins. After the rule fires, the partition's partial matches are reset.
+- **Bounded state**: partial matches expire after `within`. Count windows keep at most `threshold` timestamps. Every partition is evicted after 10 × `within` of inactivity. Partitions are capped per rule (default 1 000) and the oldest is evicted.
+- **Timers**: `absent` steps and expirations use the injected clock, so sim time and replay both work.
+- **Self-loop protection**: a rule never matches an event whose causal chain contains its own `RULE_MATCH`. The global causal depth is limited to 16.
+
+## 4. Guards (`guard`)
+
+Guards are evaluated at fire time against the **current state**: the active fault snapshot plus the latest `STATE` values.
+
+```yaml
+guard:
+  faults_active:   [power.battery.low]           # all must be ACTIVE/LATCHED
+  faults_inactive: [safety.estop.engaged]        # none may be ACTIVE/LATCHED
+  state:
+    robot.mode:     { in: [AUTONOMOUS] }         # latest STATE event value
+    mission.status: RUNNING
+```
+
+## 5. Actions (`then`)
+
+| Action | Example | Effect |
+|--------|---------|--------|
+| `recover` | `{ recover: { plan: restart-lifecycle-node, args: { node: "{{ event.attrs.node }}" } } }` | `ExecuteRecovery` goal (requester `RULE`) |
+| `emit` | `{ emit: { kind: FAULT_RAISE, code: drive.motor.overcurrent_burst, severity: ERROR, message: "…" } }` | Derived event, e.g. a composite fault |
+| `incident` | `{ incident: { open: true } }` / `{ incident: { escalate: true } }` | Open or escalate the incident |
+| `notify` | `{ notify: { channel: ops, message: "…" } }` | `jarvis.notify` event, delivered by the gateway |
+| `ask_agent` | `{ ask_agent: { focus: "Mechanical binding or tuning?" } }` | `jarvis.agent.request` event |
+
+**Templating** uses `{{ … }}` interpolation only, with no logic. Available variables: `event` (last matched event), `steps.<id>` (sequence steps), `count`, `partition.<key>`, `rule.id`, `robot`. A template that renders empty makes the action fail validation at fire time; this is recorded and the action does not run.
+
+## 6. Policy
+
+| Field | Default | Meaning |
+|-------|---------|---------|
+| `cooldown` | `0s` | Minimum time between fires per partition |
+| `max_fires` | none | `{ count, per }` per partition. When exceeded, the rule is suppressed for the rest of the window and emits `jarvis.rule.suppressed` (WARN), which **other rules can match on** to escalate. |
+| `priority` | `0` | Ordering when several rules fire on the same event (higher first) |
+| `dry_run` | `false` | Shadow mode: `RULE_MATCH` is recorded with `attrs.dry_run=true` and no actions run |
+
+## 7. Rule examples
+
+```yaml
+schema: jarvis.rules/v1
+rules:
+  # 1. Single event → targeted recovery
+  - id: lidar-stale-restart
+    description: Lidar topic stale → restart its driver.
+    partition_by: [source.component]
+    when:
+      event: { kind: FAULT_STATE, code: ros.topic.stale, attrs.state: ACTIVE, source.component: { glob: "lidar_*" } }
+    guard: { faults_inactive: [safety.estop.engaged] }
+    then:
+      - recover: { plan: restart-lifecycle-node, args: { node: "{{ event.attrs.node }}", component: "{{ event.source.component }}" } }
+    policy: { cooldown: 30s, max_fires: { count: 3, per: 1h } }
+
+  # 2. Escalate when the rule above keeps firing
+  - id: lidar-restart-exhausted
+    when:
+      event: { kind: SYSTEM, code: jarvis.rule.suppressed, attrs.rule: lidar-stale-restart }
+    then:
+      - recover: { plan: safe-stop }
+      - incident: { escalate: true }
+      - notify: { channel: ops, message: "Lidar on {{ robot }} keeps stalling. Robot stopped safely." }
+
+  # 3. Count in window → composite fault + ask the agent
+  - id: drive-overcurrent-burst
+    partition_by: [source.component]
+    when:
+      count: { event: { kind: FAULT_RAISE, code: drive.motor.overcurrent }, threshold: 5, within: 2m }
+    then:
+      - emit: { kind: FAULT_RAISE, code: drive.motor.overcurrent_burst, severity: ERROR,
+                message: "{{ count }} overcurrent events on {{ partition.source.component }} in 2 min" }
+      - ask_agent: { focus: "Mechanical binding or controller tuning?" }
+
+  # 4. Sequence with absence: "recovery didn't fix it"
+  - id: localization-unrecoverable
+    when:
+      sequence:
+        within: 90s
+        steps:
+          - id: lost
+            event: { kind: FAULT_STATE, code: nav.localization.lost, attrs.state: ACTIVE }
+          - id: tried
+            event: { kind: RECOVERY, attrs.plan: relocalize, attrs.phase: { in: [SUCCEEDED, FAILED] } }
+          - id: still_lost
+            absent: { kind: FAULT_STATE, code: nav.localization.lost, attrs.state: CLEARED }
+            for: 20s
+    then:
+      - recover: { plan: safe-stop }
+      - incident: { escalate: true }
+
+  # 5. Correlation in any order + state guard
+  - id: wifi-then-localization
+    when:
+      all:
+        within: 10s
+        of:
+          - event: { code: net.wifi.degraded }
+          - event: { kind: FAULT_STATE, code: nav.localization.lost, attrs.state: ACTIVE }
+    guard: { state: { robot.mode: AUTONOMOUS } }
+    then:
+      - ask_agent: { focus: "Is localization loss caused by network-delivered map/odom?" }
+    policy: { dry_run: true }   # shadow mode while we learn
+```
+
+## 8. Recovery plans
+
+```yaml
+schema: jarvis.plans/v1
+plans:
+  - id: restart-lifecycle-node
+    description: Cycle a managed node and verify its fault clears.
+    params:
+      node:      { type: string, required: true, pattern: "^/" }
+      component: { type: string, required: true }
+    locks: ["node:{{ params.node }}"]          # mutual exclusion key(s)
+    on_conflict: reject                         # reject | queue (queue_ttl: 30s)
+    allowed_requesters: [RULE, OPERATOR, AGENT]
+    agent_policy: autonomous                    # never | advise | supervised | autonomous
+    requires_approval: []                       # e.g. [RULE] to make rule-triggered runs wait for a human
+    preconditions: { faults_inactive: [safety.estop.engaged] }
+    max_attempts: { count: 5, per: 1h }
+    timeout: 60s
+    steps:
+      - id: restart
+        action: lifecycle.restart
+        with: { node: "{{ params.node }}" }
+        timeout: 20s
+        retry: { attempts: 2, backoff: 2s, multiplier: 2.0 }
+      - id: verify
+        action: wait_for
+        with: { fault: { code: ros.topic.stale, component: "{{ params.component }}" }, state: CLEARED }
+        timeout: 15s
+    on_failure:
+      - run: { plan: restart-perception-stack }
+      - escalate: operator
+
+  - id: safe-stop
+    description: Ask the navigation stack to stop and wait until the robot is still.
+    allowed_requesters: [RULE, OPERATOR, AGENT]
+    agent_policy: supervised
+    steps:
+      - id: stop
+        action: service.trigger
+        with: { service: /nav/stop }
+        timeout: 5s
+      - id: still
+        action: wait_for
+        with: { event: { kind: STATE, code: robot.motion, attrs.value: STOPPED } }
+        timeout: 10s
+    on_failure:
+      - escalate: operator
+```
+
+### Step fields
+
+| Field | Default | Meaning |
+|-------|---------|---------|
+| `id` | required | Unique within the plan |
+| `action` | required | Registered action name (validated at load) |
+| `with` | `{}` | Action arguments (validated against the action's JSON schema) |
+| `timeout` | `10s` | Per attempt |
+| `retry` | none | `{ attempts, backoff, multiplier }` |
+| `when` | none | Guard. If false, the step is **skipped** (recorded) |
+| `continue_on_failure` | `false` | Keep going even if this step fails |
+
+### Action catalog (v1)
+
+| Action | Provided by | Arguments | Behavior |
+|--------|-------------|-----------|----------|
+| `wait_for` | core | `event: <matcher>` **or** `fault: {code, component}, state` | Succeeds when matched, fails on timeout |
+| `delay` | core | `duration` | Sleep (clock-aware) |
+| `check` | core | guard | Fails if the guard is false |
+| `emit` | core | event fields | Emits an event |
+| `run` | core | `plan`, `args` | Sub-plan (depth ≤ 3, cycles rejected at load) |
+| `lifecycle.transition` | jarvis_ros | `node`, `transition` | `lifecycle_msgs/srv/ChangeState` |
+| `lifecycle.restart` | jarvis_ros | `node` | Reads `GetState`, then walks to `active` through `deactivate → cleanup → configure → activate` |
+| `service.trigger` | jarvis_ros | `service` | `std_srvs/srv/Trigger`. `success=false` fails the step. |
+| `service.set_bool` | jarvis_ros | `service`, `data` | `std_srvs/srv/SetBool` |
+| `service.empty` | jarvis_ros | `service` | `std_srvs/srv/Empty` |
+| `param.set` | jarvis_ros | `node`, `name`, `value` | `rcl_interfaces/srv/SetParameters` |
+| `bag.snapshot` | jarvis_ros | `service` | rosbag2 `~/snapshot` |
+| `<vendor>.<name>` | **pluginlib** | plugin-defined | Custom actuators (`jarvis_ros::Actuator` base class), e.g. `nav2.clear_costmaps` |
+
+Planned later: a generic `action.goal` and a generic typed `service.call` (via dynamic type support), `process.restart` (systemd over D-Bus), `bt.run` (BehaviorTree.CPP).
+
+## 9. The gates (admission control)
+
+```mermaid
+flowchart TB
+  REQ["ExecuteRecovery request<br/>requester: RULE · OPERATOR · AGENT · PLAN"] --> G1
+  G1{"1 · Mode<br/>ENABLED / DRY_RUN / DISABLED"} -->|"DISABLED"| REJ["REJECTED"]
+  G1 --> G2{"2 · Plan known<br/>+ params valid"}
+  G2 -->|"no"| REJ
+  G2 --> G3{"3 · Requester allowed<br/>allowed_requesters · agent_policy"}
+  G3 -->|"no"| REJ
+  G3 --> G4{"4 · Preconditions<br/>guard on faults/state"}
+  G4 -->|"false"| REJ
+  G4 --> G5{"5 · Rate limit<br/>max_attempts"}
+  G5 -->|"exceeded"| REJ
+  G5 --> G6{"6 · Locks free?"}
+  G6 -->|"held + reject"| REJ
+  G6 -->|"held + queue"| Q["QUEUED (TTL)"]
+  Q --> G6
+  G6 --> G7{"7 · Approval needed?"}
+  G7 -->|"yes"| PA["PENDING_APPROVAL (TTL)"]
+  PA -->|"approved"| RUN
+  PA -->|"rejected"| REJ
+  PA -->|"timeout"| EXP["EXPIRED"]
+  G7 -->|"no"| RUN["RUNNING"]
+```
+
+Each gate result is stored on the execution for the audit trail. In `DRY_RUN` mode every gate runs, but steps are only **simulated**, and events carry `attrs.dry_run=true`.
+
+**Agent autonomy** (gate 3 + gate 7): `effective = min(deployment agent.autonomy, plan.agent_policy)`.
+
+| Effective level | What happens to an agent proposal |
+|-----------------|-----------------------------------|
+| `never` / `observe` | Rejected at gate 3 |
+| `advise` | Not submitted. Shown on the dashboard as a recommendation with a "run" button (that run is an `OPERATOR` request). |
+| `supervised` | Submitted → `PENDING_APPROVAL` |
+| `autonomous` | Submitted → runs if gates 4–6 pass **and** `confidence ≥ agent.min_confidence` (default 0.8) |
+
+## 10. Execution state machine
+
+```mermaid
+stateDiagram-v2
+  [*] --> PENDING_APPROVAL : approval required
+  [*] --> QUEUED : lock held, queue
+  [*] --> RUNNING : gates passed
+  [*] --> REJECTED : a gate failed
+  PENDING_APPROVAL --> RUNNING : approved
+  PENDING_APPROVAL --> REJECTED : rejected by operator
+  PENDING_APPROVAL --> EXPIRED : TTL elapsed
+  QUEUED --> RUNNING : lock acquired
+  QUEUED --> EXPIRED : TTL elapsed
+  RUNNING --> SUCCEEDED : all steps ok
+  RUNNING --> FAILED : step failed after retries, or plan timeout
+  RUNNING --> ABORTED : cancel or preempted
+  FAILED --> [*] : on_failure chain starts new executions
+  SUCCEEDED --> [*]
+  ABORTED --> [*]
+  REJECTED --> [*]
+  EXPIRED --> [*]
+```
+
+## 11. Safety model
+
+1. **Not in the safety chain.** Certified safety functions stay independent. Plans should use `preconditions` to stand down while safety faults are active.
+2. **One gate.** Rules, operators and the agent all go through `ExecuteRecovery`. The agent owns no actuators.
+3. **Closed world for actions.** Only registered actions; arguments are schema-validated; plans are validated at load (unknown action, bad template variable, recursion, missing verification step → error or warning).
+4. **Anti-storm.** Cooldowns, `max_fires`, `max_attempts`, locks, a global `max_concurrent` (default 4), plan timeouts and depth limits.
+5. **Kill switch.** `~/set_mode DISABLED` from the dashboard, CLI or ROS. It takes effect immediately and cancels running executions when `cancel_running: true`.
+6. **Safe rollout.** `dry_run` (shadow) per rule, `DRY_RUN` mode globally, and `jarvis backtest` against recorded incidents before enabling.
+7. **Full audit.** Who requested, why (`rationale`), which gates passed, each step, outcome, and who approved.
+
+## 12. Tooling
+
+| Tool | Purpose |
+|------|---------|
+| `jarvis lint <dir>` | Schema validation and semantic checks (unknown actions/plans/codes, template variables, cycles, missing verify step) |
+| `jarvis backtest` | Replay recorded events through rules and plans and report what would have fired |
+| `ros2 jarvis rules [list\|reload\|enable\|disable\|dry-run]` | Operate rules live |
+| `ros2 jarvis recover <plan> [--arg k=v] [--dry-run]` | Operator-triggered recovery |
+| `ros2 jarvis mode [enabled\|dry_run\|disabled]` | Kill switch |

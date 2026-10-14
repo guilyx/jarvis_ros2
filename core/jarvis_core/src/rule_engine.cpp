@@ -395,11 +395,6 @@ Duration window_of(const Pattern & p)
   return 0;
 }
 
-bool is_fault_state_active(const std::string & state)
-{
-  return state == "ACTIVE" || state == "LATCHED";
-}
-
 }  // namespace
 
 std::unique_ptr<PatternState> make_matcher_state(const Pattern & pattern)
@@ -514,18 +509,14 @@ void RuleEngine::track_state(const Event & e)
     const std::string * fault_id = attr_string(e.attrs, "fault_id");
     const std::string * state = attr_string(e.attrs, "state");
     if (fault_id && state) {
-      if (is_fault_state_active(*state)) {
+      if (is_active_fault_state(*state)) {
         active_faults_[*fault_id] = e.code;
       } else {
         active_faults_.erase(*fault_id);
       }
     }
   } else if (e.kind == Kind::State) {
-    if (const auto it = e.attrs.find("value"); it != e.attrs.end()) {
-      states_[e.code] = it->second;
-    } else {
-      states_[e.code] = e.message;
-    }
+    states_[e.code] = state_value(e);
   }
   // Remember what our own matches caused, so a rule never feeds on its own consequences.
   if (!e.causation_id.empty() && !e.id.empty()) {
@@ -548,22 +539,7 @@ void RuleEngine::sync_active_faults(std::map<std::string, std::string> active)
 
 bool RuleEngine::guard_passes(const Guard & guard) const
 {
-  auto any_active = [this](const std::string & glob) {
-    return std::any_of(active_faults_.begin(), active_faults_.end(), [&glob](const auto & f) {
-      return glob_match(glob, f.second);
-    });
-  };
-  if (!std::all_of(guard.faults_active.begin(), guard.faults_active.end(), any_active)) {
-    return false;
-  }
-  if (std::any_of(guard.faults_inactive.begin(), guard.faults_inactive.end(), any_active)) {
-    return false;
-  }
-  return std::all_of(guard.state.begin(), guard.state.end(), [this](const auto & cond) {
-    const auto it = states_.find(cond.first);
-    return cond.second.matches(
-      it == states_.end() ? std::nullopt : std::optional<AttrValue>(it->second));
-  });
+  return guard.passes(active_faults_, states_);
 }
 
 Effects RuleEngine::on_event(const Event & e, Timestamp now)

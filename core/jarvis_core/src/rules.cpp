@@ -247,6 +247,41 @@ bool Matcher::matches(const Event & e) const
   });
 }
 
+// -- guards ---------------------------------------------------------------------------------------
+
+bool Guard::passes(
+  const std::map<std::string, std::string> & active_faults,
+  const std::map<std::string, AttrValue> & states) const
+{
+  auto any_active = [&active_faults](const std::string & glob) {
+    return std::any_of(active_faults.begin(), active_faults.end(), [&glob](const auto & f) {
+      return glob_match(glob, f.second);
+    });
+  };
+  if (!std::all_of(faults_active.begin(), faults_active.end(), any_active)) {
+    return false;
+  }
+  if (std::any_of(faults_inactive.begin(), faults_inactive.end(), any_active)) {
+    return false;
+  }
+  return std::all_of(state.begin(), state.end(), [&states](const auto & cond) {
+    const auto it = states.find(cond.first);
+    return cond.second.matches(
+      it == states.end() ? std::nullopt : std::optional<AttrValue>(it->second));
+  });
+}
+
+bool is_active_fault_state(std::string_view state)
+{
+  return state == "ACTIVE" || state == "LATCHED";
+}
+
+AttrValue state_value(const Event & e)
+{
+  const auto it = e.attrs.find("value");
+  return it != e.attrs.end() ? it->second : AttrValue(e.message);
+}
+
 // -- templates ------------------------------------------------------------------------------------
 
 Template Template::parse(const std::string & text)

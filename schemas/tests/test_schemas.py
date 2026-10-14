@@ -119,3 +119,109 @@ def _rule(**overrides):
 )
 def test_rules_schema_rejects_mistakes(bad):
     assert list(_validator("rules.schema.json").iter_errors(_rule(**bad))), f"should reject {bad}"
+
+
+@pytest.mark.parametrize(
+    "path", sorted((SCHEMAS / "examples").glob("execution.*.json")), ids=lambda p: p.name
+)
+def test_execution_examples_validate(path):
+    _validator("execution.schema.json").validate(json.loads(path.read_text()))
+
+
+@pytest.mark.parametrize("block", _doc_yaml_blocks(RULE_DOC, "schema: jarvis.plans/v1"))
+def test_design_doc_plan_examples_validate(block):
+    _validator("plans.schema.json").validate(yaml.safe_load(block))
+
+
+@pytest.mark.parametrize(
+    "path", sorted(REPO.glob("ros/*/config/**/plans/*.yaml")), ids=lambda p: str(p.relative_to(REPO))
+)
+def test_shipped_plans_validate(path):
+    _validator("plans.schema.json").validate(yaml.safe_load(path.read_text()) or {})
+
+
+def _plan(**overrides):
+    plan = {"id": "ok", "steps": [{"id": "s", "action": "x.y"}]}
+    plan.update(overrides)
+    return {"schema": "jarvis.plans/v1", "plans": [plan]}
+
+
+def test_plans_schema_accepts_every_core_action():
+    steps = [
+        {
+            "id": "a",
+            "action": "lifecycle.restart",
+            "with": {"node": "{{ params.node }}"},
+            "retry": {"attempts": 2},
+        },
+        {
+            "id": "b",
+            "action": "wait_for",
+            "with": {"fault": {"code": "ros.*", "component": "c"}, "state": "CLEARED"},
+        },
+        {"id": "c", "action": "wait_for", "with": {"event": {"kind": "STATE", "attrs.value": "ACTIVE"}}},
+        {"id": "d", "action": "delay", "with": {"duration": "2s"}, "when": {"faults_inactive": ["safety.*"]}},
+        {"id": "e", "action": "check", "with": {"state": {"robot.motion": "STOPPED"}}},
+        {"id": "f", "action": "emit", "with": {"code": "a.b", "severity": "WARN", "attrs": {"n": 1}}},
+        {
+            "id": "g",
+            "action": "run",
+            "with": {"plan": "other", "args": {"x": "y"}},
+            "continue_on_failure": True,
+        },
+    ]
+    plan = _plan(
+        params={"node": {"type": "string", "required": True, "pattern": "^/"}},
+        locks=["node:{{ params.node }}"],
+        on_conflict="queue",
+        queue_ttl="10s",
+        allowed_requesters=["RULE", "plan"],
+        requires_approval=["AGENT"],
+        on_failure=[{"run": {"plan": "other", "args": {"x": "{{ params.node }}"}}}, {"escalate": "operator"}],
+        steps=steps,
+    )
+    _validator("plans.schema.json").validate(plan)
+    _validator("plans.schema.json").validate(_plan())
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"id": "Not_Kebab"},
+        {"steps": []},
+        {"colour": "red"},
+        {"steps": [{"id": "s", "action": "restart"}]},
+        {"steps": [{"id": "s", "action": "x.y", "retry": {"attempts": 0}}]},
+        {"steps": [{"id": "s", "action": "x.y", "timeout": "0s"}]},
+        {"steps": [{"id": "s", "action": "wait_for", "with": {}}]},
+        {"steps": [{"id": "s", "action": "wait_for", "with": {"fault": {"code": "a"}, "state": "GONE"}}]},
+        {"steps": [{"id": "s", "action": "wait_for", "with": {"event": {"cod": "a"}}}]},
+        {"steps": [{"id": "s", "action": "delay", "with": {"seconds": 2}}]},
+        {"steps": [{"id": "s", "action": "run", "with": {"plan": "Bad Plan"}}]},
+        {"params": {"n": {"type": "float"}}},
+        {"params": {"n": {"required": True, "default": "x"}}},
+        {"on_conflict": "wait"},
+        {"agent_policy": "yolo"},
+        {"allowed_requesters": ["ROBOT"]},
+        {"on_failure": [{"run": {"plan": "b"}, "escalate": "operator"}]},
+        {"max_attempts": {"count": 0, "per": "1h"}},
+    ],
+)
+def test_plans_schema_rejects_mistakes(bad):
+    assert list(_validator("plans.schema.json").iter_errors(_plan(**bad))), f"should reject {bad}"
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"state": "DONE"},
+        {"requester": {"type": "ROBOT"}},
+        {"gates": [{"gate": "vibes", "passed": True}]},
+        {"confidence": 1.5},
+        {"surprise": True},
+    ],
+)
+def test_execution_schema_rejects_bad_fields(bad):
+    execution = json.loads((SCHEMAS / "examples" / "execution.failed.json").read_text())
+    execution.update(bad)
+    assert list(_validator("execution.schema.json").iter_errors(execution)), f"should reject {bad}"

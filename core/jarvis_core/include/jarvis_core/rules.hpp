@@ -170,7 +170,16 @@ struct Guard
   std::vector<std::pair<std::string, Test>> state;  ///< STATE code -> test on its latest value
 
   bool empty() const { return faults_active.empty() && faults_inactive.empty() && state.empty(); }
+  /// `active_faults`: fault_id -> code of every open fault. `states`: STATE code -> latest value.
+  bool passes(
+    const std::map<std::string, std::string> & active_faults,
+    const std::map<std::string, AttrValue> & states) const;
 };
+
+/// FAULT_STATE `attrs.state` values that count as an active fault for guards.
+bool is_active_fault_state(std::string_view state);
+/// The value a STATE event sets: `attrs.value` if present, else the message.
+AttrValue state_value(const Event & e);
 
 struct RuleAction
 {

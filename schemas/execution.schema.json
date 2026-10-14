@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/guilyx/jarvis_ros2/schemas/execution.schema.json",
+  "title": "Jarvis recovery execution",
+  "description": "The audit record of one recovery execution (docs/design/03-data-model.md \u00a77), as written by jarvis_core::to_json(Execution), served on /jarvis/executions and persisted in the orchestrator snapshot.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "execution_id",
+    "plan_id",
+    "requester",
+    "state",
+    "gates",
+    "steps",
+    "created"
+  ],
+  "properties": {
+    "execution_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "plan_id": {
+      "type": "string"
+    },
+    "plan_rev": {
+      "type": "string",
+      "description": "Content hash of the plan definition it ran"
+    },
+    "args": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "requester": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "RULE",
+            "OPERATOR",
+            "AGENT",
+            "PLAN"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "description": "Rule id, operator name, insight id or parent execution id"
+        }
+      }
+    },
+    "correlation_id": {
+      "type": "string"
+    },
+    "causation_id": {
+      "type": "string"
+    },
+    "rationale": {
+      "type": "string"
+    },
+    "confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "dry_run": {
+      "type": "boolean"
+    },
+    "state": {
+      "enum": [
+        "PENDING_APPROVAL",
+        "QUEUED",
+        "RUNNING",
+        "SUCCEEDED",
+        "FAILED",
+        "ABORTED",
+        "REJECTED",
+        "EXPIRED"
+      ]
+    },
+    "reason": {
+      "type": "string"
+    },
+    "gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "gate",
+          "passed"
+        ],
+        "properties": {
+          "gate": {
+            "enum": [
+              "mode",
+              "plan",
+              "requester",
+              "preconditions",
+              "rate_limit",
+              "locks",
+              "approval"
+            ]
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "needs_approval": {
+      "type": "boolean"
+    },
+    "approved_by": {
+      "type": "string"
+    },
+    "locks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "action",
+          "state"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "PENDING",
+              "RUNNING",
+              "RETRYING",
+              "SUCCEEDED",
+              "FAILED",
+              "SKIPPED",
+              "ABORTED"
+            ]
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "started": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "finished": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "current_step": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "failed_step": {
+      "type": "string"
+    },
+    "created": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "started": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "finished": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "expires": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "depth": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "parent_id": {
+      "type": "string"
+    },
+    "child_id": {
+      "type": "string"
+    },
+    "ladder_of": {
+      "type": "string"
+    },
+    "ladder": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "running": {
+          "type": "boolean"
+        },
+        "next": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "child": {
+          "type": "string"
+        }
+      }
+    },
+    "escalated": {
+      "type": "boolean"
+    },
+    "last_event_id": {
+      "type": "string"
+    }
+  }
+}

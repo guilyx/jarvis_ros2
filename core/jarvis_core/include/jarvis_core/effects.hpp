@@ -7,6 +7,7 @@
 #pragma once
 
 #include <map>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <variant>
 #include <vector>
@@ -51,11 +52,38 @@ struct RequestRecovery
   std::string correlation_id;  ///< incident, when there is one
 };
 
-using Effect =
-  std::variant<EmitEvent, FaultsChanged, PersistState, CaptureBlackbox, RequestRecovery>;
+/// Run one attempt of an actuator step, then report with Orchestrator::on_action_result.
+struct StartAction
+{
+  std::string execution_id;
+  std::string step_id;
+  int attempt{1};
+  std::string action;
+  nlohmann::json args;
+  Duration timeout{0};  ///< the orchestrator enforces it too; past it the result is ignored
+};
+
+/// Stop an attempt still in flight (timeout, abort, kill switch). No result is expected.
+struct CancelAction
+{
+  std::string execution_id;
+  std::string step_id;
+  int attempt{1};
+};
+
+/// These executions changed: republish /jarvis/executions and update their ExecuteRecovery goals.
+struct ExecutionsChanged
+{
+  std::vector<std::string> execution_ids;
+};
+
+using Effect = std::variant<
+  EmitEvent, FaultsChanged, PersistState, CaptureBlackbox, RequestRecovery, StartAction,
+  CancelAction, ExecutionsChanged>;
 using Effects = std::vector<Effect>;
 
-/// Appends `more` to `into`, keeping a single FaultsChanged and a single PersistState at the end.
+/// Appends `more` to `into`, keeping a single FaultsChanged, ExecutionsChanged (with every id) and
+/// PersistState at the end.
 void merge_effects(Effects & into, Effects more);
 
 }  // namespace jarvis_core

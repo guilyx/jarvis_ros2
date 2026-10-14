@@ -28,6 +28,8 @@ add_library(jarvis_core
   src/fault_catalog.cpp
   src/fault_manager.cpp
   src/json.cpp
+  src/orchestrator.cpp
+  src/plans.cpp
   src/rule_engine.cpp
   src/rules.cpp
   src/types.cpp
@@ -89,6 +91,8 @@ if(BUILD_TESTING)
     test/test_fault_catalog.cpp
     test/test_fault_manager.cpp
     test/test_rule_engine.cpp
+    test/test_orchestrator.cpp
+    test/test_plans.cpp
     test/test_rules.cpp
   )
   target_link_libraries(jarvis_core_tests PRIVATE jarvis_core GTest::gtest_main)

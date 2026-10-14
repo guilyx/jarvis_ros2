@@ -188,7 +188,7 @@ plans:
     requires_approval: []                       # e.g. [RULE] to make rule-triggered runs wait for a human
     preconditions: { faults_inactive: [safety.estop.engaged] }
     max_attempts: { count: 5, per: 1h }
-    timeout: 60s
+    timeout: 90s
     steps:
       - id: restart
         action: lifecycle.restart
@@ -236,7 +236,7 @@ plans:
 
   - id: safe-stop
     description: Cancel navigation goals and wait until the robot is still.
-    allowed_requesters: [RULE, OPERATOR, AGENT]
+    allowed_requesters: [RULE, OPERATOR, AGENT, PLAN]   # PLAN: reached from nav2-reset's ladder
     agent_policy: supervised
     steps:
       - { id: cancel, action: nav2.cancel_navigation, timeout: 5s }
@@ -259,6 +259,26 @@ plans:
 | `retry` | none | `{ attempts, backoff, multiplier }` |
 | `when` | none | Guard. If false, the step is **skipped** (recorded) |
 | `continue_on_failure` | `false` | Keep going even if this step fails |
+
+Plan fields: `params` (`type: string | int | number | bool`, `required`, `default`, `pattern`, `one_of`), `locks`, `on_conflict: reject | queue` with `queue_ttl` (default `30s`), `allowed_requesters` (default: all four), `agent_policy` (default `advise`), `requires_approval`, `preconditions`, `max_attempts`, `timeout` (default `5m`), `steps`, `on_failure`. Templates in plans can use `params.<name>`, `plan.id`, `execution.id`, `correlation_id` and `robot`. A string that is exactly one `{{ var }}` keeps the parameter's type (`{{ params.enable }}` of a `bool` parameter is `true`, not `"true"`).
+
+### Execution semantics (exact)
+
+- **Steps run in order.** A step with a false `when` is recorded as `SKIPPED`. A failed attempt is retried after `backoff × multiplier^(attempt−1)`, up to `retry.attempts` more times. When a step fails for good, the execution is `FAILED`, unless the step has `continue_on_failure`. A rendering error (an unresolved template) fails the step without retrying.
+- **`wait_for` looks back.** It also matches events received since the *previous* step started, so an effect visible before the actuator reports back still counts. The `fault` form checks the fault table instead: `CLEARED` holds once no open fault matches `code` (glob) and `component`; `ACTIVE` holds while one is `ACTIVE` or `LATCHED`.
+- **`check` with `retry` polls.** Each attempt evaluates the guard once.
+- **`run` starts a sub-plan** with requester `PLAN`. The sub-plan holds its parent's locks (no self-deadlock) and runs in its parent's `max_concurrent` slot. Its own `timeout` applies, not the step's. Its outcome is the step's outcome: its `on_failure` ladder does **not** run, because the parent handles the failure.
+- **The `on_failure` ladder** runs when a top-level execution ends `FAILED`. Entries run in order. A `run` entry starts a new execution (requester `PLAN`, same correlation). If it **succeeds**, the ladder stops: recovered. If it fails, is rejected or expires, its own ladder runs first, then this ladder continues with the next entry. If it is aborted, the ladder stops (a human or the kill switch intervened). `escalate` raises the incident to `ESCALATED` and happens at most once per chain, so nested ladders never page twice. With the examples above, L1 `restart-lifecycle-node` → L2 `nav2-reset` → L3 `safe-stop` → L4 `escalate: operator` is exactly the ladder in [04 · Data flow §3](04-data-flow.md).
+- **Plan timeout** (from `RUNNING`) fails the execution and cancels the step in flight.
+- **Dry run** (`DRY_RUN` mode, or `dry_run: true` on the request): every gate runs, approval is noted but not awaited, every step succeeds immediately as `simulated`, and no actuator is called. Its events carry `attrs.dry_run=true` and never change incidents. Dry-run attempts count against their own `max_attempts` history, not the live one.
+- **Restart.** `PENDING_APPROVAL` and `QUEUED` executions survive a restart, along with ladders in progress, rate-limit history and the mode. `RUNNING` executions are not resumed. They end `ABORTED` with `jarvis.recovery.interrupted`, their incident is escalated, and the ladder they belong to stops. A waiting execution whose plan changed (content hash `plan_rev`) is rejected, both after a restart and after a reload.
+- **Events.** Every transition is a `RECOVERY` event `jarvis.recovery.<phase>` with `attrs.phase` set to one of the following:
+  - lifecycle: `PENDING_APPROVAL`, `QUEUED`, `APPROVED`, `STARTED`;
+  - steps: `STEP_SKIPPED`, `STEP_RETRYING`, `STEP_SUCCEEDED`, `STEP_FAILED`;
+  - outcome: `SUCCEEDED`, `FAILED`, `ABORTED`, `REJECTED`, `EXPIRED`;
+  - escalation: `ESCALATED`, `LADDER_DONE`.
+
+  The event also carries `attrs.plan`, `attrs.execution_id`, `attrs.requester`, `attrs.dry_run` and, for sub-plans, `attrs.parent_id`. Only top-level, non-dry-run executions move incident states. Each event's `causation_id` is the previous event of the same execution, and the first one points at the request's cause (e.g. the `RULE_MATCH`).
 
 ### Action catalog (v1)
 

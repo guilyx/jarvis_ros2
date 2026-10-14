@@ -81,6 +81,7 @@ void merge_effects(Effects & into, Effects more)
 {
   bool faults_changed = false;
   bool persist = false;
+  std::optional<ExecutionsChanged> executions;
   Effects merged;
   merged.reserve(into.size() + more.size());
   for (auto * list : {&into, &more}) {
@@ -89,6 +90,16 @@ void merge_effects(Effects & into, Effects more)
         faults_changed = true;
       } else if (std::holds_alternative<PersistState>(fx)) {
         persist = true;
+      } else if (auto * ec = std::get_if<ExecutionsChanged>(&fx)) {
+        if (!executions) {
+          executions.emplace();
+        }
+        for (auto & id : ec->execution_ids) {
+          auto & ids = executions->execution_ids;
+          if (std::find(ids.begin(), ids.end(), id) == ids.end()) {
+            ids.push_back(std::move(id));
+          }
+        }
       } else {
         merged.push_back(std::move(fx));
       }
@@ -96,6 +107,9 @@ void merge_effects(Effects & into, Effects more)
   }
   if (faults_changed) {
     merged.emplace_back(FaultsChanged{});
+  }
+  if (executions) {
+    merged.emplace_back(std::move(*executions));
   }
   if (persist) {
     merged.emplace_back(PersistState{});
@@ -535,6 +549,16 @@ Effects FaultManager::on_recovery(const Event & e, Timestamp now)
   Incident & inc = it->second;
   const std::string * phase = attr_string(e.attrs, "phase");
   if (phase == nullptr) {
+    return fx;
+  }
+  // Only real, top-level executions move the incident: a dry run changes nothing, and a sub-plan's
+  // outcome is its parent's business.
+  if (const auto dry = e.attrs.find("dry_run"); dry != e.attrs.end() &&
+                                                std::holds_alternative<bool>(dry->second) &&
+                                                std::get<bool>(dry->second)) {
+    return fx;
+  }
+  if (const std::string * parent = attr_string(e.attrs, "parent_id"); parent && !parent->empty()) {
     return fx;
   }
   if (*phase == "STARTED" && inc.state == IncidentState::Open) {

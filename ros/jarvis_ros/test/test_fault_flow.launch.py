@@ -22,6 +22,7 @@ from jarvis_interfaces.srv import ClearFault, GetFaults, QueryEvents
 from launch_ros.actions import ComposableNodeContainer
 from launch_ros.descriptions import ComposableNode
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from rosbag2_interfaces.srv import Snapshot
 
 HERE = pathlib.Path(__file__).resolve().parent
 STATE_DIR = tempfile.mkdtemp(prefix="jarvis_flow_")
@@ -45,7 +46,9 @@ def generate_test_description():
             ComposableNode(
                 package="jarvis_ros",
                 plugin="jarvis_ros::FaultManagerNode",
-                parameters=[{**common, "catalog_path": str(HERE / "data" / "faults.yaml")}],
+                parameters=[
+                    {**common, "catalog_path": str(HERE / "data" / "faults.yaml"), "blackbox_wait_s": 1.0}
+                ],
                 extra_arguments=[{"use_intra_process_comms": True}],
             ),
         ],
@@ -204,6 +207,47 @@ class TestFaultFlow(unittest.TestCase):
 
         state = self.wait_for(saved_state, what="fault manager state with every fault cleared")
         self.assertEqual(state["schema"], "jarvis.fault_manager.state/v1")
+
+    def test_6_black_box_capture_waits_for_a_late_recorder(self):
+        def outcome(fault_id):
+            return lambda: next(
+                (
+                    e.code
+                    for e in self.events
+                    if e.code.startswith("jarvis.blackbox.")
+                    and any(a.key == "fault_id" and a.string_value == fault_id for a in e.attrs)
+                ),
+                None,
+            )
+
+        def raise_and_get_id(component):
+            self.send(Event.KIND_FAULT_RAISE, "demo.capture.me", component=component)
+            return self.wait_for(
+                lambda: next(
+                    (
+                        f.fault_id
+                        for f in (self.faults.faults if self.faults else [])
+                        if f.source.component == component
+                    ),
+                    None,
+                ),
+                what=f"fault on {component}",
+            )
+
+        # No recorder yet when the fault confirms; it comes up 300 ms later and still gets the request.
+        first = raise_and_get_id("late_recorder")
+        until = time.time() + 0.3
+        while time.time() < until:
+            rclpy.spin_once(self.node, timeout_sec=0.05)
+        service = self.node.create_service(
+            Snapshot, "/jarvis/blackbox/snapshot", lambda req, res: setattr(res, "success", True) or res
+        )
+        self.assertEqual(self.wait_for(outcome(first), what="capture"), "jarvis.blackbox.captured")
+
+        # Without a recorder, the capture gives up after blackbox_wait_s and says so.
+        self.node.destroy_service(service)
+        second = raise_and_get_id("no_recorder")
+        self.assertEqual(self.wait_for(outcome(second), what="give up"), "jarvis.blackbox.unavailable")
 
 
 @launch_testing.post_shutdown_test()

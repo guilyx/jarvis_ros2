@@ -54,6 +54,9 @@ public:
     declare<std::string>(
       *this, "blackbox_service", "/jarvis/blackbox/snapshot",
       "rosbag2 snapshot service called for faults with capture.blackbox");
+    declare<double>(
+      *this, "blackbox_wait_s", 2.0,
+      "How long a capture waits for the snapshot service (e.g. at startup) before giving up");
     declare<int>(*this, "queue_depth", 1000, "History depth of /jarvis/events and /jarvis/ingest");
     if (declare<bool>(*this, "autostart", false, "Configure and activate on startup")) {
       autostart_timer_ = create_wall_timer(std::chrono::milliseconds(1), [this]() {
@@ -190,6 +193,8 @@ public:
     active_ = false;
     events_sub_.reset();
     deadline_timer_.reset();
+    blackbox_retry_timer_.reset();
+    waiting_captures_.clear();
     diagnostics_timer_.reset();
     persist_if_dirty();
     persist_timer_.reset();
@@ -358,38 +363,86 @@ private:
     }
   }
 
+  /// Captures wait a little for the snapshot service: right after startup (or a recorder restart)
+  /// the client may not have discovered it yet, and a request sent then would be lost.
   void request_blackbox(const jarvis_core::CaptureBlackbox & capture)
   {
-    auto notice = [this, capture](std::string code, jarvis_core::Severity sev, std::string text) {
-      jarvis_core::Event e;
-      e.id = ids_.uuid7(now_ns(*this));
-      e.stamp = now_ns(*this);
-      e.source.robot = get_parameter("robot_id").as_string();
-      e.source.node = get_fully_qualified_name();
-      e.kind = jarvis_core::Kind::System;
-      e.code = std::move(code);
-      e.severity = sev;
-      e.message = std::move(text);
-      e.attrs = {{"fault_id", capture.fault_id}, {"fault_code", capture.code}};
-      e.correlation_id = capture.incident_id;
-      apply({jarvis_core::EmitEvent{std::move(e)}});
-    };
-    if (!blackbox_client_->service_is_ready()) {
-      notice(
-        "jarvis.blackbox.unavailable", jarvis_core::Severity::Warn,
-        "Black-box recorder not reachable at " + std::string(blackbox_client_->get_service_name()));
+    if (blackbox_client_->service_is_ready()) {
+      send_blackbox(capture);
       return;
     }
+    const auto wait = std::chrono::duration<double>(get_parameter("blackbox_wait_s").as_double());
+    waiting_captures_.push_back(
+      {capture, std::chrono::steady_clock::now() +
+                  std::chrono::duration_cast<std::chrono::steady_clock::duration>(wait)});
+    if (!blackbox_retry_timer_) {
+      blackbox_retry_timer_ =
+        create_wall_timer(std::chrono::milliseconds(100), [this]() { retry_blackbox(); });
+    }
+  }
+
+  void retry_blackbox()
+  {
+    const bool ready = blackbox_client_->service_is_ready();
+    const auto now = std::chrono::steady_clock::now();
+    auto waiting = std::exchange(waiting_captures_, {});
+    for (auto & [capture, deadline] : waiting) {
+      if (ready) {
+        send_blackbox(capture);
+      } else if (now >= deadline) {
+        blackbox_notice(
+          capture, "jarvis.blackbox.unavailable", jarvis_core::Severity::Warn,
+          "Black-box recorder not reachable at " +
+            std::string(blackbox_client_->get_service_name()));
+      } else {
+        waiting_captures_.push_back({std::move(capture), deadline});
+      }
+    }
+    if (waiting_captures_.empty()) {
+      blackbox_retry_timer_.reset();
+    }
+  }
+
+  void send_blackbox(const jarvis_core::CaptureBlackbox & capture)
+  {
     blackbox_client_->async_send_request(
       std::make_shared<Snapshot::Request>(),
-      [notice](rclcpp::Client<Snapshot>::SharedFuture future) {
+      [this, capture](rclcpp::Client<Snapshot>::SharedFuture future) {
         const bool ok = future.get()->success;
-        notice(
-          ok ? "jarvis.blackbox.captured" : "jarvis.blackbox.failed",
+        blackbox_notice(
+          capture, ok ? "jarvis.blackbox.captured" : "jarvis.blackbox.failed",
           ok ? jarvis_core::Severity::Info : jarvis_core::Severity::Warn,
           ok ? "Black-box snapshot saved" : "Black-box snapshot failed");
       });
   }
+
+  void blackbox_notice(
+    const jarvis_core::CaptureBlackbox & capture, std::string code, jarvis_core::Severity sev,
+    std::string text)
+  {
+    // The reply can come back after a deactivation; there's nowhere to publish it then.
+    if (!active_) {
+      return;
+    }
+    jarvis_core::Event e;
+    e.id = ids_.uuid7(now_ns(*this));
+    e.stamp = now_ns(*this);
+    e.source.robot = get_parameter("robot_id").as_string();
+    e.source.node = get_fully_qualified_name();
+    e.kind = jarvis_core::Kind::System;
+    e.code = std::move(code);
+    e.severity = sev;
+    e.message = std::move(text);
+    e.attrs = {{"fault_id", capture.fault_id}, {"fault_code", capture.code}};
+    e.correlation_id = capture.incident_id;
+    apply({jarvis_core::EmitEvent{std::move(e)}});
+  }
+
+  struct WaitingCapture
+  {
+    jarvis_core::CaptureBlackbox capture;
+    std::chrono::steady_clock::time_point deadline;
+  };
 
   std::unique_ptr<jarvis_core::FaultManager> manager_;
   std::unique_ptr<StateFile> state_;
@@ -405,6 +458,8 @@ private:
   rclcpp::Service<ClearFault>::SharedPtr clear_srv_;
   rclcpp::Client<Snapshot>::SharedPtr blackbox_client_;
   rclcpp::TimerBase::SharedPtr deadline_timer_;
+  rclcpp::TimerBase::SharedPtr blackbox_retry_timer_;
+  std::vector<WaitingCapture> waiting_captures_;
   rclcpp::TimerBase::SharedPtr persist_timer_;
   rclcpp::TimerBase::SharedPtr diagnostics_timer_;
   rclcpp::TimerBase::SharedPtr autostart_timer_;

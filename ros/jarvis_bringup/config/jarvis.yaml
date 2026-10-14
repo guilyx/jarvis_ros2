@@ -15,6 +15,7 @@
     incident_auto_close_h: 24.0
     export_diagnostics: true
     blackbox_service: /jarvis/blackbox/snapshot
+    blackbox_wait_s: 2.0          # a capture waits this long for the recorder (e.g. at startup)
 
 /jarvis/bridges/diagnostics:
   ros__parameters:

@@ -11,3 +11,6 @@ faults:
     severity: CRITICAL
     latch: true
     incident: always
+  - code: demo.capture.me
+    description: Asks for a black-box snapshot.
+    capture: { blackbox: true }

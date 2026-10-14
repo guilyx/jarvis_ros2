@@ -1,0 +1,36 @@
+# Parameters of the Jarvis components. jarvis.launch.py sets robot_id, state_dir, catalog_path,
+# use_sim_time and autostart on top of these.
+/jarvis/event_hub:
+  ros__parameters:
+    rate_limit_per_sec: 50.0      # per (node, code, component)
+    rate_limit_burst: 100.0
+    suppression_window_s: 10.0
+    buffer_capacity_mb: 128       # recent-events ring buffer, must cover one recorder split
+    max_causal_depth: 16
+
+/jarvis/fault_manager:
+  ros__parameters:
+    incident_min_severity: ERROR
+    incident_merge_window_s: 120.0
+    incident_auto_close_h: 24.0
+    export_diagnostics: true
+    blackbox_service: /jarvis/blackbox/snapshot
+
+/jarvis/bridges/diagnostics:
+  ros__parameters:
+    topic: /diagnostics
+    code_prefix: diag
+    ignore_hardware_ids: [jarvis]
+    repeat_period_s: 0.0          # level changes only
+
+/jarvis/bridges/rosout:
+  ros__parameters:
+    topic: /rosout
+    min_level: WARN
+    fault_level: ERROR
+    ignore_loggers: ["jarvis.*"]
+    fault_repeat_period_s: 1.0
+
+/jarvis/bridges/action_status:
+  ros__parameters:
+    discovery_period_s: 2.0       # watches every action server; set `actions` to narrow it

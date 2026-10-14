@@ -81,7 +81,7 @@
 
 ## 4. Code naming convention
 
-`<domain>.<subsystem>.<condition>` — e.g. `power.battery.low`, `nav.localization.lost`, `nav.action.navigate_to_pose.aborted`.
+`<domain>.<subsystem>.<condition>` — e.g. `power.battery.low`, `nav.localization.lost`, `ros.action.navigate_to_pose.aborted`.
 
 | Prefix | Reserved for |
 |--------|--------------|
@@ -150,7 +150,7 @@ faults:
       freeze_frame: [/odom, /cmd_vel]      # sample these topics at confirmation
       blackbox: true                       # dump the black-box ring buffer (rosbag2 snapshot)
     runbook: runbooks/ros.topic.stale.md
-  - code: nav.action.navigate_to_pose.aborted
+  - code: ros.action.navigate_to_pose.aborted
     severity: ERROR
     heal: { on_clear: true }               # next SUCCEEDED goal clears it
   - code: drive.motor.overcurrent
@@ -163,7 +163,7 @@ faults:
 correlation:                               # borrowed from ros2_medkit
   - id: estop-cascade
     root: [safety.estop.engaged]
-    symptoms: ["drive.*", "nav.controller.*", "nav.action.*"]
+    symptoms: ["drive.*", "nav.controller.*", "ros.action.*"]
     window: 1s
     mute_symptoms: true                    # still recorded, hidden from the active list
     clear_with_root: true

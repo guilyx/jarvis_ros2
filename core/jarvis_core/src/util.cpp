@@ -75,6 +75,26 @@ bool glob_match(std::string_view pattern, std::string_view text)
   return p == pattern.size();
 }
 
+std::string format_duration(Duration d)
+{
+  if (d == 0) {
+    return "0s";
+  }
+  struct Unit
+  {
+    Duration ns;
+    const char * name;
+  };
+  for (const Unit u :
+       {Unit{kHour, "h"}, Unit{kMinute, "m"}, Unit{kSecond, "s"}, Unit{kMillisecond, "ms"},
+        Unit{1000, "us"}}) {
+    if (d % u.ns == 0) {
+      return std::to_string(d / u.ns) + u.name;
+    }
+  }
+  return std::to_string(d) + "ns";
+}
+
 bool is_valid_code(std::string_view code)
 {
   if (code.empty()) {

@@ -8,8 +8,11 @@ It reports `sensor.scan.stale` through jarvis_reporter when its output goes quie
 on /diagnostics (bridged to `diag.scan_relay.output_rate`). Faults are injected at runtime:
 
     ros2 param set /demo/scan_relay inject stall   # stop relaying  -> sensor.scan.stale
+    ros2 param set /demo/scan_relay inject wedge   # hang until restarted (a lifecycle cleanup cures it)
     ros2 param set /demo/scan_relay inject slow    # half the rate  -> diag.scan_relay.output_rate
     ros2 param set /demo/scan_relay inject none
+
+`stall` survives a restart (the lidar itself is gone), `wedge` doesn't (the driver hung).
 """
 
 import collections
@@ -21,10 +24,11 @@ from jarvis_reporter import Reporter, Severity
 from rcl_interfaces.msg import ParameterDescriptor, SetParametersResult
 from rclpy.executors import ExternalShutdownException
 from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn
+from rclpy.parameter import Parameter
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
 
-INJECTIONS = ("none", "stall", "slow")
+INJECTIONS = ("none", "stall", "wedge", "slow")
 RATE_WINDOW_S = 2.0
 RATE_WINDOW_NS = int(RATE_WINDOW_S * 1e9)
 STALE_CODE = "sensor.scan.stale"
@@ -50,6 +54,7 @@ class ScanRelay(LifecycleNode):
         self._activated = 0
         self._first_sent = None  # first relayed scan since activation
         self._received = 0
+        self._name = self.get_fully_qualified_name()  # recovery plans restart the relay by this name
         self._jarvis = Reporter(self, self.get_parameter("component").value)
         # The updater declares parameters, so it lives as long as the node, not one configuration.
         self._diagnostics = Updater(self)
@@ -83,15 +88,19 @@ class ScanRelay(LifecycleNode):
         return super().on_activate(state)
 
     def on_deactivate(self, state):
+        # An open stale fault stays open: /scan is still silent, and only scans flowing again prove
+        # the relay works (a restart that cleared it here would pass any check that waits for it).
         self._active = False
         self.destroy_timer(self._watchdog)
         self.destroy_subscription(self._sub)
-        self._jarvis.clear(STALE_CODE, "relay deactivated")
         return super().on_deactivate(state)
 
     def on_cleanup(self, state):
         self.destroy_lifecycle_publisher(self._pub)
         self._sent.clear()
+        if self.get_parameter("inject").value == "wedge":
+            self.set_parameters([Parameter("inject", value="none")])
+            self.get_logger().info("cleanup reset the wedged relay")
         return TransitionCallbackReturn.SUCCESS
 
     # -- relay -----------------------------------------------------------------------------------
@@ -102,7 +111,7 @@ class ScanRelay(LifecycleNode):
     def _on_scan(self, msg):
         self._received += 1
         inject = self.get_parameter("inject").value
-        if inject == "stall" or (inject == "slow" and self._received % 2):
+        if inject in ("stall", "wedge") or (inject == "slow" and self._received % 2):
             return
         self._pub.publish(msg)
         self._since = self._now()
@@ -130,7 +139,7 @@ class ScanRelay(LifecycleNode):
                 STALE_CODE,
                 Severity.ERROR,
                 f"no scan on {self._topic} for {silence / 1e9:.1f} s",
-                {"topic": self._topic, "silence_ms": silence // 1_000_000},
+                {"topic": self._topic, "silence_ms": silence // 1_000_000, "node": self._name},
             )
         else:
             self._jarvis.clear(STALE_CODE, "scans are flowing again")

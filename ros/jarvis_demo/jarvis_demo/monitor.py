@@ -1,19 +1,20 @@
 # Copyright 2026 Erwin L.
 # SPDX-License-Identifier: Apache-2.0
-"""Live terminal view of Jarvis: open faults and the latest events, refreshed twice a second.
+"""Live terminal view of Jarvis: open faults, recoveries and the latest events, refreshed twice a second.
 
 ros2 run jarvis_demo monitor          # full-screen view (Ctrl-C to quit)
 ros2 run jarvis_demo monitor --once   # print one snapshot and exit, for scripts and CI
 """
 
 import argparse
+import bisect
 import collections
 import shutil
 import sys
 import time
 
 import rclpy
-from jarvis_interfaces.msg import Event, Fault, FaultArray
+from jarvis_interfaces.msg import Event, Execution, ExecutionArray, Fault, FaultArray
 from jarvis_interfaces.srv import QueryEvents
 from rclpy.executors import ExternalShutdownException
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
@@ -37,6 +38,22 @@ STATES = {
     Fault.STATE_LATCHED: "LATCHED",
     Fault.STATE_CLEARED: "CLEARED",
 }
+EXEC_STATES = {
+    Execution.STATE_PENDING_APPROVAL: "APPROVAL",
+    Execution.STATE_QUEUED: "QUEUED",
+    Execution.STATE_RUNNING: "RUNNING",
+    Execution.STATE_SUCCEEDED: "SUCCEEDED",
+    Execution.STATE_FAILED: "FAILED",
+    Execution.STATE_ABORTED: "ABORTED",
+    Execution.STATE_REJECTED: "REJECTED",
+    Execution.STATE_EXPIRED: "EXPIRED",
+}
+REQUESTERS = {
+    Execution.REQUESTER_OPERATOR: "operator",
+    Execution.REQUESTER_RULE: "rule",
+    Execution.REQUESTER_AGENT: "agent",
+    Execution.REQUESTER_PLAN: "plan",
+}
 COLORS = {
     "DEBUG": "2",
     "INFO": "32",
@@ -48,9 +65,21 @@ COLORS = {
     "LATCHED": "1;35",
     "CLEARED": "32",
     "MUTED": "2",
+    "APPROVAL": "1;33",
+    "QUEUED": "33",
+    "RUNNING": "1;36",
+    "SUCCEEDED": "32",
+    "FAILED": "1;31",
+    "ABORTED": "33",
+    "REJECTED": "2",
+    "EXPIRED": "2",
 }
 TOUR_CODE = "demo.tour.step"
-HINT = "inject: scan-stall · scan-slow · estop · rosout-error · diag-error · tour   then: inject clear"
+HINT = (
+    "inject: scan-wedge · scan-stall · scan-slow · estop · rosout-error · diag-error · tour   "
+    "then: inject clear"
+)
+RECOVERY_ROWS = 4
 
 
 def paint(text, key, color):
@@ -75,31 +104,62 @@ class Snapshot:
 
     def __init__(self, history=12):
         self.faults = None  # FaultArray, None until the latched snapshot arrives
-        self.events = collections.deque(maxlen=history)
+        self.executions = None  # ExecutionArray, None until the recovery node publishes one
+        self.events = collections.deque(maxlen=history)  # the latest ones, in seq order
         self.total_events = 0
-        self.last_seq = 0
         self.robot = ""
         self.tour = ""
+        self._tour_seq = 0
 
     def on_faults(self, msg):
         self.faults = msg
 
+    def on_executions(self, msg):
+        self.executions = msg
+
     def on_event(self, msg):
-        # History from the hub and live events overlap while the monitor starts: seq tells them apart.
-        if msg.seq and msg.seq <= self.last_seq:
+        # Live events start flowing while the hub's history is still being read: the two overlap
+        # and interleave. seq orders them and tells copies apart.
+        if msg.seq and any(e.seq == msg.seq for e in self.events):
             return
-        self.last_seq = max(self.last_seq, msg.seq)
         self.total_events += 1
         self.robot = msg.source.robot or self.robot
-        if msg.code == TOUR_CODE:
-            self.tour = msg.message
-        self.events.append(msg)
+        if msg.code == TOUR_CODE and msg.seq >= self._tour_seq:
+            self.tour, self._tour_seq = msg.message, msg.seq
+        if not msg.seq or not self.events or msg.seq > self.events[-1].seq:
+            self.events.append(msg)
+            return
+        keep = self.events.maxlen
+        if len(self.events) == keep and msg.seq < self.events[0].seq:
+            return  # older than everything on screen
+        ordered = list(self.events)
+        bisect.insort(ordered, msg, key=lambda e: e.seq)
+        self.events = collections.deque(ordered[-keep:], maxlen=keep)
 
 
-def render(snap, width=100, color=True):
-    """The whole screen as one string: header, open faults, recent events, hints.
+def execution_rows(snap):
+    """Running and waiting executions first, then the latest settled ones, newest first."""
+    if snap.executions is None:
+        return [("  (no snapshot from /jarvis/executions: is recovery running?)", None)]
+    rows = list(snap.executions.executions) + list(reversed(snap.executions.recent))
+    if not rows:
+        return [("  none yet", None)]
+    lines = [(f"  {'STATE':<10} {'PLAN':<26} {'BY':<28} STEP · REASON", None)]
+    for x in rows[:RECOVERY_ROWS]:
+        state = EXEC_STATES.get(x.state, "?")
+        by = fit(f"{REQUESTERS.get(x.requester_type, '?')} {x.requester_id}".strip(), 28)
+        step = x.steps[x.current_step].id if x.state == Execution.STATE_RUNNING and x.steps else ""
+        detail = " · ".join(part for part in (step, x.reason) if part)
+        dry = " (dry run)" if x.dry_run else ""
+        lines.append((f"  {state:<10} {fit(x.plan_id + dry, 26):<26} {by:<28} {detail}", state))
+    return lines
 
-    Every line is cut to `width` before it is colored, so escape codes never count as text.
+
+def render(snap, width=100, color=True, height=None):
+    """The whole screen as one string: header, open faults, recoveries, recent events, hints.
+
+    Every line is cut to `width` before it is colored, so escape codes never count as text. With a
+    `height`, the oldest events are left out so the screen and the cursor fit (or it would scroll).
     """
     lines = []  # (text, color key)
     faults = list(snap.faults.faults) if snap.faults else []
@@ -127,10 +187,14 @@ def render(snap, width=100, color=True):
             code, component = fit(f.code, 34), fit(f.source.component, 18)
             row = f"  {state:<8} {sev:<5} {code:<34} {component:<18} {f.occurrences:>4}  {f.message}"
             lines.append((row, state))
+    mode = snap.executions.mode if snap.executions is not None else ""
+    lines += [("", None), ("RECOVERY" + (f"  mode {mode}" if mode else ""), "INFO"), *execution_rows(snap)]
     lines += [("", None), ("RECENT EVENTS", "INFO")]
     if not snap.events:
         lines.append(("  (none yet)", None))
-    for e in reversed(snap.events):
+    # The hints take 2 rows, and the cursor one more: a full screen would scroll the header away.
+    room = len(snap.events) if height is None else max(1, height - len(lines) - 3)
+    for e in list(reversed(snap.events))[:room]:
         sev = SEVERITIES.get(e.severity, str(e.severity))
         kind = KINDS.get(e.kind, str(e.kind))
         state = attr(e, "state") if e.kind == Event.KIND_FAULT_STATE else ""
@@ -147,24 +211,34 @@ def width(tty):
     return shutil.get_terminal_size().columns if tty else 10_000
 
 
+def height(tty):
+    """The terminal's height; without a terminal every event is printed."""
+    return shutil.get_terminal_size().lines if tty else None
+
+
 def prefill(node, snap, timeout=3.0):
-    """Recent history from the event hub's ring buffer, so the view isn't empty at start."""
+    """Recent history from the event hub's ring buffer, so the view isn't empty at start.
+
+    Returns False when the hub did not answer within `timeout` seconds.
+    """
     client = node.create_client(QueryEvents, "/jarvis/event_hub/query_events")
+    deadline = time.monotonic() + timeout
     try:
         if not client.wait_for_service(timeout_sec=timeout):
-            return
+            return False
         after = 0
         for _ in range(20):  # 20 pages of 500 is far more than the screen shows
             future = client.call_async(QueryEvents.Request(after_seq=after, limit=500))
-            rclpy.spin_until_future_complete(node, future, timeout_sec=timeout)
+            rclpy.spin_until_future_complete(node, future, timeout_sec=max(0.5, deadline - time.monotonic()))
             reply = future.result()
             if reply is None:
-                return
+                return False
             for event in reply.events:
                 snap.on_event(event)
             if reply.next_seq == 0:
-                return
+                return True
             after = reply.next_seq
+        return True
     finally:
         node.destroy_client(client)
 
@@ -184,10 +258,13 @@ def main(argv=None):
     )
     stream = QoSProfile(depth=1000, reliability=ReliabilityPolicy.RELIABLE)
     node.create_subscription(FaultArray, "/jarvis/faults", snap.on_faults, latched)
+    node.create_subscription(ExecutionArray, "/jarvis/executions", snap.on_executions, latched)
     node.create_subscription(Event, "/jarvis/events", snap.on_event, stream)
     tty = sys.stdout.isatty()
     try:
-        prefill(node, snap)
+        # A snapshot for a script has time to wait for the hub; the live view starts at once.
+        if not prefill(node, snap, timeout=args.timeout if args.once else 3.0):
+            print("monitor: no history from the event hub, showing live events only", file=sys.stderr)
         if args.once:
             deadline = time.monotonic() + args.timeout
             while snap.faults is None and time.monotonic() < deadline:
@@ -204,7 +281,7 @@ def main(argv=None):
             until = time.monotonic() + period
             while time.monotonic() < until:
                 rclpy.spin_once(node, timeout_sec=0.05)
-            screen = render(snap, width(tty), color=tty)
+            screen = render(snap, width(tty), color=tty, height=height(tty))
             sys.stdout.write(("\033[H\033[2J" if tty else "\n") + screen + "\n")
             sys.stdout.flush()
     except (KeyboardInterrupt, ExternalShutdownException):

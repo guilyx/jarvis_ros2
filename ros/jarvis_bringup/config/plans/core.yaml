@@ -1,0 +1,28 @@
+# Generic recovery plans that fit most robots. Add your own files next to this one (or point the
+# `plans` launch argument at your directory). Spec: docs/design/05-rules-and-recovery.md §8-10.
+schema: jarvis.plans/v1
+plans:
+  - id: restart-lifecycle-node
+    description: Cycle a managed node back to active, then verify that its faults clear.
+    params:
+      node: { type: string, required: true, pattern: "^/", description: absolute node name }
+      component: { type: string, required: true, description: the component its faults are about }
+      fault: { type: string, default: "*", description: code glob of the faults that must clear }
+    locks: ["node:{{ params.node }}"]
+    allowed_requesters: [RULE, OPERATOR, AGENT, PLAN]
+    agent_policy: supervised
+    preconditions: { faults_inactive: [safety.estop.engaged] }
+    max_attempts: { count: 5, per: 1h }
+    timeout: 90s
+    steps:
+      - id: restart
+        action: lifecycle.restart
+        with: { node: "{{ params.node }}" }
+        timeout: 20s
+        retry: { attempts: 2, backoff: 2s, multiplier: 2.0 }
+      - id: verify
+        action: wait_for
+        with: { fault: { code: "{{ params.fault }}", component: "{{ params.component }}" }, state: CLEARED }
+        timeout: 15s
+    on_failure:
+      - escalate: operator

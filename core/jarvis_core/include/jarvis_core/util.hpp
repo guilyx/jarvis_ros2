@@ -34,6 +34,9 @@ bool glob_match(std::string_view pattern, std::string_view text);
 /// Event codes are dotted, lowercase: `^[a-z0-9_]+(\.[a-z0-9_]+)*$`.
 bool is_valid_code(std::string_view code);
 
+/// The inverse of parse_duration, in the largest exact unit: `1h`, `90s`, `250ms`, `0s`.
+std::string format_duration(Duration d);
+
 /// Parses "250ms", "1.5s", "2m", "1h", "500us", "10ns". A bare number means seconds.
 std::optional<Duration> parse_duration(std::string_view text);
 

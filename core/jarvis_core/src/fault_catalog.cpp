@@ -11,6 +11,7 @@
 #include <sstream>
 
 #include "jarvis_core/util.hpp"
+#include "yaml_util.hpp"
 
 namespace jarvis_core
 {
@@ -18,86 +19,7 @@ namespace jarvis_core
 namespace
 {
 
-[[noreturn]] void fail(const std::string & path, const std::string & what)
-{
-  throw CatalogError(path + ": " + what);
-}
-
-void check_keys(
-  const YAML::Node & node, const std::string & path,
-  std::initializer_list<std::string_view> allowed)
-{
-  if (!node.IsMap()) {
-    fail(path, "expected a mapping");
-  }
-  for (const auto & item : node) {
-    const auto key = item.first.as<std::string>();
-    if (std::find(allowed.begin(), allowed.end(), key) == allowed.end()) {
-      fail(path + "." + key, "unknown key");
-    }
-  }
-}
-
-std::string as_string(const YAML::Node & node, const std::string & path)
-{
-  if (!node.IsScalar()) {
-    fail(path, "expected a string");
-  }
-  return node.as<std::string>();
-}
-
-bool as_bool(const YAML::Node & node, const std::string & path)
-{
-  try {
-    return node.as<bool>();
-  } catch (const YAML::Exception &) {
-    fail(path, "expected true or false");
-  }
-}
-
-int as_int(const YAML::Node & node, const std::string & path)
-{
-  try {
-    return node.as<int>();
-  } catch (const YAML::Exception &) {
-    fail(path, "expected an integer");
-  }
-}
-
-Duration as_duration(const YAML::Node & node, const std::string & path)
-{
-  const auto text = as_string(node, path);
-  const auto d = parse_duration(text);
-  if (!d || *d < 0) {
-    fail(path, "invalid duration '" + text + "' (use e.g. 500ms, 1s, 2m, 1h)");
-  }
-  return *d;
-}
-
-Severity as_severity(const YAML::Node & node, const std::string & path)
-{
-  const auto text = as_string(node, path);
-  const auto s = parse_severity(text);
-  if (!s) {
-    fail(path, "invalid severity '" + text + "' (DEBUG, INFO, WARN, ERROR, CRITICAL)");
-  }
-  return *s;
-}
-
-std::vector<std::string> as_string_list(const YAML::Node & node, const std::string & path)
-{
-  if (node.IsScalar()) {
-    return {node.as<std::string>()};
-  }
-  if (!node.IsSequence()) {
-    fail(path, "expected a list of strings");
-  }
-  std::vector<std::string> out;
-  for (std::size_t i = 0; i < node.size(); ++i) {
-    out.push_back(as_string(node[i], path + "[" + std::to_string(i) + "]"));
-  }
-  return out;
-}
+using namespace detail;
 
 DebouncePolicy parse_debounce(const YAML::Node & node, const std::string & path)
 {
@@ -221,14 +143,11 @@ FaultPolicy FaultCatalog::policy_for(const std::string & code) const
   return p;
 }
 
-FaultCatalog FaultCatalog::from_yaml(const std::string & text)
+namespace
 {
-  YAML::Node root;
-  try {
-    root = YAML::Load(text);
-  } catch (const YAML::Exception & e) {
-    throw CatalogError(std::string("invalid YAML: ") + e.what());
-  }
+
+FaultCatalog parse_catalog(const YAML::Node & root)
+{
   if (!root || root.IsNull()) {
     return FaultCatalog{};
   }
@@ -316,6 +235,17 @@ FaultCatalog FaultCatalog::from_yaml(const std::string & text)
     }
   }
   return catalog;
+}
+
+}  // namespace
+
+FaultCatalog FaultCatalog::from_yaml(const std::string & text)
+{
+  try {
+    return parse_catalog(load(text));
+  } catch (const YamlError & e) {
+    throw CatalogError(e.what());
+  }
 }
 
 FaultCatalog FaultCatalog::from_file(const std::string & path)

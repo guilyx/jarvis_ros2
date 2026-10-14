@@ -91,3 +91,16 @@ TEST(Enums, ParseAndPrint)
   EXPECT_FALSE(is_valid(Kind::Unspecified));
   EXPECT_TRUE(Severity::Error > Severity::Warn);
 }
+
+TEST(Util, FormatDurationRoundTrips)
+{
+  EXPECT_EQ(format_duration(0), "0s");
+  EXPECT_EQ(format_duration(kHour), "1h");
+  EXPECT_EQ(format_duration(90 * kSecond), "90s");
+  EXPECT_EQ(format_duration(2 * kMinute), "2m");
+  EXPECT_EQ(format_duration(250 * kMillisecond), "250ms");
+  EXPECT_EQ(format_duration(1500), "1500ns");
+  for (const Duration d : {kHour, 90 * kSecond, 250 * kMillisecond, Duration{7}}) {
+    EXPECT_EQ(parse_duration(format_duration(d)), d);
+  }
+}

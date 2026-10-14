@@ -60,6 +60,14 @@ class TestBringup(unittest.TestCase):
         cls.nav_status = cls.node.create_publisher(GoalStatusArray, status_topic, latched)
         cls.get_faults = cls.node.create_client(GetFaults, "/jarvis/fault_manager/get_faults")
         assert cls.get_faults.wait_for_service(timeout_sec=60.0), "fault manager never came up"
+        # The first capture comes right after startup: wait until the black box records the stream,
+        # or its ring buffer may still be empty when it is dumped (discovery is slower under load).
+        deadline = time.time() + 60.0
+        while time.time() < deadline and not any(
+            info.node_name == "blackbox"
+            for info in cls.node.get_subscriptions_info_by_topic("/jarvis/events")
+        ):
+            rclpy.spin_once(cls.node, timeout_sec=0.1)
 
     @classmethod
     def tearDownClass(cls):

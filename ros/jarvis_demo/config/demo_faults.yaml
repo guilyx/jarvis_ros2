@@ -46,13 +46,31 @@ faults:
   - code: ros.action.compute_path_to_pose.aborted
     description: The planner server found no path.
     severity: WARN
+  - code: ros.topic.stale
+    description: A watched topic went silent, or lost its publisher.
+    debounce: { persist: 1s }
+    capture: { blackbox: true }
+  - code: ros.topic.slow
+    description: A watched topic publishes below its minimum rate.
+    severity: WARN
+    debounce: { persist: 3s }
+  - code: ros.node.missing
+    description: An expected node is not on the ROS graph (it crashed or never started).
+    capture: { blackbox: true }
+  - code: ros.lifecycle.inactive
+    description: A managed node left the active state.
+    severity: WARN
+    debounce: { persist: 5s }   # a deliberate restart goes through inactive much faster
+  - code: ros.lifecycle.failed
+    description: A managed node's transition failed (error processing).
 
 correlation:
-  # A stalled lidar also collapses its rate: show the stall, mute the rate.
+  # A stalled lidar also collapses its rate: show the stall, mute the rate. The window covers a
+  # restart of the relay, which resets its rate window: the symptom can come seconds later.
   - id: scan-stall
     root: [sensor.scan.stale]
     symptoms: ["diag.scan_relay.*"]
-    window: 3s
+    window: 30s
     mute_symptoms: true
     clear_with_root: false
   # Pressing the e-stop makes Nav2 abort: the e-stop is the root cause.

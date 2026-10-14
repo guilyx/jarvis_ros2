@@ -1,0 +1,99 @@
+{
+  "approved_by": "",
+  "args": {
+    "component": "scan_relay",
+    "node": "/demo/scan_relay"
+  },
+  "causation_id": "01928f6e-7c19-7a00-8b11-0c2d3e4f5a6b",
+  "child_id": "",
+  "confidence": null,
+  "correlation_id": "01928f6e-7c1a-7b3e-9f00-5a1d2c3b4e5f",
+  "created": "2025-10-14T09:14:03.120000000Z",
+  "current_step": 1,
+  "depth": 1,
+  "dry_run": false,
+  "escalated": false,
+  "execution_id": "0199e1ff-83f0-73f3-85ff-3ca60f508135",
+  "expires": null,
+  "failed_step": "verify",
+  "finished": "2025-10-14T09:14:20.520000000Z",
+  "gates": [
+    {
+      "detail": "ENABLED",
+      "gate": "mode",
+      "passed": true
+    },
+    {
+      "detail": "rev 83920b74da6ee052",
+      "gate": "plan",
+      "passed": true
+    },
+    {
+      "detail": "RULE allowed",
+      "gate": "requester",
+      "passed": true
+    },
+    {
+      "detail": "none",
+      "gate": "preconditions",
+      "passed": true
+    },
+    {
+      "detail": "none",
+      "gate": "rate_limit",
+      "passed": true
+    },
+    {
+      "detail": "acquired node:/demo/scan_relay",
+      "gate": "locks",
+      "passed": true
+    },
+    {
+      "detail": "not required",
+      "gate": "approval",
+      "passed": true
+    }
+  ],
+  "ladder": {
+    "child": "0199e1ff-c7e8-7c7a-993e-30f0fcce9456",
+    "next": 1,
+    "running": true
+  },
+  "ladder_of": "",
+  "last_event_id": "0199e1ff-c7e8-77d1-9f36-9e21af46c88f",
+  "locks": [
+    "node:/demo/scan_relay"
+  ],
+  "needs_approval": false,
+  "parent_id": "",
+  "plan_id": "restart-lifecycle-node",
+  "plan_rev": "83920b74da6ee052",
+  "rationale": "ros.topic.stale on scan_relay",
+  "reason": "step verify failed: fault ros.topic.stale not CLEARED within 15s",
+  "requester": {
+    "id": "scan-stale-restart",
+    "type": "RULE"
+  },
+  "started": "2025-10-14T09:14:03.120000000Z",
+  "state": "FAILED",
+  "steps": [
+    {
+      "action": "lifecycle.restart",
+      "attempts": 1,
+      "finished": "2025-10-14T09:14:05.520000000Z",
+      "id": "restart",
+      "message": "active again",
+      "started": "2025-10-14T09:14:03.120000000Z",
+      "state": "SUCCEEDED"
+    },
+    {
+      "action": "wait_for",
+      "attempts": 1,
+      "finished": "2025-10-14T09:14:20.520000000Z",
+      "id": "verify",
+      "message": "fault ros.topic.stale not CLEARED within 15s",
+      "started": "2025-10-14T09:14:05.520000000Z",
+      "state": "FAILED"
+    }
+  ]
+}

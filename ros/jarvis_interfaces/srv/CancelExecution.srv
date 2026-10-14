@@ -1,0 +1,7 @@
+# Aborts a waiting or running execution, or stops the escalation ladder of a failed one.
+string execution_id
+string operator_name
+string reason
+---
+bool success
+string message

@@ -3,7 +3,7 @@
 <package format="3">
   <name>jarvis_ros</name>
   <version>0.1.0</version>
-  <description>ROS 2 layer of Jarvis: type adapters and the event hub and fault manager lifecycle components.</description>
+  <description>ROS 2 layer of Jarvis: type adapters, the event hub, fault manager, rule engine and recovery lifecycle components, and the built-in actuators.</description>
   <maintainer email="erwin.lejeune15@gmail.com">Erwin L.</maintainer>
   <license>Apache-2.0</license>
 
@@ -16,10 +16,14 @@
   <depend>diagnostic_updater</depend>
   <depend>lifecycle_msgs</depend>
   <depend>nlohmann-json-dev</depend>
+  <depend>pluginlib</depend>
+  <depend>rcl_interfaces</depend>
   <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
   <depend>rclcpp_components</depend>
   <depend>rclcpp_lifecycle</depend>
   <depend>rosbag2_interfaces</depend>
+  <depend>std_srvs</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>
@@ -29,6 +33,7 @@
   <test_depend>launch_testing_ament_cmake</test_depend>
   <test_depend>launch_testing_ros</test_depend>
   <test_depend>rclpy</test_depend>
+  <test_depend>std_srvs</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

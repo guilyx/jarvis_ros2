@@ -28,6 +28,11 @@ add_library(jarvis_core
   src/fault_catalog.cpp
   src/fault_manager.cpp
   src/json.cpp
+  src/orchestrator.cpp
+  src/plans.cpp
+  src/rule_engine.cpp
+  src/rules.cpp
+  src/tooling.cpp
   src/types.cpp
   src/util.cpp
 )
@@ -52,7 +57,16 @@ if(JARVIS_SANITIZE)
   endforeach()
 endif()
 
+# `jarvis lint` and `jarvis backtest`: the offline tools (tools/jarvis.cpp).
+add_executable(jarvis tools/jarvis.cpp)
+target_link_libraries(jarvis PRIVATE jarvis_core)
+target_compile_options(jarvis PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion)
+if(JARVIS_WERROR)
+  target_compile_options(jarvis PRIVATE -Werror)
+endif()
+
 include(GNUInstallDirs)
+install(TARGETS jarvis RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(TARGETS jarvis_core EXPORT jarvis_coreTargets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -86,11 +100,30 @@ if(BUILD_TESTING)
     test/test_event_hub.cpp
     test/test_fault_catalog.cpp
     test/test_fault_manager.cpp
+    test/test_rule_engine.cpp
+    test/test_orchestrator.cpp
+    test/test_plans.cpp
+    test/test_rules.cpp
+    test/test_tooling.cpp
   )
   target_link_libraries(jarvis_core_tests PRIVATE jarvis_core GTest::gtest_main)
   target_compile_definitions(jarvis_core_tests PRIVATE
     JARVIS_SCHEMA_EXAMPLES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../schemas/examples"
+    JARVIS_DOCS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../docs"
+    JARVIS_REPO_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../.."
   )
   include(GoogleTest)
   gtest_discover_tests(jarvis_core_tests DISCOVERY_MODE PRE_TEST)
+
+  # The CLI itself, on the configuration that ships.
+  set(BRINGUP_CONFIG ${CMAKE_CURRENT_SOURCE_DIR}/../../ros/jarvis_bringup/config)
+  set(DEMO_CONFIG ${CMAKE_CURRENT_SOURCE_DIR}/../../ros/jarvis_demo/config)
+  add_test(NAME cli.lint_shipped_configuration
+    COMMAND jarvis lint --rules ${BRINGUP_CONFIG}/rules --plans ${BRINGUP_CONFIG}/plans
+            --catalog ${BRINGUP_CONFIG}/faults.yaml)
+  add_test(NAME cli.lint_demo_configuration
+    COMMAND jarvis lint --rules ${DEMO_CONFIG}/rules --plans ${BRINGUP_CONFIG}/plans
+            --catalog ${DEMO_CONFIG}/demo_faults.yaml)
+  add_test(NAME cli.unknown_command_is_a_usage_error COMMAND jarvis nope)
+  set_tests_properties(cli.unknown_command_is_a_usage_error PROPERTIES WILL_FAIL TRUE)
 endif()

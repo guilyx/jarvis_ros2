@@ -4,7 +4,7 @@
 
 from builtin_interfaces.msg import Time
 from jarvis_demo.monitor import Snapshot, render
-from jarvis_interfaces.msg import Attribute, Event, Fault, FaultArray
+from jarvis_interfaces.msg import Attribute, Event, Execution, ExecutionArray, Fault, FaultArray, StepProgress
 
 
 def fault(code, state=Fault.STATE_ACTIVE, severity=Event.SEVERITY_ERROR, component="lidar", muted_by=""):
@@ -83,9 +83,66 @@ def test_history_and_live_events_are_not_counted_twice():
     assert [e.seq for e in snap.events] == [1, 2, 3, 4]
 
 
+def test_history_read_after_live_events_still_shows_in_order():
+    # A wedged relay reports every second: live events arrive while the history is being read.
+    snap = Snapshot(history=5)
+    snap.on_event(event("sensor.scan.stale", seq=10))
+    snap.on_event(event("demo.tour.step", kind=Event.KIND_LOG, message="2/5", seq=11))
+    for seq in range(1, 12):
+        code = "demo.tour.step" if seq == 3 else f"code.n{seq}"
+        snap.on_event(event(code, kind=Event.KIND_LOG, message="1/5", seq=seq))
+    assert [e.seq for e in snap.events] == [7, 8, 9, 10, 11]
+    assert snap.total_events == 11
+    assert snap.tour == "2/5", "older narration doesn't replace newer"
+
+
 def test_the_robot_id_comes_from_faults_when_no_event_was_seen():
     snap = Snapshot()
     f = fault("sensor.scan.stale")
     f.source.robot = "demo-bot"
     snap.on_faults(FaultArray(faults=[f]))
     assert "JARVIS · demo-bot" in render(snap, color=False)
+
+
+def execution(plan, state, reason="", requester_id="lidar-stale-restart", step=""):
+    x = Execution(plan_id=plan, state=state, reason=reason, requester_type=Execution.REQUESTER_RULE)
+    x.requester_id = requester_id
+    if step:
+        x.steps = [StepProgress(id=step, action="lifecycle.restart")]
+    return x
+
+
+def test_recoveries_show_what_runs_first_then_the_latest_outcomes():
+    snap = Snapshot()
+    assert "is recovery running?" in render(snap, color=False)
+    snap.on_executions(ExecutionArray(mode="ENABLED"))
+    assert "RECOVERY  mode ENABLED" in render(snap, color=False)
+    assert "none yet" in render(snap, color=False)
+
+    snap.on_executions(
+        ExecutionArray(
+            mode="ENABLED",
+            executions=[execution("restart-lifecycle-node", Execution.STATE_RUNNING, step="restart")],
+            recent=[
+                execution("restart-lifecycle-node", Execution.STATE_FAILED, "step verify failed: timeout"),
+                execution("restart-lifecycle-node", Execution.STATE_SUCCEEDED, "all steps succeeded"),
+            ],
+        )
+    )
+    screen = render(snap, width=200, color=False)
+    rows = [line.split()[0] for line in screen.splitlines() if "restart-lifecycle-node" in line]
+    assert rows == ["RUNNING", "SUCCEEDED", "FAILED"]
+    assert "rule lidar-stale-restart" in screen
+    assert "restart" in next(line for line in screen.splitlines() if line.lstrip().startswith("RUNNING"))
+
+
+def test_the_screen_fits_the_terminal_by_leaving_out_the_oldest_events():
+    snap = Snapshot(history=50)
+    for seq in range(1, 31):
+        snap.on_event(event(f"code.n{seq}", seq=seq))
+    screen = render(snap, color=False, height=20).splitlines()
+    assert len(screen) == 19, "a row is left for the cursor"
+    assert any("code.n30" in line for line in screen), "the newest event stays"
+    assert not any("code.n1 " in line or line.endswith("code.n1") for line in screen)
+    assert screen[-1].startswith("inject:"), "the hints stay"
+    assert len(render(snap, color=False).splitlines()) > 30, "without a height, everything"

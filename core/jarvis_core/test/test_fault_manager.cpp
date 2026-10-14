@@ -439,6 +439,31 @@ TEST_F(FaultManagerTest, IncidentFollowsRecoveryAndClosesAfterResolution)
   EXPECT_EQ(fm_.find_incident(incident), nullptr);
 }
 
+TEST_F(FaultManagerTest, DryRunsAndSubPlansDoNotMoveTheIncident)
+{
+  raise("something.broke", kT0);
+  const std::string incident = fm_.faults().front().incident_id;
+  Event recovery;
+  recovery.kind = Kind::Recovery;
+  recovery.code = "jarvis.recovery.started";
+  recovery.correlation_id = incident;
+  recovery.attrs["phase"] = std::string("STARTED");
+
+  recovery.attrs["dry_run"] = true;
+  fm_.on_event(recovery, kT0 + 1);
+  EXPECT_EQ(fm_.find_incident(incident)->state, IncidentState::Open) << "a dry run changes nothing";
+
+  recovery.attrs["dry_run"] = false;
+  recovery.attrs["parent_id"] = std::string("exec-parent");
+  fm_.on_event(recovery, kT0 + 2);
+  EXPECT_EQ(fm_.find_incident(incident)->state, IncidentState::Open)
+    << "sub-plans are the parent's";
+
+  recovery.attrs.erase("parent_id");
+  fm_.on_event(recovery, kT0 + 3);
+  EXPECT_EQ(fm_.find_incident(incident)->state, IncidentState::Recovering);
+}
+
 TEST_F(FaultManagerTest, OperatorCanCloseAResolvedIncident)
 {
   raise("something.broke", kT0);

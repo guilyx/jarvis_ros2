@@ -36,6 +36,25 @@ faults:
     description: The planner server found no path.
     severity: WARN
 
+  # Watchdog and lifecycle bridges.
+  - code: ros.topic.stale
+    description: A watched topic went silent, or lost its publisher.
+    debounce: { persist: 1s }
+    capture: { blackbox: true }
+  - code: ros.topic.slow
+    description: A watched topic publishes below its minimum rate.
+    severity: WARN
+    debounce: { persist: 3s }
+  - code: ros.node.missing
+    description: An expected node is not on the ROS graph (it crashed or never started).
+    capture: { blackbox: true }
+  - code: ros.lifecycle.inactive
+    description: A managed node left the active state.
+    severity: WARN
+    debounce: { persist: 5s }   # a deliberate restart goes through inactive much faster
+  - code: ros.lifecycle.failed
+    description: A managed node's transition failed (error processing).
+
 correlation:
   # Inner servers abort first; the navigator's abort is the fault worth showing.
   - id: nav-goal-aborted

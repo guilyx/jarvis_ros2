@@ -3,7 +3,8 @@
 """End-to-end demo without a simulator: inject faults with the real CLI and watch Jarvis handle them.
 
 Covers M1's exit criteria (docs/design/09-roadmap.md): debounce, correlation, black box, latch and
-operator clear, and open faults surviving a fault manager restart.
+operator clear, and open faults surviving a fault manager restart. And M2's demo scenarios: a wedged
+relay restarted by a rule (S1), restarts that keep being needed suppressed and escalated (S2).
 """
 
 import pathlib
@@ -47,11 +48,15 @@ def attr(event, key):
     return next((a.string_value for a in event.attrs if a.key == key), None)
 
 
-def inject(*args, wait=True):
+def inject(*args, wait=True, check=True):
     cmd = ["ros2", "run", "jarvis_demo", "inject", *args]
     if wait:
-        return subprocess.run(cmd, timeout=60, check=True)
+        return subprocess.run(cmd, timeout=60, check=check)
     return subprocess.Popen(cmd)
+
+
+RESTART_RULE = "lidar-stale-restart"
+RELAY = "/demo/scan_relay"
 
 
 class TestDemo(unittest.TestCase):
@@ -95,6 +100,26 @@ class TestDemo(unittest.TestCase):
     def became(self, code, state):
         return lambda e: e.kind == Event.KIND_FAULT_STATE and e.code == code and attr(e, "state") == state
 
+    def spin(self, seconds):
+        until = time.time() + seconds
+        while time.time() < until:
+            rclpy.spin_once(self.node, timeout_sec=0.05)
+
+    def matches(self, rule):
+        return [e for e in self.events if e.kind == Event.KIND_RULE_MATCH and attr(e, "rule") == rule]
+
+    def restart(self, phase, requester="RULE"):
+        """Predicate: an event of the restart plan reaching `phase`, asked for by `requester`."""
+        return lambda e: (
+            e.kind == Event.KIND_RECOVERY
+            and attr(e, "phase") == phase
+            and attr(e, "plan") == "restart-lifecycle-node"
+            and attr(e, "requester") == requester
+        )
+
+    def recoveries(self, phase, requester="RULE"):
+        return [e for e in self.events if self.restart(phase, requester)(e)]
+
     def call(self, client, request):
         future = client.call_async(request)
         rclpy.spin_until_future_complete(self.node, future, timeout_sec=15.0)
@@ -114,7 +139,9 @@ class TestDemo(unittest.TestCase):
         self.assertEqual(raised, [], "no fault while everything is healthy")
 
     def test_1_scan_stall_is_one_fault_with_its_symptom_muted(self):
-        proc = inject("scan-stall", "--seconds", "4", wait=False)
+        # Long enough to outlast the relay's restart (Jarvis tries one) and its startup grace, so the
+        # rate status reports the collapse too.
+        proc = inject("scan-stall", "--seconds", "8", wait=False)
         try:
             self.wait_for(self.became("sensor.scan.stale", "PENDING"), "PENDING (persist debounce)")
             active = self.wait_for(self.became("sensor.scan.stale", "ACTIVE"), "ACTIVE")
@@ -152,6 +179,49 @@ class TestDemo(unittest.TestCase):
         inject("rosout-error", "--count", "10", "--period", "0.4")
         active = self.wait_for(self.became("ros.log.error", "ACTIVE"), "ros.log.error ACTIVE")
         self.assertEqual(active.source.component, "demo.fault_injector")
+
+    def test_4_jarvis_restarts_a_wedged_relay_on_its_own(self):
+        before = len(self.recoveries("SUCCEEDED"))
+        inject("scan-wedge", "--timeout", "30")  # returns once the relay was restarted and recovery settled
+        self.spin(1.0)
+        succeeded = self.recoveries("SUCCEEDED")
+        self.assertEqual(len(succeeded), before + 1, "one more rule-driven restart succeeded")
+        self.assertEqual(attr(succeeded[-1], "requester_id"), RESTART_RULE)
+        # The check passed because scans flowed again, after the restart, not because of it.
+        cleared = [e for e in self.events if self.became("sensor.scan.stale", "CLEARED")(e)]
+        self.assertTrue(cleared and cleared[-1].seq < succeeded[-1].seq)
+        scans = self.scans
+        self.spin(1.0)
+        self.assertGreater(self.scans, scans, "the relay publishes /scan again")
+
+    def test_5_restarts_that_keep_being_needed_are_suppressed_and_escalated(self):
+        # The rule may fire 3 times in 10 minutes (earlier tests used some of them): wedge until it's
+        # used up, then once more. The policy's 2 s cooldown separates the wedges.
+        for _ in range(3):
+            self.spin(2.5)  # take in what the last wedge did; also past the cooldown
+            if len(self.matches(RESTART_RULE)) >= 3:
+                break
+            inject("scan-wedge", "--timeout", "30")
+        self.spin(2.5)
+        self.assertEqual(len(self.matches(RESTART_RULE)), 3)
+        stuck = inject("scan-wedge", "--timeout", "6", check=False)
+        self.assertEqual(stuck.returncode, 1, "nobody restarts the relay a fourth time")
+
+        suppressed = self.wait_for(lambda e: e.code == "jarvis.rule.suppressed", "the rule suppressed")
+        self.assertEqual(attr(suppressed, "rule"), RESTART_RULE)
+        self.wait_for(lambda e: attr(e, "rule") == "lidar-restarts-exhausted", "the escalation rule")
+        notify = self.wait_for(lambda e: e.code == "jarvis.notify" and "keeps hanging" in e.message, "notify")
+        self.assertEqual(attr(notify, "channel"), "operators")
+        self.assertEqual(len(self.matches(RESTART_RULE)), 3, "suppressed, not fired")
+
+        # An operator restarts it by hand, through the same gates.
+        restart = f"ros2 jarvis recover restart-lifecycle-node -a node={RELAY} -a component=lidar"
+        subprocess.run(
+            [*restart.split(), "-a", "fault=sensor.scan.stale", "--operator", "tester"],
+            timeout=60,
+            check=True,
+        )
+        self.wait_for(self.restart("SUCCEEDED", requester="OPERATOR"), "the operator's restart")
 
 
 @launch_testing.post_shutdown_test()

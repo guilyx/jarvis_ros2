@@ -4,6 +4,8 @@
 #   docker compose exec demo monitor              # live view of faults and events (Ctrl-C to leave)
 #   docker compose exec demo inject tour          # every scenario, narrated in the live view
 #   docker compose exec demo inject clear         # operator clears the latched e-stop
+#   docker compose exec demo inject scan-wedge    # the lidar relay hangs: Jarvis restarts it
+#   docker compose exec demo ros2-jarvis executions  # what Jarvis ran (ros2 jarvis <verb>)
 #   docker compose down                           # stop; recordings stay in ./demo-data
 name: jarvis
 services:

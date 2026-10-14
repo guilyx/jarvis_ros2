@@ -1,0 +1,7 @@
+#!/bin/bash
+# `ros2 jarvis <verb>` with the ROS environment loaded: `docker compose exec demo ros2-jarvis executions`.
+# shellcheck source=/dev/null # both exist only inside the image
+source "/opt/ros/${ROS_DISTRO}/setup.bash" --
+# shellcheck source=/dev/null
+source /opt/jarvis/setup.bash --
+exec ros2 jarvis "$@"

@@ -39,8 +39,11 @@ flowchart LR
 | 2.4b | `jarvis_nav2`: Nav2 actuator plugins (lifecycle manager, clear costmaps, cancel/send goals) |
 | 2.5 | Bridges: lifecycle bridge, topic watchdog (QoS events + rate), node watchdog |
 | 2.6 | `jarvis backtest` + `jarvis_cli` (`ros2 jarvis …`) |
+| 2.7 | Demo: S1 and S2 in `jarvis_demo` (rules, `inject scan-wedge`, recoveries in the live view), launch test and Docker smoke test |
 
 **Exit**: e2e in simulation — `/scan` stalls → rule fires → `scan_relay` restarts → fault clears → `SUCCEEDED`. Repeated aborts clear costmaps. Exhaustion escalates to `safe-stop` (goals cancelled). Backtest on the recorded bag reproduces the same decisions.
+
+**Where it stands**: the first half and the backtest run on every PR, without a simulator (`jarvis_demo` launch test, Docker smoke test): a wedged relay is restarted (`SUCCEEDED`), a stall the restart can't fix fails its check and escalates, a fourth restart in ten minutes is suppressed and escalated, and the recording replays to the same decisions. The Nav2 half (costmap clears, `safe-stop`) needs the Gazebo simulation: it comes with the nightly scenario suite.
 
 ### M3 — Gateway & dashboard
 | PR | Content |
@@ -79,8 +82,8 @@ Fleet (Parquet to object storage) & fleet dashboard · real-robot bring-up (ARM6
 
 | # | Inject (fault injector) | Detected by | Expected Jarvis response |
 |---|-------------------------|-------------|--------------------------|
-| S1 | Stall `scan_relay` (stop forwarding `/scan`) | Topic watchdog → `ros.topic.stale` | Restart `scan_relay` → verify → `SUCCEEDED` |
-| S2 | Repeat S1 four times in an hour | `jarvis.rule.suppressed` | `safe-stop`, incident `ESCALATED`, notification |
+| S1 | Wedge `scan_relay` (it stops forwarding `/scan` until restarted) | The relay's own report → `sensor.scan.stale` (or the topic watchdog → `ros.topic.stale`) | Restart `scan_relay` → verify → `SUCCEEDED`. A stall a restart can't fix: verify fails → `ESCALATED`, notification |
+| S2 | Repeat S1 four times in ten minutes | `jarvis.rule.suppressed` | Incident `ESCALATED`, notification (with Nav2: `safe-stop` too) |
 | S3 | Block the path so `NavigateToPose` aborts 3× | Action status bridge → `ros.action.navigate_to_pose.aborted` | Clear costmaps + agent insight |
 | S4 | Teleport the robot (kidnapping) | Localization monitor diagnostics → `nav.localization.lost` | `relocalize` → if still lost after 20 s: `safe-stop` + escalate |
 | S5 | Kill `controller_server` | Lifecycle bridge / Nav2 lifecycle manager diagnostics | `nav2-reset` (shadow mode first, then enabled) |

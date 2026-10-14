@@ -11,9 +11,10 @@ The core is ROS-agnostic; ROS 2 is the communication layer.
 
 ## Status
 
-**M1 (record & manage faults) is in. M2 (rules & automated recovery) is under way**: the rule
-engine, the recovery orchestrator and the actuators run in the stack; demo scenarios and tooling are
-next ([roadmap](docs/design/09-roadmap.md)). The design package starts at
+**M1 (record & manage faults) and M2 (rules & automated recovery) are in**: Jarvis records and
+manages faults, restarts what hangs on its own, escalates to a human when that doesn't work, and
+replays recordings to check rule changes. Next is M3, the dashboard and analytics
+([roadmap](docs/design/09-roadmap.md)). The design package starts at
 [`docs/design/README.md`](docs/design/README.md).
 
 ## Try it in Docker
@@ -25,17 +26,29 @@ git clone https://github.com/guilyx/jarvis_ros2 && cd jarvis_ros2
 ./demo
 ```
 
-The first run builds the image (about 10 minutes). Then a guided tour plays in a live view: a lidar
-stalls, a motor driver overheats, a node errors in a loop, the e-stop is pressed. You watch Jarvis
-debounce, correlate, latch and record each one. Ctrl-C leaves the view; Jarvis keeps running.
+The first run builds the image (about 10 minutes). Then a guided tour plays in a live view (about a
+minute):
+
+1. The lidar relay hangs. Jarvis restarts it, checks that scans flow again, and the recovery succeeds.
+2. The lidar itself stops. The restart can't fix that, so the check fails and the operators are
+   notified.
+3. A motor driver overheats, a node errors in a loop, the e-stop is pressed: Jarvis debounces,
+   correlates, latches and records each one.
+
+Ctrl-C leaves the view; Jarvis keeps running.
 
 | Command | What it does |
 |---------|--------------|
-| `./demo watch` | Live view of open faults and recent events |
-| `./demo inject scan-stall` | Break one thing: `scan-stall`, `scan-slow`, `rosout-error`, `diag-error`, `estop` |
-| `./demo clear` | Clear the latched e-stop, as an operator would |
+| `./demo watch` | Live view of open faults, recoveries and recent events |
+| `./demo inject scan-wedge` | Break one thing: `scan-wedge`, `scan-stall`, `scan-slow`, `rosout-error`, `diag-error`, `estop` |
+| `./demo clear` | Clear the latched e-stop, as an operator would (Jarvis restarts nothing while it is latched) |
+| `./demo jarvis executions` | `ros2 jarvis`: `executions`, `rules`, `recover`, `mode DRY_RUN`, `faults`, ... |
 | `./demo shell` | A shell with ROS 2 ready: `ros2 topic echo /jarvis/faults` |
 | `./demo down` | Stop. Recordings stay in `./demo-data/` |
+
+- **Wedge it four times** in ten minutes: the fourth time Jarvis stops restarting it and calls a human.
+  Restart it yourself, through the same gates: `./demo jarvis recover restart-lifecycle-node -a
+  node=/demo/scan_relay -a component=lidar`.
 
 - **Foxglove**: connect to `ws://localhost:8765` to browse `/jarvis/events`, `/jarvis/faults`, `/scan` and
   `/diagnostics` live. The MCAP recordings in `./demo-data/bags/` open in Foxglove too.
@@ -80,24 +93,29 @@ gates (mode, requester, preconditions, rate limits, locks, approvals), verifies 
 when it does not work. Rules and plans are YAML directories (`rules:=`, `plans:=` launch arguments):
 
 ```yaml
-# rules/lidar.yaml
+# rules/lidar.yaml (the demo's: ros/jarvis_demo/config/rules/demo.yaml)
 schema: jarvis.rules/v1
 rules:
-  - id: scan-stale-restart
+  - id: lidar-stale-restart
     when: { event: { kind: FAULT_STATE, code: sensor.scan.stale, attrs.state: ACTIVE } }
+    guard: { faults_inactive: [safety.estop.engaged] }
     then:
-      - recover: { plan: restart-lifecycle-node, args: { node: /scan_relay, component: lidar } }
-    policy: { cooldown: 30s, max_fires: { count: 3, per: 1h } }
+      - recover:
+          plan: restart-lifecycle-node
+          args: { node: "{{ event.attrs.node }}", component: lidar, fault: sensor.scan.stale }
+    policy: { cooldown: 2s, max_fires: { count: 3, per: 10m } }
+  - id: lidar-restarts-exhausted   # the 4th time, the rule above is suppressed: call a human
+    when: { event: { kind: SYSTEM, code: jarvis.rule.suppressed, attrs.rule: lidar-stale-restart } }
+    then: [ { incident: { escalate: true } }, { notify: { channel: operators, message: "Lidar keeps hanging" } } ]
 ```
 
 `restart-lifecycle-node` ships in [`jarvis_bringup/config/plans`](ros/jarvis_bringup/config/plans).
-Operators use the same gate:
+Operators use the same gates:
 
 ```bash
-ros2 action send_goal /jarvis/recovery/execute jarvis_interfaces/action/ExecuteRecovery \
-  "{plan_id: restart-lifecycle-node, args: [{key: node, string_value: /scan_relay}, {key: component, string_value: lidar}], dry_run: true}"
-ros2 service call /jarvis/recovery/set_mode jarvis_interfaces/srv/SetRecoveryMode "{mode: DISABLED, operator_name: me}"
-ros2 topic echo /jarvis/executions   # what runs, what waits for approval, what just finished
+ros2 jarvis recover restart-lifecycle-node -a node=/scan_relay -a component=lidar --dry-run
+ros2 jarvis mode DISABLED            # kill switch (DRY_RUN: decide everything, move nothing)
+ros2 jarvis executions --steps       # what runs, what waits for approval, what just finished
 ```
 
 Before shipping rules, check them and replay a recording through them:

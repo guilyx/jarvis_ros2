@@ -6,6 +6,9 @@
     ros2 run jarvis_demo monitor               # live view, in another shell
     ros2 run jarvis_demo inject tour           # every scenario, narrated in the monitor
 
+Jarvis runs the demo's rules (config/rules: restart the lidar relay when it hangs, escalate when
+that keeps happening) with the generic recovery plans of jarvis_bringup.
+
 `foxglove:=true` also starts foxglove_bridge on ws://localhost:8765 (the Docker demo does).
 
 Use nav2_sim.launch.py for the same demo on a simulated TurtleBot 4 with Nav2.
@@ -34,6 +37,8 @@ def generate_launch_description():
             "robot_id": arg("robot_id"),
             "data_dir": arg("data_dir"),
             "catalog": str(DEMO / "config" / "demo_faults.yaml"),
+            "rules": str(DEMO / "config" / "rules"),
+            "recovery_mode": arg("recovery_mode"),
             "blackbox_topics": "/scan /jarvis/events",
         }.items(),
     )
@@ -44,6 +49,9 @@ def generate_launch_description():
                 "data_dir", default_value=os.environ.get("JARVIS_DATA", "~/.local/share/jarvis/demo")
             ),
             DeclareLaunchArgument("fake_lidar", default_value="true", description="Publish /scan_raw"),
+            DeclareLaunchArgument(
+                "recovery_mode", default_value="ENABLED", description="ENABLED, DRY_RUN or DISABLED"
+            ),
             DeclareLaunchArgument(
                 "foxglove", default_value="false", description="Serve the graph to Foxglove on port 8765"
             ),

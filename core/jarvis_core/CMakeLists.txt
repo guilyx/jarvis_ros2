@@ -117,9 +117,13 @@ if(BUILD_TESTING)
 
   # The CLI itself, on the configuration that ships.
   set(BRINGUP_CONFIG ${CMAKE_CURRENT_SOURCE_DIR}/../../ros/jarvis_bringup/config)
+  set(DEMO_CONFIG ${CMAKE_CURRENT_SOURCE_DIR}/../../ros/jarvis_demo/config)
   add_test(NAME cli.lint_shipped_configuration
     COMMAND jarvis lint --rules ${BRINGUP_CONFIG}/rules --plans ${BRINGUP_CONFIG}/plans
             --catalog ${BRINGUP_CONFIG}/faults.yaml)
+  add_test(NAME cli.lint_demo_configuration
+    COMMAND jarvis lint --rules ${DEMO_CONFIG}/rules --plans ${BRINGUP_CONFIG}/plans
+            --catalog ${DEMO_CONFIG}/demo_faults.yaml)
   add_test(NAME cli.unknown_command_is_a_usage_error COMMAND jarvis nope)
   set_tests_properties(cli.unknown_command_is_a_usage_error PROPERTIES WILL_FAIL TRUE)
 endif()

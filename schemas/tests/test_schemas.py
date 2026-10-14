@@ -47,6 +47,32 @@ def test_shipped_fault_catalogs_validate(path):
     _validator("fault_catalog.schema.json").validate(yaml.safe_load(path.read_text()) or {})
 
 
+def _by_key(items, key):
+    return {item[key]: item for item in items}
+
+
+def test_the_demo_catalog_repeats_the_default_one():
+    # Catalogs don't include each other yet: the demo copies the generic faults, and must keep up.
+    default = yaml.safe_load((REPO / "ros/jarvis_bringup/config/faults.yaml").read_text())
+    demo = yaml.safe_load((REPO / "ros/jarvis_demo/config/demo_faults.yaml").read_text())
+    assert demo["defaults"] == default["defaults"]
+    faults = _by_key(demo["faults"], "code")
+    for fault in default["faults"]:
+        assert faults.get(fault["code"]) == fault, fault["code"]
+    rules = _by_key(demo.get("correlation", []), "id")
+    for rule in default.get("correlation", []):
+        assert rules.get(rule["id"]) == rule, rule["id"]
+
+
+def test_the_demo_rules_repeat_the_default_ones():
+    default = yaml.safe_load((REPO / "ros/jarvis_bringup/config/rules/core.yaml").read_text())
+    demo = {}
+    for path in (REPO / "ros/jarvis_demo/config/rules").glob("*.yaml"):
+        demo.update(_by_key(yaml.safe_load(path.read_text())["rules"], "id"))
+    for rule in default["rules"]:
+        assert demo.get(rule["id"]) == rule, rule["id"]
+
+
 @pytest.mark.parametrize(
     "bad",
     [

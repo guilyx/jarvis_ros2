@@ -1,0 +1,38 @@
+# Rules of the demo robot. The plan they ask for, restart-lifecycle-node, is one of the generic plans
+# (jarvis_bringup/config/plans). Spec: docs/design/05-rules-and-recovery.md.
+schema: jarvis.rules/v1
+rules:
+  # S1: the lidar went quiet -> restart its relay, then check that scans flow again.
+  - id: lidar-stale-restart
+    description: The lidar went quiet. Restart its relay and check that scans flow again.
+    partition_by: [source.component]
+    when:
+      event: { kind: FAULT_STATE, code: sensor.scan.stale, attrs.state: ACTIVE }
+    guard: { faults_inactive: [safety.estop.engaged] }
+    then:
+      - recover:
+          plan: restart-lifecycle-node
+          args:
+            node: "{{ event.attrs.node }}"
+            component: "{{ event.source.component }}"
+            fault: sensor.scan.stale
+    policy: { cooldown: 5s, max_fires: { count: 3, per: 10m } }
+
+  # S2: restarts keep being needed -> stop trying, hand the incident to a human.
+  - id: lidar-restarts-exhausted
+    description: The relay needed three restarts in ten minutes. Stop restarting it and call a human.
+    when:
+      event: { kind: SYSTEM, code: jarvis.rule.suppressed, attrs.rule: lidar-stale-restart }
+    then:
+      - incident: { escalate: true }
+      - notify:
+          channel: operators
+          message: "The lidar on {{ robot }} keeps hanging: Jarvis stopped restarting it. Check the sensor."
+
+  # Same as jarvis_bringup/config/rules/core.yaml (rules directories don't include each other yet).
+  - id: escalation-notify
+    description: Tell the operators when recovery gives up on an incident.
+    when:
+      event: { kind: RECOVERY, attrs.phase: ESCALATED, attrs.dry_run: false }
+    then:
+      - notify: { channel: operators, message: "{{ event.message }}" }

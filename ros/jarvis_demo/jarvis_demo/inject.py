@@ -2,13 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """Fault injector for the Jarvis demo: each scenario produces one kind of fault the way it happens.
 
-    inject scan-stall --seconds 5   lidar stops       -> sensor.scan.stale (rate status muted)
+    inject scan-wedge               relay hangs       -> sensor.scan.stale, Jarvis restarts the relay
+    inject scan-stall --seconds 5   lidar stops       -> sensor.scan.stale (a restart can't fix it)
     inject scan-slow --seconds 10   lidar at 50 %     -> diag.scan_relay.output_rate
     inject rosout-error --count 10  a node errors     -> ros.log.error
     inject diag-error --seconds 5   driver reports    -> diag.fault_injector.motor_driver
     inject estop --seconds 2        e-stop pressed    -> safety.estop.engaged (latched)
     inject nav-abort                unreachable goal  -> ros.action.navigate_to_pose.aborted
-    inject tour                     the first five, one after the other, narrated in the monitor
+    inject tour                     wedge, stall, diag-error, rosout-error, estop, narrated in the monitor
     inject clear                    an operator clears the latched faults
 
 Run as `ros2 run jarvis_demo inject <scenario>`.
@@ -21,14 +22,22 @@ from types import SimpleNamespace
 
 import rclpy
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
-from jarvis_interfaces.msg import Fault
+from jarvis_interfaces.msg import Event, Fault
 from jarvis_interfaces.srv import ClearFault, GetFaults
 from jarvis_reporter import Reporter, Severity
 from rclpy.action import ActionClient
 from rclpy.parameter import Parameter
 from rclpy.parameter_client import AsyncParameterClient
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 
 TOUR_CODE = "demo.tour.step"
+# What Jarvis decides and does, printed while a scenario runs.
+REACTIONS = ("jarvis.rule.", "jarvis.recovery.", "jarvis.notify", "jarvis.incident.")
+# Last phases of an execution (a failed one's ladder reports ESCALATED and LADDER_DONE after FAILED).
+SETTLED = ("SUCCEEDED", "FAILED", "ABORTED", "REJECTED", "EXPIRED", "ESCALATED", "LADDER_DONE")
+OPERATOR_RESTART = (
+    "ros2 jarvis recover restart-lifecycle-node -a node={relay} -a component=lidar -a fault=sensor.scan.stale"
+)
 
 
 def spin_for(node, seconds):
@@ -37,18 +46,75 @@ def spin_for(node, seconds):
         rclpy.spin_once(node, timeout_sec=0.05)
 
 
+def attr(event, key):
+    return next((a.string_value for a in event.attrs if a.key == key), "")
+
+
+class Reactions:
+    """Prints what Jarvis decides and does (rules, recoveries, notifications) as it happens."""
+
+    def __init__(self, node, quiet=False):
+        self.events = []
+        self.quiet = quiet
+        stream = QoSProfile(depth=1000, reliability=ReliabilityPolicy.RELIABLE)
+        node.create_subscription(Event, "/jarvis/events", self._on_event, stream)
+        # Events published before the subscription matches are lost: wait for the hub's publisher.
+        deadline = time.monotonic() + 5.0
+        while node.count_publishers("/jarvis/events") == 0 and time.monotonic() < deadline:
+            spin_for(node, 0.05)
+        spin_for(node, 0.3)
+
+    def _on_event(self, e):
+        if not e.code.startswith(REACTIONS):
+            return
+        self.events.append(e)
+        if not self.quiet:
+            print(f"  jarvis: {e.code:<28} {e.message}")
+
+    def executions(self):
+        """Phase of every execution seen so far, by execution id."""
+        phases = {}
+        for e in self.events:
+            if e.kind == Event.KIND_RECOVERY and attr(e, "execution_id"):
+                phases[attr(e, "execution_id")] = attr(e, "phase")
+        return phases
+
+    def settled(self):
+        phases = self.executions()
+        return bool(phases) and all(p in SETTLED for p in phases.values())
+
+
+_parameter_clients = {}
+
+
+def parameter_client(node, relay):
+    """One client per relay: scan-wedge polls the relay's parameters."""
+    key = (node.get_name(), relay)
+    if key not in _parameter_clients:
+        client = AsyncParameterClient(node, relay)
+        if not client.wait_for_services(timeout_sec=10.0):
+            raise RuntimeError(f"{relay} is not running (ros2 launch jarvis_demo demo.launch.py)")
+        _parameter_clients[key] = client
+    return _parameter_clients[key]
+
+
 def set_inject(node, relay, value):
-    client = AsyncParameterClient(node, relay)
-    if not client.wait_for_services(timeout_sec=10.0):
-        raise RuntimeError(f"{relay} is not running (ros2 launch jarvis_demo demo.launch.py)")
-    future = client.set_parameters([Parameter("inject", value=value)])
+    future = parameter_client(node, relay).set_parameters([Parameter("inject", value=value)])
     rclpy.spin_until_future_complete(node, future, timeout_sec=10.0)
     result = future.result()
     if result is None or not result.results[0].successful:
         raise RuntimeError(f"could not set inject={value} on {relay}")
 
 
+def get_inject(node, relay):
+    future = parameter_client(node, relay).get_parameters(["inject"])
+    rclpy.spin_until_future_complete(node, future, timeout_sec=10.0)
+    result = future.result()
+    return result.values[0].string_value if result and result.values else ""
+
+
 def scan(node, args, mode):
+    reactions = Reactions(node, quiet=args.quiet)
     set_inject(node, args.relay, mode)
     print(f"{args.relay}: inject={mode} for {args.seconds:g} s")
     try:
@@ -56,6 +122,35 @@ def scan(node, args, mode):
     finally:
         set_inject(node, args.relay, "none")
         print(f"{args.relay}: inject=none")
+    # A recovery still running when the injection ends settles once scans flow again.
+    deadline = time.monotonic() + 10.0
+    while reactions.executions() and not reactions.settled() and time.monotonic() < deadline:
+        spin_for(node, 0.1)
+    spin_for(node, 0.5)  # what follows the last phase: notifications, the incident
+
+
+def scan_wedge(node, args):
+    """Wedges the relay, then waits for Jarvis to restart it and for the recovery to settle."""
+    reactions = Reactions(node, quiet=args.quiet)
+    set_inject(node, args.relay, "wedge")
+    print(f"{args.relay}: inject=wedge, it relays nothing until it is restarted")
+    deadline = time.monotonic() + args.timeout
+    unwedged = False
+    while time.monotonic() < deadline:
+        spin_for(node, 0.25)
+        unwedged = unwedged or get_inject(node, args.relay) != "wedge"
+        if unwedged and reactions.settled():
+            spin_for(node, 0.5)
+            phases = sorted(set(reactions.executions().values()))
+            print(f"{args.relay}: restarted, scans flow again (recovery {', '.join(phases)})")
+            return
+    if unwedged:
+        raise RuntimeError(f"{args.relay} was restarted, but recovery did not settle in {args.timeout:g} s")
+    raise RuntimeError(
+        f"{args.relay} is still wedged after {args.timeout:g} s: Jarvis did not restart it. Is the e-stop "
+        "latched (inject clear), the rule suppressed (see above) or recovery off (ros2 jarvis mode)? "
+        "Restart it as an operator: " + OPERATOR_RESTART.format(relay=args.relay)
+    )
 
 
 def wait_for_readers(node, topic, count_readers, timeout=10.0):
@@ -153,28 +248,35 @@ def clear(node, args):
         print(f"{outcome} {f.code} ({f.source.component}): {reply.message}")
 
 
+RELAY = "/demo/scan_relay"
 # (narration, step, pause after the step in seconds)
 TOUR = (
     (
-        "1/4 Lidar stall for 5 s: sensor.scan.stale goes PENDING then ACTIVE, its rate symptom is "
-        "muted, and a black-box snapshot is saved.",
-        lambda node: scan(node, SimpleNamespace(seconds=5.0, relay="/demo/scan_relay"), "stall"),
+        "1/5 The lidar relay hangs: sensor.scan.stale goes ACTIVE (black-box snapshot), rule "
+        "lidar-stale-restart runs plan restart-lifecycle-node, the relay restarts, scans flow: SUCCEEDED.",
+        lambda node: scan_wedge(node, SimpleNamespace(relay=RELAY, timeout=30.0, quiet=False)),
         6.0,
     ),
     (
-        "2/4 Motor driver overcurrent on /diagnostics for 5 s: the bridge raises it, the next OK clears it.",
+        "2/5 The lidar itself stops for 20 s: its rate symptom is muted, the restart can't help, the "
+        "plan's check times out (FAILED) and the incident goes to the operators (ESCALATED, notify).",
+        lambda node: scan(node, SimpleNamespace(seconds=20.0, relay=RELAY, quiet=False), "stall"),
+        4.0,
+    ),
+    (
+        "3/5 Motor driver overcurrent on /diagnostics for 5 s: the bridge raises it, the next OK clears it.",
         lambda node: diag_error(node, SimpleNamespace(seconds=5.0)),
         3.0,
     ),
     (
-        "3/4 A node logs errors in a loop: sustained /rosout errors become ros.log.error, which heals "
+        "4/5 A node logs errors in a loop: sustained /rosout errors become ros.log.error, which heals "
         "after 60 s of quiet.",
         lambda node: rosout_error(node, SimpleNamespace(count=8, period=0.5)),
         3.0,
     ),
     (
-        "4/4 E-stop pressed for 2 s: CRITICAL, and still LATCHED after release until an operator "
-        "clears it (inject clear).",
+        "5/5 E-stop pressed for 2 s: CRITICAL, and still LATCHED after release until an operator "
+        "clears it (inject clear). While it is latched, Jarvis restarts nothing.",
         lambda node: estop(node, SimpleNamespace(seconds=2.0)),
         0.0,
     ),
@@ -205,7 +307,12 @@ def parser():
     for name, default in (("scan-stall", 5.0), ("scan-slow", 10.0)):
         s = sub.add_parser(name)
         s.add_argument("--seconds", type=float, default=default)
-        s.add_argument("--relay", default="/demo/scan_relay")
+        s.add_argument("--relay", default=RELAY)
+        s.add_argument("--quiet", action="store_true", help="don't print what Jarvis does")
+    s = sub.add_parser("scan-wedge")
+    s.add_argument("--timeout", type=float, default=30.0, help="how long to wait for Jarvis to restart it")
+    s.add_argument("--relay", default=RELAY)
+    s.add_argument("--quiet", action="store_true", help="don't print what Jarvis does")
     s = sub.add_parser("rosout-error")
     s.add_argument("--count", type=int, default=10)
     s.add_argument("--period", type=float, default=0.5)
@@ -224,6 +331,7 @@ def parser():
 
 
 SCENARIOS = {
+    "scan-wedge": scan_wedge,
     "scan-stall": lambda node, args: scan(node, args, "stall"),
     "scan-slow": lambda node, args: scan(node, args, "slow"),
     "rosout-error": rosout_error,

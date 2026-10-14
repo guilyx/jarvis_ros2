@@ -6,6 +6,7 @@ NOT RUN IN CI: it needs Nav2 and the TB4 simulation, which this repository does 
 
     sudo apt install ros-jazzy-nav2-bringup ros-jazzy-nav2-minimal-tb4-sim
     ros2 launch jarvis_demo nav2_sim.launch.py headless:=false
+    ros2 run jarvis_demo inject scan-wedge                # relay hangs, Jarvis restarts it
     ros2 run jarvis_demo inject scan-stall --seconds 10   # costmaps go blind, Nav2 aborts
     ros2 run jarvis_demo inject nav-abort                 # unreachable goal
 
@@ -58,6 +59,7 @@ def generate_launch_description():
             "robot_id": arg("robot_id"),
             "use_sim_time": "true",
             "catalog": str(DEMO / "config" / "demo_faults.yaml"),
+            "rules": str(DEMO / "config" / "rules"),
             "blackbox_topics": f"/scan {RELAYED} /odom /tf /tf_static /cmd_vel /jarvis/events",
         }.items(),
     )

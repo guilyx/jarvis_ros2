@@ -638,6 +638,15 @@ void FaultManager::confirm(
     it->second.last_activity = at;
   }
   emit_transition(ep, prev, at, causation, {}, fx);
+  if (!ep.muted_by.empty()) {
+    // Same notice as the retroactive case below, so muting is announced whatever the order.
+    const auto root = open_.find(ep.muted_by);
+    fx.emplace_back(EmitEvent{make_event(
+      Kind::System, "jarvis.fault.muted", Severity::Info,
+      ep.code + " muted as a symptom of " + (root != open_.end() ? root->second.code : ep.muted_by),
+      {{"fault_id", ep.fault_id}, {"muted_by", ep.muted_by}, {"rule", ep.muted_rule}},
+      ep.source.component, ep.incident_id, causation, at)});
+  }
 
   // Am I a root cause for symptoms that confirmed just before me?
   for (const auto & rule : catalog_.correlation()) {

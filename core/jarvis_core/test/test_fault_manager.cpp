@@ -345,9 +345,13 @@ TEST_F(FaultManagerTest, SymptomsOfARootCauseAreMutedAndClearedWithIt)
 
   const auto fx = raise("drive.motor.fault", kT0 + 300 * kMillisecond, "left_wheel");
   const auto ev = emitted(fx);
-  ASSERT_EQ(ev.size(), 1u) << "no separate incident for a symptom";
+  EXPECT_EQ(codes(fx), (V{"drive.motor.fault", "jarvis.fault.muted"}))
+    << "no separate incident for a symptom";
+  ASSERT_EQ(ev.size(), 2u);
   EXPECT_EQ(*attr_string(ev[0].attrs, "muted_by"), root);
   EXPECT_EQ(ev[0].correlation_id, incident);
+  EXPECT_EQ(*attr_string(ev[1].attrs, "muted_by"), root);
+  EXPECT_EQ(ev[1].message, "drive.motor.fault muted as a symptom of safety.estop.engaged");
 
   const auto faults = fm_.faults();
   const auto sym = std::find_if(faults.begin(), faults.end(), [](const FaultEpisode & f) {

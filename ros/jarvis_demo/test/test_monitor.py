@@ -141,7 +141,7 @@ def test_the_screen_fits_the_terminal_by_leaving_out_the_oldest_events():
     for seq in range(1, 31):
         snap.on_event(event(f"code.n{seq}", seq=seq))
     screen = render(snap, color=False, height=20).splitlines()
-    assert len(screen) <= 20
+    assert len(screen) == 19, "a row is left for the cursor"
     assert any("code.n30" in line for line in screen), "the newest event stays"
     assert not any("code.n1 " in line or line.endswith("code.n1") for line in screen)
     assert screen[-1].startswith("inject:"), "the hints stay"

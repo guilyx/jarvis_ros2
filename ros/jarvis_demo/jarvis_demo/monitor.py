@@ -159,7 +159,7 @@ def render(snap, width=100, color=True, height=None):
     """The whole screen as one string: header, open faults, recoveries, recent events, hints.
 
     Every line is cut to `width` before it is colored, so escape codes never count as text. With a
-    `height`, the oldest events are left out so the screen fits (a taller one would scroll).
+    `height`, the oldest events are left out so the screen and the cursor fit (or it would scroll).
     """
     lines = []  # (text, color key)
     faults = list(snap.faults.faults) if snap.faults else []
@@ -192,7 +192,8 @@ def render(snap, width=100, color=True, height=None):
     lines += [("", None), ("RECENT EVENTS", "INFO")]
     if not snap.events:
         lines.append(("  (none yet)", None))
-    room = len(snap.events) if height is None else max(1, height - len(lines) - 2)
+    # The hints take 2 rows, and the cursor one more: a full screen would scroll the header away.
+    room = len(snap.events) if height is None else max(1, height - len(lines) - 3)
     for e in list(reversed(snap.events))[:room]:
         sev = SEVERITIES.get(e.severity, str(e.severity))
         kind = KINDS.get(e.kind, str(e.kind))

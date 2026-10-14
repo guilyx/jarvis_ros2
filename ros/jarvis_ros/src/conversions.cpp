@@ -3,6 +3,8 @@
 
 #include "jarvis_ros/conversions.hpp"
 
+#include <cmath>
+#include <limits>
 #include <type_traits>
 
 namespace jarvis_ros
@@ -156,6 +158,136 @@ jarvis_interfaces::msg::Fault to_msg(const jarvis_core::FaultEpisode & f)
   out.description = f.description;
   out.message = f.message;
   out.freeze_frame = to_msg(f.freeze_frame);
+  return out;
+}
+
+std::pair<std::string, jarvis_core::FaultView> to_view(const jarvis_interfaces::msg::Fault & f)
+{
+  const auto state = static_cast<jarvis_core::FaultState>(f.state);
+  return {
+    f.fault_id,
+    jarvis_core::FaultView{f.code, f.source.component, std::string(jarvis_core::to_string(state))}};
+}
+
+std::uint8_t to_msg(jarvis_core::Requester r)
+{
+  using jarvis_interfaces::msg::Execution;
+  switch (r) {
+    case jarvis_core::Requester::Rule:
+      return Execution::REQUESTER_RULE;
+    case jarvis_core::Requester::Agent:
+      return Execution::REQUESTER_AGENT;
+    case jarvis_core::Requester::Plan:
+      return Execution::REQUESTER_PLAN;
+    case jarvis_core::Requester::Operator:
+      break;
+  }
+  return Execution::REQUESTER_OPERATOR;
+}
+
+std::optional<jarvis_core::Requester> requester_from_msg(std::uint8_t value)
+{
+  using jarvis_interfaces::msg::Execution;
+  switch (value) {
+    case 0:
+    case Execution::REQUESTER_OPERATOR:
+      return jarvis_core::Requester::Operator;
+    case Execution::REQUESTER_RULE:
+      return jarvis_core::Requester::Rule;
+    case Execution::REQUESTER_AGENT:
+      return jarvis_core::Requester::Agent;
+    case Execution::REQUESTER_PLAN:
+      return jarvis_core::Requester::Plan;
+    default:
+      return std::nullopt;
+  }
+}
+
+jarvis_interfaces::msg::Execution to_msg(const jarvis_core::Execution & x)
+{
+  jarvis_interfaces::msg::Execution out;
+  out.execution_id = x.execution_id;
+  out.plan_id = x.plan_id;
+  out.plan_rev = x.plan_rev;
+  for (const auto & [k, v] : x.args) {
+    Attribute a;
+    a.key = k;
+    a.type = Attribute::TYPE_STRING;
+    a.string_value = v;
+    out.args.push_back(std::move(a));
+  }
+  out.requester_type = to_msg(x.requester);
+  out.requester_id = x.requester_id;
+  out.correlation_id = x.correlation_id;
+  out.causation_id = x.causation_id;
+  out.rationale = x.rationale;
+  out.confidence = x.confidence.value_or(std::numeric_limits<double>::quiet_NaN());
+  out.dry_run = x.dry_run;
+  // Execution.STATE_* and StepProgress.STATE_* follow the order of the core enums, from 1.
+  out.state = static_cast<std::uint8_t>(static_cast<int>(x.state) + 1);
+  out.reason = x.reason;
+  for (const auto & g : x.gates) {
+    jarvis_interfaces::msg::GateResult r;
+    r.gate = g.gate;
+    r.passed = g.passed;
+    r.detail = g.detail;
+    out.gates.push_back(std::move(r));
+  }
+  out.needs_approval = x.needs_approval;
+  out.approved_by = x.approved_by;
+  out.locks = x.locks;
+  for (const auto & s : x.steps) {
+    jarvis_interfaces::msg::StepProgress p;
+    p.id = s.id;
+    p.action = s.action;
+    p.state = static_cast<std::uint8_t>(static_cast<int>(s.state) + 1);
+    p.attempts = static_cast<std::uint16_t>(s.attempts);
+    p.started = to_msg_time(s.started);
+    p.finished = to_msg_time(s.finished);
+    p.message = s.message;
+    out.steps.push_back(std::move(p));
+  }
+  out.current_step = static_cast<std::uint16_t>(x.current_step);
+  out.failed_step = x.failed_step;
+  out.created = to_msg_time(x.created);
+  out.started = to_msg_time(x.started);
+  out.finished = to_msg_time(x.finished);
+  out.expires = to_msg_time(x.expires);
+  out.depth = static_cast<std::uint8_t>(x.depth);
+  out.parent_id = x.parent_id;
+  out.ladder_of = x.ladder_of;
+  out.ladder_running = x.ladder_running;
+  out.escalated = x.escalated;
+  return out;
+}
+
+std::map<std::string, std::string> args_from_msg(const std::vector<Attribute> & attrs)
+{
+  std::map<std::string, std::string> out;
+  for (const auto & [k, v] : from_msg(attrs)) {
+    out[k] = jarvis_core::attr_to_string(v);
+  }
+  return out;
+}
+
+jarvis_interfaces::msg::RuleStatus to_msg(
+  const jarvis_core::RuleStats & stats, const jarvis_core::Rule * rule)
+{
+  jarvis_interfaces::msg::RuleStatus out;
+  out.id = stats.id;
+  if (rule) {
+    out.description = rule->description;
+    out.file = rule->file;
+  }
+  out.enabled = stats.enabled;
+  out.dry_run = stats.dry_run;
+  out.fires = stats.fires;
+  out.dry_fires = stats.dry_fires;
+  out.suppressed = stats.suppressed;
+  out.cooled_down = stats.cooled_down;
+  out.guard_blocked = stats.guard_blocked;
+  out.action_failures = stats.action_failures;
+  out.partitions = static_cast<std::uint32_t>(stats.partitions);
   return out;
 }
 

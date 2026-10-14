@@ -11,8 +11,9 @@ The core is ROS-agnostic; ROS 2 is the communication layer.
 
 ## Status
 
-**M1 (record & manage faults) is in.** Next up: M2, rules and automated recovery
-([roadmap](docs/design/09-roadmap.md)). The design package starts at
+**M1 (record & manage faults) is in. M2 (rules & automated recovery) is under way**: the rule
+engine, the recovery orchestrator and the actuators run in the stack; demo scenarios and tooling are
+next ([roadmap](docs/design/09-roadmap.md)). The design package starts at
 [`docs/design/README.md`](docs/design/README.md).
 
 ## Try it in Docker
@@ -71,16 +72,43 @@ jarvis.clear("sensor.lidar.stale");
 Or don't report at all: the bridges turn `/diagnostics`, `/rosout` errors and aborted action goals into
 faults on their own.
 
+## Recover automatically
+
+A rule watches the event stream and asks for a recovery plan; the orchestrator runs it behind safety
+gates (mode, requester, preconditions, rate limits, locks, approvals), verifies the fix and escalates
+when it does not work. Rules and plans are YAML directories (`rules:=`, `plans:=` launch arguments):
+
+```yaml
+# rules/lidar.yaml
+schema: jarvis.rules/v1
+rules:
+  - id: scan-stale-restart
+    when: { event: { kind: FAULT_STATE, code: sensor.scan.stale, attrs.state: ACTIVE } }
+    then:
+      - recover: { plan: restart-lifecycle-node, args: { node: /scan_relay, component: lidar } }
+    policy: { cooldown: 30s, max_fires: { count: 3, per: 1h } }
+```
+
+`restart-lifecycle-node` ships in [`jarvis_bringup/config/plans`](ros/jarvis_bringup/config/plans).
+Operators use the same gate:
+
+```bash
+ros2 action send_goal /jarvis/recovery/execute jarvis_interfaces/action/ExecuteRecovery \
+  "{plan_id: restart-lifecycle-node, args: [{key: node, string_value: /scan_relay}, {key: component, string_value: lidar}], dry_run: true}"
+ros2 service call /jarvis/recovery/set_mode jarvis_interfaces/srv/SetRecoveryMode "{mode: DISABLED, operator_name: me}"
+ros2 topic echo /jarvis/executions   # what runs, what waits for approval, what just finished
+```
+
 ## Packages
 
 | Package | What it does |
 |---------|--------------|
-| [`core/jarvis_core`](core/jarvis_core) | ROS-free C++ domain: event hub, fault lifecycle, incidents, catalog |
-| [`ros/jarvis_interfaces`](ros/jarvis_interfaces) | Messages and services |
-| [`ros/jarvis_ros`](ros/jarvis_ros) | Event hub and fault manager lifecycle components |
+| [`core/jarvis_core`](core/jarvis_core) | ROS-free C++ domain: event hub, fault lifecycle, incidents, catalog, rule engine, recovery orchestrator |
+| [`ros/jarvis_interfaces`](ros/jarvis_interfaces) | Messages, services and the `ExecuteRecovery` action |
+| [`ros/jarvis_ros`](ros/jarvis_ros) | Event hub, fault manager, rule engine and recovery lifecycle components; built-in actuators (lifecycle, std_srvs, parameters, bag snapshot) |
 | [`ros/jarvis_reporter`](ros/jarvis_reporter) | C++ and Python client libraries for apps |
 | [`ros/jarvis_bridges`](ros/jarvis_bridges) | Diagnostics, rosout and action status bridges |
-| [`ros/jarvis_bringup`](ros/jarvis_bringup) | Launch, parameters, default fault catalog, recorder and black box |
+| [`ros/jarvis_bringup`](ros/jarvis_bringup) | Launch, parameters, default fault catalog, rules and plans, recorder and black box |
 | [`ros/jarvis_demo`](ros/jarvis_demo) | Lidar relay, fault injector, demo launch files |
 | [`schemas`](schemas) | JSON Schema contracts (canonical) |
 

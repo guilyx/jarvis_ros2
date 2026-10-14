@@ -1,0 +1,36 @@
+# The one gate to recovery: rules, operators and the agent all run plans through it
+# (docs/design/05-rules-and-recovery.md §9). The goal is always accepted; the gates decide, and a
+# rejection comes back as OUTCOME_REJECTED.
+uint8 REQUESTER_OPERATOR=1
+uint8 REQUESTER_RULE=2
+uint8 REQUESTER_AGENT=3
+uint8 REQUESTER_PLAN=4
+string plan_id
+Attribute[] args
+uint8 requester_type
+string requester_id
+string correlation_id
+string causation_id
+string rationale
+float64 confidence                   # agent proposals (0..1); NaN or 0 when not given
+bool dry_run
+---
+uint8 OUTCOME_SUCCEEDED=1
+uint8 OUTCOME_FAILED=2
+uint8 OUTCOME_ABORTED=3
+uint8 OUTCOME_REJECTED=4
+uint8 OUTCOME_EXPIRED=5
+string execution_id
+uint8 outcome
+string reason
+string failed_step
+---
+uint8 STATE_PENDING_APPROVAL=1
+uint8 STATE_QUEUED=2
+uint8 STATE_RUNNING=3
+string execution_id
+uint8 state
+string step_id
+uint16 step_index
+uint16 step_count
+string message

@@ -1,0 +1,8 @@
+# Approves or rejects an execution waiting in PENDING_APPROVAL.
+string execution_id
+bool approve
+string operator_name
+string note
+---
+bool success
+string message

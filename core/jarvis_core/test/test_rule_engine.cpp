@@ -112,6 +112,23 @@ using V = std::vector<std::string>;
 
 // -- event patterns, actions, templates -----------------------------------------------------------
 
+TEST_F(EngineTest, FiresAskToPersistTheirHistory)
+{
+  load(R"(  - id: r
+    when: { event: { code: a.b } }
+    then: [{ notify: { message: hi } }]
+    policy: { cooldown: 1m }
+)");
+  auto has_persist = [](const Effects & fx) {
+    return std::any_of(fx.begin(), fx.end(), [](const Effect & f) {
+      return std::holds_alternative<PersistState>(f);
+    });
+  };
+  EXPECT_FALSE(has_persist(feed(event(Kind::Log, "x.y", kT0)))) << "no match, nothing to save";
+  EXPECT_TRUE(has_persist(feed(event(Kind::Log, "a.b", kT0 + 1))));
+  EXPECT_FALSE(has_persist(feed(event(Kind::Log, "a.b", kT0 + 2)))) << "cooled down: no fire";
+}
+
 TEST_F(EngineTest, AMatchEmitsRuleMatchThenRunsActionsWithRenderedTemplates)
 {
   load(R"(  - id: scan-stale-restart

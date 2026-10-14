@@ -3,6 +3,7 @@ project(jarvis_interfaces)
 
 find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(action_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -11,11 +12,23 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   msg/Event.msg
   msg/Fault.msg
   msg/FaultArray.msg
+  msg/GateResult.msg
+  msg/StepProgress.msg
+  msg/Execution.msg
+  msg/ExecutionArray.msg
+  msg/RuleStatus.msg
   srv/QueryEvents.srv
   srv/GetFaults.srv
   srv/AcknowledgeFault.srv
   srv/ClearFault.srv
-  DEPENDENCIES builtin_interfaces
+  srv/ReloadConfig.srv
+  srv/SetRuleState.srv
+  srv/ListRules.srv
+  srv/SetRecoveryMode.srv
+  srv/DecideApproval.srv
+  srv/CancelExecution.srv
+  action/ExecuteRecovery.action
+  DEPENDENCIES action_msgs builtin_interfaces
 )
 
 ament_export_dependencies(rosidl_default_runtime)

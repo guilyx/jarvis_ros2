@@ -17,6 +17,26 @@
     blackbox_service: /jarvis/blackbox/snapshot
     blackbox_wait_s: 2.0          # a capture waits this long for the recorder (e.g. at startup)
 
+/jarvis/rule_engine:
+  ros__parameters:
+    recovery_action: /jarvis/recovery/execute
+    recovery_wait_s: 5.0          # a recover action waits this long for the orchestrator (startup)
+    max_partitions: 1000          # per rule
+
+/jarvis/recovery:
+  ros__parameters:
+    max_concurrent: 4             # top-level executions at once
+    approval_ttl_s: 300.0         # PENDING_APPROVAL expires after
+    agent_autonomy: supervised    # ceiling for the agent: never, advise, supervised, autonomous
+    min_confidence: 0.8           # autonomous agent runs need this confidence
+    max_depth: 3                  # nesting of `run` steps
+    recent_executions: 20         # settled executions kept on /jarvis/executions
+    actuators:                    # pluginlib, base class jarvis_ros::Actuator
+      - jarvis_ros::LifecycleActuator
+      - jarvis_ros::ServiceActuator
+      - jarvis_ros::ParamActuator
+      - jarvis_ros::BagActuator
+
 /jarvis/bridges/diagnostics:
   ros__parameters:
     topic: /diagnostics

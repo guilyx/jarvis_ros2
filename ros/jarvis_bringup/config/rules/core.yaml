@@ -1,0 +1,10 @@
+# Generic rules. Robot-specific ones go in your own files (or point the `rules` launch argument at
+# your directory). Spec: docs/design/05-rules-and-recovery.md §1-7.
+schema: jarvis.rules/v1
+rules:
+  - id: escalation-notify
+    description: Tell the operators when recovery gives up on an incident.
+    when:
+      event: { kind: RECOVERY, attrs.phase: ESCALATED, attrs.dry_run: false }
+    then:
+      - notify: { channel: operators, message: "{{ event.message }}" }

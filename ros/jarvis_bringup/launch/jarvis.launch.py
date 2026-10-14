@@ -8,7 +8,9 @@ Data lands in `data_dir` (default $JARVIS_DATA, else ~/.local/share/jarvis):
   bags/jarvis_<stamp>/       continuous MCAP of /jarvis/** (+ record_extra_topics), split every 5 min;
                              closed splits are announced on /jarvis/recorder/events/write_split
   blackbox/blackbox_<stamp>/ snapshot-mode ring buffer of blackbox_topics, dumped when a fault asks
-  state/                     open faults and the hub boot counter (atomic JSON)
+  state/                     open faults, rule fire history, waiting executions, hub boot counter
+
+Rules and plans are directories of YAML files (`rules`, `plans`); the defaults ship generic ones.
 """
 
 import os
@@ -28,6 +30,10 @@ ARGUMENTS = {
     "robot_id": ("robot", "Robot id stamped on every event"),
     "data_dir": (os.environ.get("JARVIS_DATA", "~/.local/share/jarvis"), "Root of bags/, blackbox/, state/"),
     "catalog": (str(SHARE / "config" / "faults.yaml"), "Fault catalog (jarvis.faults/v1)"),
+    "rules": (str(SHARE / "config" / "rules"), "Directory of rules (jarvis.rules/v1)"),
+    "plans": (str(SHARE / "config" / "plans"), "Directory of recovery plans (jarvis.plans/v1)"),
+    "recovery": ("true", "Run the rule engine and the recovery orchestrator"),
+    "recovery_mode": ("ENABLED", "Initial recovery mode: ENABLED, DRY_RUN or DISABLED"),
     "params_file": (str(SHARE / "config" / "jarvis.yaml"), "Parameters of the Jarvis components"),
     "use_sim_time": ("false", "Use /clock"),
     "autostart": ("true", "Configure and activate the lifecycle components on startup"),
@@ -75,6 +81,29 @@ def _setup(context):
             extra_arguments=fast,
         ),
     ]
+
+    if _flag(arg["recovery"]):
+        nodes += [
+            ComposableNode(
+                package="jarvis_ros",
+                plugin="jarvis_ros::RuleEngineNode",
+                name="rule_engine",
+                namespace="jarvis",
+                parameters=[arg["params_file"], {**common, **state, "rules_dir": arg["rules"]}],
+                extra_arguments=fast,
+            ),
+            ComposableNode(
+                package="jarvis_ros",
+                plugin="jarvis_ros::RecoveryNode",
+                name="recovery",
+                namespace="jarvis",
+                parameters=[
+                    arg["params_file"],
+                    {**common, **state, "plans_dir": arg["plans"], "mode": arg["recovery_mode"]},
+                ],
+                extra_arguments=fast,
+            ),
+        ]
 
     if _flag(arg["bridges"]):
         for plugin, name in (

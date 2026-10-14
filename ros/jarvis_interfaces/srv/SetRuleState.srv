@@ -1,0 +1,10 @@
+# Enables/disables a rule or toggles its shadow mode at runtime (not persisted across reloads).
+uint8 KEEP=0
+uint8 SET_TRUE=1
+uint8 SET_FALSE=2
+string rule_id
+uint8 enabled                        # KEEP, SET_TRUE or SET_FALSE
+uint8 dry_run                        # KEEP, SET_TRUE or SET_FALSE
+---
+bool success
+string message

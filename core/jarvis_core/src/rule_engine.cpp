@@ -476,7 +476,7 @@ Effects RuleEngine::reload(RuleSet rules, Timestamp now)
     Kind::System, "jarvis.rules.reloaded", Severity::Info,
     "Loaded " + std::to_string(rules_.rules().size()) + " rules", Event{}, "", now);
   e.attrs["rules"] = static_cast<std::int64_t>(rules_.rules().size());
-  return {EmitEvent{std::move(e)}};
+  return {EmitEvent{std::move(e)}, PersistState{}};
 }
 
 Timestamp RuleEngine::time_of(const RuleRuntime & rr, const Event & e) const
@@ -674,6 +674,7 @@ void RuleEngine::handle_fire(
 
   p.last_fire = t;
   p.fires.push_back(t);
+  out.push_back(PersistState{});  // cooldowns and max_fires must survive a restart
   // The match belongs to the incident of its matched events: the last one, else any earlier step
   // (a sequence that completes on an absent step often ends on an event outside the incident).
   Event cause = fire.last;

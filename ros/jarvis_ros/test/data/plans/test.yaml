@@ -1,0 +1,33 @@
+schema: jarvis.plans/v1
+plans:
+  - id: restart-lifecycle-node
+    params:
+      node: { type: string, required: true, pattern: "^/" }
+      component: { type: string, required: true }
+      fault: { type: string, default: "*" }
+    locks: ["node:{{ params.node }}"]
+    timeout: 30s
+    steps:
+      - id: restart
+        action: lifecycle.restart
+        with: { node: "{{ params.node }}" }
+        timeout: 10s
+      - id: verify
+        action: wait_for
+        with: { fault: { code: "{{ params.fault }}", component: "{{ params.component }}" }, state: CLEARED }
+        timeout: 10s
+    on_failure:
+      - escalate: operator
+
+  - id: poke
+    params: { service: { type: string, required: true } }
+    steps:
+      - { id: trigger, action: service.trigger, with: { service: "{{ params.service }}" }, timeout: 5s }
+      - { id: note, action: emit, with: { code: test.poked, message: "poked {{ params.service }}" } }
+      - { id: verify, action: check, with: { faults_inactive: [safety.*] } }
+
+  - id: gated
+    requires_approval: [OPERATOR]
+    steps:
+      - { id: note, action: emit, with: { code: test.gated.ran } }
+      - { id: verify, action: check, with: { faults_inactive: [safety.*] } }

@@ -1,0 +1,14 @@
+<library path="jarvis_actuators">
+  <class type="jarvis_ros::LifecycleActuator" base_class_type="jarvis_ros::Actuator">
+    <description>lifecycle.transition and lifecycle.restart (lifecycle_msgs ChangeState / GetState)</description>
+  </class>
+  <class type="jarvis_ros::ServiceActuator" base_class_type="jarvis_ros::Actuator">
+    <description>service.trigger, service.set_bool and service.empty (std_srvs)</description>
+  </class>
+  <class type="jarvis_ros::ParamActuator" base_class_type="jarvis_ros::Actuator">
+    <description>param.set (rcl_interfaces SetParameters)</description>
+  </class>
+  <class type="jarvis_ros::BagActuator" base_class_type="jarvis_ros::Actuator">
+    <description>bag.snapshot (rosbag2 snapshot service)</description>
+  </class>
+</library>

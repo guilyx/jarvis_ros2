@@ -1,0 +1,12 @@
+schema: jarvis.rules/v1
+rules:
+  - id: victim-restart
+    description: A stuck victim is restarted, and its fault must clear.
+    when:
+      event: { kind: FAULT_STATE, code: test.victim.stuck, attrs.state: ACTIVE }
+    then:
+      - recover:
+          plan: restart-lifecycle-node
+          args: { node: /test/victim, component: "{{ event.source.component }}", fault: "{{ event.code }}" }
+          rationale: "{{ event.code }} on {{ event.source.component }}"
+    policy: { cooldown: 2s }

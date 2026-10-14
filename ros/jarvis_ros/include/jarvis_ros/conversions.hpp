@@ -8,12 +8,20 @@
 
 #include <builtin_interfaces/msg/time.hpp>
 #include <jarvis_core/fault_manager.hpp>
+#include <jarvis_core/orchestrator.hpp>
+#include <jarvis_core/rule_engine.hpp>
 #include <jarvis_core/types.hpp>
 #include <jarvis_interfaces/msg/attribute.hpp>
 #include <jarvis_interfaces/msg/event.hpp>
+#include <jarvis_interfaces/msg/execution.hpp>
 #include <jarvis_interfaces/msg/fault.hpp>
+#include <jarvis_interfaces/msg/rule_status.hpp>
 #include <jarvis_interfaces/msg/source.hpp>
+#include <map>
+#include <optional>
 #include <rclcpp/type_adapter.hpp>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace jarvis_ros
@@ -33,6 +41,19 @@ void to_msg(const jarvis_core::Event & event, jarvis_interfaces::msg::Event & ms
 void from_msg(const jarvis_interfaces::msg::Event & msg, jarvis_core::Event & event);
 
 jarvis_interfaces::msg::Fault to_msg(const jarvis_core::FaultEpisode & fault);
+/// What the rule engine and the orchestrator need from a /jarvis/faults entry.
+std::pair<std::string, jarvis_core::FaultView> to_view(const jarvis_interfaces::msg::Fault & fault);
+
+/// ExecuteRecovery / Execution REQUESTER_* values. 0 (unset) reads as OPERATOR.
+std::uint8_t to_msg(jarvis_core::Requester requester);
+std::optional<jarvis_core::Requester> requester_from_msg(std::uint8_t value);
+jarvis_interfaces::msg::Execution to_msg(const jarvis_core::Execution & execution);
+/// Attribute values as plan arguments (their text).
+std::map<std::string, std::string> args_from_msg(
+  const std::vector<jarvis_interfaces::msg::Attribute> & attrs);
+
+jarvis_interfaces::msg::RuleStatus to_msg(
+  const jarvis_core::RuleStats & stats, const jarvis_core::Rule * rule);
 
 }  // namespace jarvis_ros
 

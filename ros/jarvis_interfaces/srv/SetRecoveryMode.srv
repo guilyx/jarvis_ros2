@@ -1,0 +1,9 @@
+# The kill switch. DISABLED rejects whatever waits and, with cancel_running, aborts what runs.
+string mode                          # ENABLED, DRY_RUN or DISABLED
+string operator_name
+string reason
+bool cancel_running
+---
+bool success
+string previous_mode
+string message

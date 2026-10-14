@@ -70,7 +70,8 @@ if(BUILD_TESTING)
   ament_add_gtest(test_translators test/test_translators.cpp)
   target_link_libraries(test_translators jarvis_translators)
 
-  add_launch_test(test/test_bridges.launch.py TIMEOUT 120)
+  # Own ROS domain: packages are tested in parallel and launch tests share node names.
+  add_launch_test(test/test_bridges.launch.py TIMEOUT 120 ENV ROS_DOMAIN_ID=62)
 endif()
 
 ament_export_include_directories(include/${PROJECT_NAME})

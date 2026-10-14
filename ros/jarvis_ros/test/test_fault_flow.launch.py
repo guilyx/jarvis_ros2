@@ -149,7 +149,10 @@ class TestFaultFlow(unittest.TestCase):
         self.send(Event.KIND_FAULT_CLEAR, "demo.sensor.stale", Event.SEVERITY_INFO)
         self.wait_for(lambda: "CLEARED" in self.states("demo.sensor.stale"), what="CLEARED")
         self.wait_for(lambda: self.faults is not None and not self.faults.faults, what="empty snapshot")
-        self.assertTrue(any(e.code == "jarvis.incident.resolved" for e in self.events), "incident resolved")
+        # The snapshot and the incident event travel on different topics: no ordering between them.
+        self.wait_for(
+            lambda: any(e.code == "jarvis.incident.resolved" for e in self.events), what="incident resolved"
+        )
 
     def test_2_latched_fault_needs_an_operator(self):
         self.send(Event.KIND_FAULT_RAISE, "safety.estop.engaged", Event.SEVERITY_CRITICAL, "base")
@@ -190,11 +193,17 @@ class TestFaultFlow(unittest.TestCase):
     def test_5_state_is_persisted(self):
         hub = pathlib.Path(STATE_DIR) / "event_hub.json"
         manager = pathlib.Path(STATE_DIR) / "fault_manager.json"
-        self.wait_for(lambda: manager.exists(), what="fault manager state file")
         self.assertEqual(json.loads(hub.read_text())["boot_count"], 1)
-        state = json.loads(manager.read_text())
+
+        # Saves are coalesced (100 ms), so wait for the one that follows the last clear.
+        def saved_state():
+            if not manager.exists():
+                return None
+            state = json.loads(manager.read_text())
+            return state if not state["faults"] else None
+
+        state = self.wait_for(saved_state, what="fault manager state with every fault cleared")
         self.assertEqual(state["schema"], "jarvis.fault_manager.state/v1")
-        self.assertEqual(state["faults"], [], "everything was cleared")
 
 
 @launch_testing.post_shutdown_test()

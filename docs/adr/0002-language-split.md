@@ -1,6 +1,6 @@
 # ADR-0002 — Languages: C++20 runtime, Python agent & gateway, TypeScript dashboard
 
-- **Status**: Proposed
+- **Status**: Accepted (2026-10-14)
 - **Date**: 2026-10-13
 
 ## Context

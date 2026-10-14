@@ -1,6 +1,6 @@
 # ADR-0006 — The Recovery Orchestrator is the single actuation gate
 
-- **Status**: Proposed
+- **Status**: Accepted (2026-10-14)
 - **Date**: 2026-10-13
 
 ## Context

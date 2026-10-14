@@ -1,6 +1,6 @@
 # ADR-0008 — Standalone web dashboard behind a gateway
 
-- **Status**: Proposed
+- **Status**: Accepted (2026-10-14)
 - **Date**: 2026-10-13
 
 ## Context

@@ -1,6 +1,6 @@
 # ADR-0005 — Declarative YAML DSL for rules (CEP) and recovery plans
 
-- **Status**: Proposed
+- **Status**: Accepted (2026-10-14)
 - **Date**: 2026-10-13
 
 ## Context

@@ -1,6 +1,6 @@
 # ADR-0009 — Target ROS 2 Jazzy (LTS) first
 
-- **Status**: Proposed
+- **Status**: Accepted (2026-10-14)
 - **Date**: 2026-10-13
 
 ## Context

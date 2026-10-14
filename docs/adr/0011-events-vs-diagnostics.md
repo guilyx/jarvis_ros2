@@ -1,6 +1,6 @@
 # ADR-0011 — Our own Event type; `diagnostic_msgs` in and out, not as the model
 
-- **Status**: Proposed
+- **Status**: Accepted (2026-10-14)
 - **Date**: 2026-10-13
 
 ## Context

@@ -1,6 +1,6 @@
 # ADR-0007 — Agent: provider-agnostic via LiteLLM, offline fallback, "advise" by default
 
-- **Status**: Proposed (revised after first review — LiteLLM instead of a single-provider SDK)
+- **Status**: Accepted (2026-10-14)
 - **Date**: 2026-10-13
 
 ## Context

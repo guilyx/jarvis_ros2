@@ -1,6 +1,6 @@
 # ADR-0003 — ROS-native persistence: rosbag2 (MCAP) as the record, Parquet + DuckDB for history
 
-- **Status**: Proposed (revised after first review — replaces the SQLite event store)
+- **Status**: Accepted (2026-10-14)
 - **Date**: 2026-10-13
 
 ## Context

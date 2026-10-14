@@ -11,7 +11,7 @@ The core is ROS-agnostic; ROS 2 is the communication layer.
 
 ## Status
 
-🚧 **Design phase.** Start with the design package: [`docs/design/README.md`](docs/design/README.md).
+🚧 **Design accepted, M1 in progress.** Start with the design package: [`docs/design/README.md`](docs/design/README.md).
 
 | Area | Doc |
 |------|-----|

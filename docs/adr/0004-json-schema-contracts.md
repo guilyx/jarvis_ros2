@@ -1,6 +1,6 @@
 # ADR-0004 — JSON Schema as the canonical contract; ROS messages are a binding
 
-- **Status**: Proposed
+- **Status**: Accepted (2026-10-14)
 - **Date**: 2026-10-13
 
 ## Context

@@ -1,6 +1,6 @@
 # ADR-0001 — Hexagonal architecture, ROS 2 as an adapter layer
 
-- **Status**: Proposed
+- **Status**: Accepted (2026-10-14)
 - **Date**: 2026-10-13
 
 ## Context

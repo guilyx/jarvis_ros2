@@ -1,7 +1,6 @@
 # Jarvis — Design Package
 
-> **Status: PROPOSED (rev 2, after first review).** Nothing is implemented yet. Review the
-> **✅ Decisions to validate** table below. Once it's signed off, implementation starts at **M1** ([roadmap](09-roadmap.md)).
+> **Status: ACCEPTED (rev 2, approved 2026-10-14).** Implementation is in progress, starting with **M1** ([roadmap](09-roadmap.md)).
 
 ## TL;DR (60 seconds)
 
@@ -68,7 +67,7 @@ flowchart LR
 | SQLite? | Prefer ROS-native: publish on the graph, record bags, convert to Parquet/DB | **Done**: rosbag2 = record, Parquet + DuckDB = history, state snapshots for open faults ([03 §12](03-data-model.md#12-persistence-ros-native-no-database-on-the-hot-path), ADR-0003) |
 | ros2_medkit | Look for inspiration | Borrowed DEM counter debounce, correlation/muting, action status bridge, freeze-frame topics. Kept independent but interoperable (ADR-0010) |
 
-## ✅ Decisions to validate
+## ✅ Decisions (accepted)
 
 | # | Decision | Recommendation | Main alternative | ADR |
 |---|----------|----------------|------------------|-----|
@@ -86,8 +85,6 @@ flowchart LR
 
 🔄 = changed after review · 🆕 = new
 
-## ❓ Still open (small)
+## ❓ Still open
 
-1. **D2**: OK with C++ for the runtime, or do you want all-Python to get to the first demo faster?
-2. **D10**: borrow-and-interoperate (recommended), or build directly on ros2_medkit's fault manager?
-3. Which LLM do you want to try first through OpenRouter? This is only needed at M4; it's just a config string.
+- Which LLM to try first through OpenRouter. Only needed at M4; it's a config string.

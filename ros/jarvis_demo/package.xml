@@ -14,6 +14,7 @@
   <exec_depend>diagnostic_msgs</exec_depend>
   <exec_depend>diagnostic_updater</exec_depend>
   <exec_depend>jarvis_bringup</exec_depend>
+  <exec_depend>jarvis_interfaces</exec_depend>
   <exec_depend>jarvis_reporter</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
@@ -23,7 +24,7 @@
   <!-- nav2_sim.launch.py also needs nav2_bringup and nav2_minimal_tb4_sim. They are not declared, so
        CI and robots that only run demo.launch.py don't pull in Nav2 and Gazebo. -->
 
-  <test_depend>jarvis_interfaces</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
   <test_depend>launch_testing</test_depend>
   <test_depend>launch_testing_ament_cmake</test_depend>
   <test_depend>lifecycle_msgs</test_depend>

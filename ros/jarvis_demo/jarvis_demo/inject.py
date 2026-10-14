@@ -8,6 +8,8 @@
     inject diag-error --seconds 5   driver reports    -> diag.fault_injector.motor_driver
     inject estop --seconds 2        e-stop pressed    -> safety.estop.engaged (latched)
     inject nav-abort                unreachable goal  -> ros.action.navigate_to_pose.aborted
+    inject tour                     the first five, one after the other, narrated in the monitor
+    inject clear                    an operator clears the latched faults
 
 Run as `ros2 run jarvis_demo inject <scenario>`.
 """
@@ -15,13 +17,18 @@ Run as `ros2 run jarvis_demo inject <scenario>`.
 import argparse
 import sys
 import time
+from types import SimpleNamespace
 
 import rclpy
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
+from jarvis_interfaces.msg import Fault
+from jarvis_interfaces.srv import ClearFault, GetFaults
 from jarvis_reporter import Reporter, Severity
 from rclpy.action import ActionClient
 from rclpy.parameter import Parameter
 from rclpy.parameter_client import AsyncParameterClient
+
+TOUR_CODE = "demo.tour.step"
 
 
 def spin_for(node, seconds):
@@ -98,9 +105,7 @@ def estop(node, args):
     spin_for(node, args.seconds)
     jarvis.clear("safety.estop.engaged", "emergency stop released")
     jarvis.flush()
-    print("e-stop released; the fault stays LATCHED until an operator clears it:")
-    print("  ros2 service call /jarvis/fault_manager/clear_fault jarvis_interfaces/srv/ClearFault \\")
-    print('    "{fault_id: <id from /jarvis/faults>, operator_name: you, reason: area checked}"')
+    print("e-stop released; the fault stays LATCHED until an operator clears it: inject clear")
 
 
 def nav_abort(node, args):
@@ -123,6 +128,75 @@ def nav_abort(node, args):
     print("goal status:", result.result().status if result.done() else "still running")
 
 
+def call(node, client, request, timeout=10.0):
+    if not client.wait_for_service(timeout_sec=timeout):
+        raise RuntimeError(f"{client.srv_name} is not available: is Jarvis running?")
+    future = client.call_async(request)
+    rclpy.spin_until_future_complete(node, future, timeout_sec=timeout)
+    if future.result() is None:
+        raise RuntimeError(f"no reply from {client.srv_name}")
+    return future.result()
+
+
+def clear(node, args):
+    get_faults = node.create_client(GetFaults, "/jarvis/fault_manager/get_faults")
+    faults = call(node, get_faults, GetFaults.Request()).faults
+    targets = [f for f in faults if args.all or f.state == Fault.STATE_LATCHED]
+    if not targets:
+        print("nothing to clear" + ("" if args.all else " (no latched fault; --all clears every open one)"))
+        return
+    clear_fault = node.create_client(ClearFault, "/jarvis/fault_manager/clear_fault")
+    for f in targets:
+        request = ClearFault.Request(fault_id=f.fault_id, operator_name=args.operator, reason=args.reason)
+        reply = call(node, clear_fault, request)
+        outcome = "cleared" if reply.success else "NOT cleared"
+        print(f"{outcome} {f.code} ({f.source.component}): {reply.message}")
+
+
+# (narration, step, pause after the step in seconds)
+TOUR = (
+    (
+        "1/4 Lidar stall for 5 s: sensor.scan.stale goes PENDING then ACTIVE, its rate symptom is "
+        "muted, and a black-box snapshot is saved.",
+        lambda node: scan(node, SimpleNamespace(seconds=5.0, relay="/demo/scan_relay"), "stall"),
+        6.0,
+    ),
+    (
+        "2/4 Motor driver overcurrent on /diagnostics for 5 s: the bridge raises it, the next OK clears it.",
+        lambda node: diag_error(node, SimpleNamespace(seconds=5.0)),
+        3.0,
+    ),
+    (
+        "3/4 A node logs errors in a loop: sustained /rosout errors become ros.log.error, which heals "
+        "after 60 s of quiet.",
+        lambda node: rosout_error(node, SimpleNamespace(count=8, period=0.5)),
+        3.0,
+    ),
+    (
+        "4/4 E-stop pressed for 2 s: CRITICAL, and still LATCHED after release until an operator "
+        "clears it (inject clear).",
+        lambda node: estop(node, SimpleNamespace(seconds=2.0)),
+        0.0,
+    ),
+)
+
+
+def tour(node, args):
+    """Runs the scenarios one after the other, narrating each step on the event stream too."""
+    narrator = Reporter(node, "tour")
+    if not narrator.wait_for_hub():
+        raise RuntimeError("the event hub is not reachable: is Jarvis running?")
+    for text, step, pause in TOUR:
+        print(f"\n== {text}")
+        narrator.log(TOUR_CODE, Severity.INFO, text)
+        step(node)
+        spin_for(node, pause * args.pace)
+    done = "Tour done. The e-stop stays latched until an operator clears it: inject clear."
+    narrator.log(TOUR_CODE, Severity.INFO, done)
+    narrator.flush()
+    print(f"\n== {done}")
+
+
 def parser():
     p = argparse.ArgumentParser(
         prog="inject", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -141,6 +215,11 @@ def parser():
     s.add_argument("--x", type=float, default=100.0)
     s.add_argument("--y", type=float, default=100.0)
     s.add_argument("--timeout", type=float, default=120.0)
+    sub.add_parser("tour").add_argument("--pace", type=float, default=1.0, help="scale the pauses")
+    s = sub.add_parser("clear")
+    s.add_argument("--all", action="store_true", help="clear every open fault, not only latched ones")
+    s.add_argument("--operator", default="demo-operator")
+    s.add_argument("--reason", default="checked during the demo")
     return p
 
 
@@ -151,6 +230,8 @@ SCENARIOS = {
     "diag-error": diag_error,
     "estop": estop,
     "nav-abort": nav_abort,
+    "tour": tour,
+    "clear": clear,
 }
 
 

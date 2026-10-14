@@ -1,0 +1,5 @@
+<library path="jarvis_nav2_actuators">
+  <class type="jarvis_nav2::Nav2Actuator" base_class_type="jarvis_ros::Actuator">
+    <description>nav2.manage_lifecycle, nav2.clear_costmaps, nav2.cancel_navigation, nav2.navigate_to_pose</description>
+  </class>
+</library>

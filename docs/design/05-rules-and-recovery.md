@@ -297,9 +297,9 @@ Plan fields: `params` (`type: string | int | number | bool`, `required`, `defaul
 | `param.set` | jarvis_ros | `node`, `name`, `value` | `rcl_interfaces/srv/SetParameters` |
 | `bag.snapshot` | jarvis_ros | `service` | rosbag2 `~/snapshot` |
 | `nav2.manage_lifecycle` | jarvis_nav2 (plugin) | `manager`, `command` | `nav2_msgs/srv/ManageLifecycleNodes` (STARTUP / PAUSE / RESUME / RESET / SHUTDOWN) |
-| `nav2.clear_costmaps` | jarvis_nav2 (plugin) | `which: local\|global` | `nav2_msgs/srv/ClearEntireCostmap` |
-| `nav2.cancel_navigation` | jarvis_nav2 (plugin) | — | Cancels all `NavigateToPose` / `NavigateThroughPoses` goals |
-| `nav2.navigate_to_pose` | jarvis_nav2 (plugin) | `pose`, `frame` | Sends a goal and waits for the result (e.g. go to dock) |
+| `nav2.clear_costmaps` | jarvis_nav2 (plugin) | `which: local\|global\|both` (default both) | `nav2_msgs/srv/ClearEntireCostmap` |
+| `nav2.cancel_navigation` | jarvis_nav2 (plugin) | `actions` (optional list) | Cancels all `NavigateToPose` / `NavigateThroughPoses` goals; succeeds when no server is up |
+| `nav2.navigate_to_pose` | jarvis_nav2 (plugin) | `pose: {x, y, yaw}`, `frame` (default map) | Sends a goal and waits for the result (e.g. go to dock); a step timeout cancels it |
 | `<vendor>.<name>` | **pluginlib** | plugin-defined | Custom actuators (`jarvis_ros::Actuator` base class) |
 
 Planned later: a generic `action.goal` and a generic typed `service.call` (via dynamic type support), `process.restart` (systemd over D-Bus), `bt.run` (BehaviorTree.CPP).

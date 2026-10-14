@@ -31,8 +31,8 @@
     min_confidence: 0.8           # autonomous agent runs need this confidence
     max_depth: 3                  # nesting of `run` steps
     recent_executions: 20         # settled executions kept on /jarvis/executions
-    actuators:                    # pluginlib, base class jarvis_ros::Actuator
-      - jarvis_ros::LifecycleActuator
+    actuators:                    # pluginlib, base class jarvis_ros::Actuator; add
+      - jarvis_ros::LifecycleActuator   # jarvis_nav2::Nav2Actuator on a Nav2 robot
       - jarvis_ros::ServiceActuator
       - jarvis_ros::ParamActuator
       - jarvis_ros::BagActuator

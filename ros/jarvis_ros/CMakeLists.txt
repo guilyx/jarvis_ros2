@@ -106,6 +106,9 @@ if(BUILD_TESTING)
   ament_add_gtest(test_state_file test/test_state_file.cpp)
   target_link_libraries(test_state_file jarvis_ros)
 
+  ament_add_gtest(test_actuators test/test_actuators.cpp TIMEOUT 120)
+  target_link_libraries(test_actuators jarvis_ros pluginlib::pluginlib ${std_srvs_TARGETS})
+
   # Own ROS domain: packages are tested in parallel and launch tests share node names.
   add_launch_test(test/test_fault_flow.launch.py TIMEOUT 120 ENV ROS_DOMAIN_ID=61)
   add_launch_test(test/test_recovery_flow.launch.py TIMEOUT 180 ENV ROS_DOMAIN_ID=65)

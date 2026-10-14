@@ -119,21 +119,22 @@ protected:
     return std::static_pointer_cast<rclcpp::Client<ServiceT>>(slot);
   }
 
-  /// Runs `send` once the service is available: right after a restart a node's services take a
-  /// moment to appear. Polls every 100 ms while the attempt is in flight (the step timeout bounds it).
-  template <typename ServiceT>
-  void when_ready(
-    const Attempt & attempt, const Token & token,
-    const typename rclcpp::Client<ServiceT>::SharedPtr & c, std::function<void()> send)
+  /// Runs `send` once `ready()` holds: right after a restart a node's services and action servers
+  /// take a moment to appear. Polls every 100 ms while the attempt is in flight (the step timeout
+  /// bounds the wait).
+  void when(
+    const Attempt & attempt, const Token & token, std::function<bool()> ready,
+    std::function<void()> send)
   {
-    if (c->service_is_ready()) {
+    if (ready()) {
       send();
       return;
     }
     const std::string key = attempt.key();
     waits_[key] = node()->create_wall_timer(
-      std::chrono::milliseconds(100), [this, key, token, c, send = std::move(send)]() {
-        if (!*token || c->service_is_ready()) {
+      std::chrono::milliseconds(100),
+      [this, key, token, ready = std::move(ready), send = std::move(send)]() {
+        if (!*token || ready()) {
           auto self = waits_[key];  // keep the timer alive until this callback returns
           self->cancel();
           waits_.erase(key);
@@ -142,6 +143,14 @@ protected:
           }
         }
       });
+  }
+
+  template <typename ServiceT>
+  void when_ready(
+    const Attempt & attempt, const Token & token,
+    const typename rclcpp::Client<ServiceT>::SharedPtr & c, std::function<void()> send)
+  {
+    when(attempt, token, [c]() { return c->service_is_ready(); }, std::move(send));
   }
 
   /// A string argument, or the reason it is missing.

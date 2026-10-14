@@ -106,6 +106,7 @@ ros2 topic echo /jarvis/executions   # what runs, what waits for approval, what 
 | [`core/jarvis_core`](core/jarvis_core) | ROS-free C++ domain: event hub, fault lifecycle, incidents, catalog, rule engine, recovery orchestrator |
 | [`ros/jarvis_interfaces`](ros/jarvis_interfaces) | Messages, services and the `ExecuteRecovery` action |
 | [`ros/jarvis_ros`](ros/jarvis_ros) | Event hub, fault manager, rule engine and recovery lifecycle components; built-in actuators (lifecycle, std_srvs, parameters, bag snapshot) |
+| [`ros/jarvis_nav2`](ros/jarvis_nav2) | Nav2 actuators: lifecycle manager, costmaps, cancel and send goals |
 | [`ros/jarvis_reporter`](ros/jarvis_reporter) | C++ and Python client libraries for apps |
 | [`ros/jarvis_bridges`](ros/jarvis_bridges) | Diagnostics, rosout and action status bridges |
 | [`ros/jarvis_bringup`](ros/jarvis_bringup) | Launch, parameters, default fault catalog, rules and plans, recorder and black box |

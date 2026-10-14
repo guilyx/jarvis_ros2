@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <map>
 #include <string>
 #include <variant>
 #include <vector>
@@ -39,7 +40,19 @@ struct CaptureBlackbox
   std::string incident_id;
 };
 
-using Effect = std::variant<EmitEvent, FaultsChanged, PersistState, CaptureBlackbox>;
+/// A rule's `recover` action: an ExecuteRecovery request with requester RULE.
+struct RequestRecovery
+{
+  std::string rule_id;
+  std::string plan;
+  std::map<std::string, std::string> args;
+  std::string rationale;
+  std::string match_id;        ///< the RULE_MATCH event, causation of the recovery
+  std::string correlation_id;  ///< incident, when there is one
+};
+
+using Effect =
+  std::variant<EmitEvent, FaultsChanged, PersistState, CaptureBlackbox, RequestRecovery>;
 using Effects = std::vector<Effect>;
 
 /// Appends `more` to `into`, keeping a single FaultsChanged and a single PersistState at the end.

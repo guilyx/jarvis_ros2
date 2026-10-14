@@ -21,6 +21,7 @@
 #include <mutex>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
+#include <thread>
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
@@ -143,6 +144,26 @@ public:
     const Attributes & attrs = {})
   {
     publish(Event::KIND_LOG, code, severity, message, attrs, clock_->now());
+  }
+
+  /// Waits until the event hub (any reader of the ingest topic) is matched. DDS drops what is
+  /// published before discovery completes, so short-lived tools call this before their first report.
+  bool wait_for_hub(std::chrono::milliseconds timeout = std::chrono::seconds(5)) const
+  {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (publisher_->get_subscription_count() == 0) {
+      if (std::chrono::steady_clock::now() >= deadline) {
+        return false;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return true;
+  }
+
+  /// Waits until every report was acknowledged by its readers. Call it before a process exits.
+  bool flush(std::chrono::milliseconds timeout = std::chrono::seconds(5)) const
+  {
+    return publisher_->wait_for_all_acked(timeout);
   }
 
   bool is_raised(const std::string & code) const

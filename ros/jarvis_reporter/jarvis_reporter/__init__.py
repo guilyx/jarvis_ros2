@@ -15,6 +15,7 @@ raised; a state only when its value changes.
 """
 
 import threading
+import time
 from collections.abc import Mapping
 from enum import IntEnum
 
@@ -97,6 +98,23 @@ class Reporter:
     def log(self, code, severity, message, attrs=None):
         """Something noteworthy happened (LOG). Never debounced: the event hub rate-limits floods."""
         self._publish(Event.KIND_LOG, code, severity, message, attrs)
+
+    def wait_for_hub(self, timeout=5.0):
+        """Waits until the event hub (any reader of the ingest topic) is matched.
+
+        DDS drops what is published before discovery completes, so short-lived tools call this
+        before their first report.
+        """
+        deadline = time.monotonic() + timeout
+        while self._publisher.get_subscription_count() == 0:
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.01)
+        return True
+
+    def flush(self, timeout=5.0):
+        """Waits until every report was acknowledged by its readers. Call it before a process exits."""
+        return self._publisher.wait_for_all_acked(Duration(nanoseconds=int(timeout * 1e9)))
 
     def is_raised(self, code):
         with self._lock:

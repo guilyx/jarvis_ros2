@@ -120,3 +120,12 @@ def test_log_is_never_debounced_and_attributes_keep_their_type(h):
 def test_attrs_must_be_a_mapping(h):
     with pytest.raises(TypeError):
         h.reporter.log("app.bad.attrs", Severity.INFO, "oops", [("k", "v")])
+
+
+def test_waits_for_the_hub_and_flushes(h, node):
+    assert h.reporter.wait_for_hub(1.0)
+    assert h.reporter.fault("app.cli.report")
+    assert h.reporter.flush(2.0)
+    assert len(h.receive(1)) == 1
+    alone = Reporter(node, "cli", topic="/test_reporter_py_nobody")
+    assert not alone.wait_for_hub(0.05), "no reader on that topic"

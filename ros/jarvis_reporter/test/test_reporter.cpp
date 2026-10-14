@@ -201,3 +201,17 @@ TEST_F(ReporterTest, IsThreadSafe)
   }
   EXPECT_FALSE(jarvis->is_raised("app.worker.busy"));
 }
+
+TEST_F(ReporterTest, WaitsForTheHubAndFlushes)
+{
+  auto jarvis = make_reporter();
+  EXPECT_TRUE(jarvis->wait_for_hub(1s));
+  EXPECT_TRUE(jarvis->fault("app.cli.report"));
+  EXPECT_TRUE(jarvis->flush(2s));
+  EXPECT_EQ(receive(1).size(), 1u);
+
+  Options lonely = options_;
+  lonely.topic = "/test_reporter_cpp_nobody";
+  Reporter alone(node_, "cli", lonely);
+  EXPECT_FALSE(alone.wait_for_hub(50ms)) << "no reader on that topic";
+}

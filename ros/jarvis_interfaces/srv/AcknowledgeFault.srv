@@ -1,0 +1,6 @@
+string fault_id
+string operator_name
+string note
+---
+bool success
+string message

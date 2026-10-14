@@ -1,0 +1,9 @@
+# Clears an open fault (latched or not). Symptoms muted by it are cleared too unless skip_symptoms.
+string fault_id
+string operator_name
+string reason
+bool skip_symptoms
+---
+bool success
+string message
+string[] cleared_symptoms

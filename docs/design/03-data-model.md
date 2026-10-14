@@ -350,20 +350,20 @@ string description
 Attribute[] freeze_frame
 ```
 
-`FaultArray.msg` (`stamp`, `last_seq`, `Fault[] faults` — non-cleared only), and `Execution.msg` / `ExecutionArray.msg` (running and pending executions with step progress).
+`FaultArray.msg` (`stamp`, `Fault[] faults` — non-cleared only), and `Execution.msg` / `ExecutionArray.msg` (running and pending executions with step progress).
 
 ### Services
 
 | Service | Type | Request → Response |
 |---------|------|--------------------|
-| `/jarvis/event_hub/query_events` | `QueryEvents` | `after_seq, from, to, kinds[], codes[] (globs), min_severity, component, correlation_id, limit` → `events[], next_seq, complete` (`complete=false` if the ring buffer no longer covers the range; use the lake) |
+| `/jarvis/event_hub/query_events` | `QueryEvents` | `after_seq, since, until, kinds[], codes[] (globs), min_severity, component, correlation_id, limit` → `events[], next_seq, complete` (`complete=false` if the ring buffer no longer covers the range; use the lake) |
 | `/jarvis/fault_manager/get_faults` | `GetFaults` | `include_cleared, include_muted, codes[], component, limit` → `faults[]` |
-| `/jarvis/fault_manager/acknowledge_fault` | `AcknowledgeFault` | `fault_id, operator, note` → `success, message` |
-| `/jarvis/fault_manager/clear_fault` | `ClearFault` | `fault_id, operator, reason, skip_symptoms` → `success, message, cleared_symptoms[]` |
+| `/jarvis/fault_manager/acknowledge_fault` | `AcknowledgeFault` | `fault_id, operator_name, note` → `success, message` |
+| `/jarvis/fault_manager/clear_fault` | `ClearFault` | `fault_id, operator_name, reason, skip_symptoms` → `success, message, cleared_symptoms[]` |
 | `/jarvis/rule_engine/reload` · `/jarvis/recovery/reload` | `ReloadConfig` | `validate_only` → `success, revision, errors[]` |
 | `/jarvis/rule_engine/set_rule_state` | `SetRuleState` | `rule_id, enabled, dry_run` → `success, message` |
-| `/jarvis/recovery/set_mode` | `SetRecoveryMode` | `mode (ENABLED/DRY_RUN/DISABLED), operator, reason` → `success, previous_mode` |
-| `/jarvis/recovery/decide` | `DecideApproval` | `execution_id, approve, operator, note` → `success, message` |
+| `/jarvis/recovery/set_mode` | `SetRecoveryMode` | `mode (ENABLED/DRY_RUN/DISABLED), operator_name, reason` → `success, previous_mode` |
+| `/jarvis/recovery/decide` | `DecideApproval` | `execution_id, approve, operator_name, note` → `success, message` |
 
 ### Actions
 
@@ -407,8 +407,8 @@ string message
 # action/Analyze.action   (served by the agent)
 string question          # empty = "explain this window"
 string correlation_id    # analyze an incident…
-builtin_interfaces/Time from
-builtin_interfaces/Time to   # …or a time range
+builtin_interfaces/Time since
+builtin_interfaces/Time until  # …or a time range
 string effort            # low | medium | high
 ---
 string insight_id
@@ -430,6 +430,8 @@ string message
 | `/diagnostics` | `diagnostic_msgs/DiagnosticArray` | default | default | default | optional |
 
 All names are relative (`events`, `~/query_events`) in the `jarvis` namespace. Multi-robot setups push a robot namespace.
+
+> Field names avoid C++ and Python keywords (`operator_name`, `since`/`until`), because rosidl generates code in both languages.
 
 ## 12. Persistence (ROS-native, no database on the hot path)
 

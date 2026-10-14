@@ -1,0 +1,14 @@
+# Recent events from the event hub's in-memory buffer. Older history lives in the lake.
+uint64 after_seq                     # exclusive cursor; 0 = from the oldest buffered event
+builtin_interfaces/Time since        # zero = unbounded ("from" is a Python keyword)
+builtin_interfaces/Time until        # zero = unbounded
+uint8[] kinds                        # Event.KIND_*; empty = all
+string[] codes                       # globs; empty = all
+uint8 min_severity                   # Event.SEVERITY_*; 0 = all
+string component
+string correlation_id
+uint32 limit                         # capped at 1000
+---
+Event[] events
+uint64 next_seq                      # pass as after_seq to continue; 0 = no more
+bool complete                        # false if evicted events could have matched

@@ -76,6 +76,10 @@ class TestBridges(unittest.TestCase):
             depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL
         )
         cls.action_status = cls.node.create_publisher(GoalStatusArray, "/fake_nav/_action/status", latched)
+        # Jarvis' own actions (a recovery that fails) are not bridged: they would loop.
+        cls.own_action_status = cls.node.create_publisher(
+            GoalStatusArray, "/jarvis/fake_recovery/_action/status", latched
+        )
 
     @classmethod
     def tearDownClass(cls):
@@ -161,15 +165,17 @@ class TestBridges(unittest.TestCase):
             return g
 
         def abort_a_goal():
-            g = goal(GoalStatus.STATUS_EXECUTING)
-            self.action_status.publish(GoalStatusArray(status_list=[g]))
-            time.sleep(0.05)
-            g.status = GoalStatus.STATUS_ABORTED
-            self.action_status.publish(GoalStatusArray(status_list=[g]))
+            for pub in (self.action_status, self.own_action_status):
+                g = goal(GoalStatus.STATUS_EXECUTING)
+                pub.publish(GoalStatusArray(status_list=[g]))
+                time.sleep(0.05)
+                g.status = GoalStatus.STATUS_ABORTED
+                pub.publish(GoalStatusArray(status_list=[g]))
 
         aborted = self.keep_trying(
             abort_a_goal, lambda e: e.code == "ros.action.fake_nav.aborted", "aborted goal fault"
         )
+        self.assertIsNone(self.find(lambda e: "fake_recovery" in e.code), "Jarvis' own actions are skipped")
         self.assertEqual(aborted.kind, Event.KIND_FAULT_RAISE)
         self.assertEqual(aborted.source.component, "/fake_nav")
         state = self.find(lambda e: e.code == "ros.action.fake_nav.status")

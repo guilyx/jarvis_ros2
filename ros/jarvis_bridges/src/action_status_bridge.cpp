@@ -2,11 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // /jarvis/bridges/action_status: `<action>/_action/status` goal transitions -> faults and states.
-// Listens to the listed actions, or discovers every action server on the graph.
+// Listens to the listed actions, or discovers every action server on the graph (but Jarvis' own:
+// a recovery that fails is already on the stream, as a recovery).
 
+#include <algorithm>
+#include <jarvis_core/util.hpp>
 #include <map>
 #include <rclcpp_components/register_node_macro.hpp>
 #include <string>
+#include <vector>
 
 #include "jarvis_bridges/bridge_node.hpp"
 #include "jarvis_bridges/translators.hpp"
@@ -30,6 +34,9 @@ public:
     declare<std::vector<std::string>>(
       *this, "actions", {}, "Action names to watch, e.g. /navigate_to_pose; empty discovers all");
     declare<double>(*this, "discovery_period_s", 2.0, "How often the graph is scanned for actions");
+    declare<std::vector<std::string>>(
+      *this, "ignore_actions", {"/jarvis/*"},
+      "Globs of discovered actions to leave alone (Jarvis' own would loop)");
     maybe_autostart();
   }
 
@@ -37,6 +44,7 @@ protected:
   void configure_bridge() override
   {
     actions_ = strings(get_parameter("actions"));
+    ignore_ = strings(get_parameter("ignore_actions"));
     discovery_period_ =
       std::chrono::duration<double>(get_parameter("discovery_period_s").as_double());
     if (actions_.empty() && discovery_period_.count() <= 0.0) {
@@ -71,7 +79,13 @@ private:
       if (
         topic.size() > kStatusSuffix.size() && topic.ends_with(kStatusSuffix) &&
         types.size() == 1 && types.front() == kStatusType) {
-        watch(topic.substr(0, topic.size() - kStatusSuffix.size()));
+        const auto action = topic.substr(0, topic.size() - kStatusSuffix.size());
+        const bool ignored = std::any_of(
+          ignore_.begin(), ignore_.end(),
+          [&action](const std::string & g) { return jarvis_core::glob_match(g, action); });
+        if (!ignored) {
+          watch(action);
+        }
       }
     }
   }
@@ -92,6 +106,7 @@ private:
   }
 
   std::vector<std::string> actions_;
+  std::vector<std::string> ignore_;
   std::chrono::duration<double> discovery_period_{2.0};
   std::unique_ptr<ActionStatusTranslator> translator_;
   std::map<std::string, rclcpp::Subscription<action_msgs::msg::GoalStatusArray>::SharedPtr> subs_;

@@ -55,6 +55,7 @@
 /jarvis/bridges/action_status:
   ros__parameters:
     discovery_period_s: 2.0       # watches every action server; set `actions` to narrow it
+    ignore_actions: ["/jarvis/*"] # a failed recovery is already a RECOVERY event
 
 /jarvis/bridges/lifecycle:
   ros__parameters:

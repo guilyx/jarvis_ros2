@@ -15,7 +15,35 @@ The core is ROS-agnostic; ROS 2 is the communication layer.
 ([roadmap](docs/design/09-roadmap.md)). The design package starts at
 [`docs/design/README.md`](docs/design/README.md).
 
-## Quick start
+## Try it in Docker
+
+All you need is Docker. No ROS install, works on Linux, macOS and Windows (WSL):
+
+```bash
+git clone https://github.com/guilyx/jarvis_ros2 && cd jarvis_ros2
+./demo
+```
+
+The first run builds the image (about 10 minutes). Then a guided tour plays in a live view: a lidar
+stalls, a motor driver overheats, a node errors in a loop, the e-stop is pressed. You watch Jarvis
+debounce, correlate, latch and record each one. Ctrl-C leaves the view; Jarvis keeps running.
+
+| Command | What it does |
+|---------|--------------|
+| `./demo watch` | Live view of open faults and recent events |
+| `./demo inject scan-stall` | Break one thing: `scan-stall`, `scan-slow`, `rosout-error`, `diag-error`, `estop` |
+| `./demo clear` | Clear the latched e-stop, as an operator would |
+| `./demo shell` | A shell with ROS 2 ready: `ros2 topic echo /jarvis/faults` |
+| `./demo down` | Stop. Recordings stay in `./demo-data/` |
+
+- **Foxglove**: connect to `ws://localhost:8765` to browse `/jarvis/events`, `/jarvis/faults`, `/scan` and
+  `/diagnostics` live. The MCAP recordings in `./demo-data/bags/` open in Foxglove too.
+- **Restarts keep open faults**: that's the persistence at work. `./demo clear --all` clears every open
+  fault; `rm -rf demo-data` (with `sudo` on Linux: the container writes as root) starts from scratch.
+- **No bash** (plain Windows): `docker compose up -d`, then `docker compose exec demo monitor` and
+  `docker compose exec demo inject tour`.
+
+## From source
 
 ROS 2 Jazzy, from the root of this repository:
 
@@ -24,13 +52,13 @@ rosdep install --from-paths core ros --ignore-src -y
 colcon build && source install/setup.bash
 
 ros2 launch jarvis_demo demo.launch.py          # Jarvis + a fake lidar, no simulator needed
-ros2 run jarvis_demo inject scan-stall          # in another shell: the lidar stops
-ros2 topic echo /jarvis/faults                  # sensor.scan.stale goes PENDING, then ACTIVE
+ros2 run jarvis_demo monitor                    # in another shell: the live view
+ros2 run jarvis_demo inject tour                # and in a third: every scenario, narrated
 ```
 
-Other scenarios: `inject --help`. With Nav2 and Gazebo installed, `nav2_sim.launch.py` runs the same
-demo on a simulated TurtleBot 4. Recordings (MCAP, opens in Foxglove) land in
-`~/.local/share/jarvis/demo/`.
+With Nav2 and Gazebo installed, `nav2_sim.launch.py` runs the same demo on a simulated TurtleBot 4.
+
+## Use it on your robot
 
 Reporting from your own node is one line, in C++ or Python:
 

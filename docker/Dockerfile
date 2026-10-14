@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
 # Stages: dev (toolchain, used by .devcontainer) -> build (colcon build) -> runtime (install space only)
+#         -> demo (runtime + Foxglove bridge and the demo tools; what compose.yaml runs)
 ARG ROS_DISTRO=jazzy
 
 FROM ros:${ROS_DISTRO}-ros-base AS dev
@@ -37,3 +38,14 @@ RUN sed -i "s|^exec \"\$@\"|source /opt/jarvis/setup.bash\nexec \"\$@\"|" /ros_e
 ENV JARVIS_DATA=/var/lib/jarvis
 VOLUME ["/var/lib/jarvis"]
 CMD ["ros2", "launch", "jarvis_bringup", "jarvis.launch.py"]
+
+FROM runtime AS demo
+RUN apt-get update && apt-get install -y --no-install-recommends "ros-${ROS_DISTRO}-foxglove-bridge" \
+    && rm -rf /var/lib/apt/lists/*
+# `inject` and `monitor` on the PATH for `docker compose exec`, and ROS 2 sourced in interactive shells.
+COPY docker/demo/bin/ /usr/local/bin/
+RUN printf 'source /opt/ros/%s/setup.bash\nsource /opt/jarvis/setup.bash\n' "${ROS_DISTRO}" >> /etc/bash.bashrc
+# Everything runs in this one container: keep DDS discovery inside it.
+ENV ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+EXPOSE 8765
+CMD ["ros2", "launch", "jarvis_demo", "demo.launch.py", "foxglove:=true"]

@@ -1,0 +1,34 @@
+# Jarvis demo in one container. Easiest: ./demo (see README, "Try it in Docker").
+#
+#   docker compose up -d                          # build (first time, ~10 min) and start
+#   docker compose exec demo monitor              # live view of faults and events (Ctrl-C to leave)
+#   docker compose exec demo inject tour          # every scenario, narrated in the live view
+#   docker compose exec demo inject clear         # operator clears the latched e-stop
+#   docker compose down                           # stop; recordings stay in ./demo-data
+name: jarvis
+services:
+  demo:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: demo
+    image: jarvis_ros2:demo
+    init: true
+    # SIGINT lets ros2 launch shut down cleanly, so the recorder finalizes its MCAP files.
+    stop_signal: SIGINT
+    stop_grace_period: 20s
+    ports:
+      - "8765:8765" # Foxglove: open a connection to ws://localhost:8765
+    volumes:
+      - ./demo-data:/var/lib/jarvis # MCAP recordings, black-box snapshots, fault state
+    environment:
+      JARVIS_DATA: /var/lib/jarvis
+      ROS_DOMAIN_ID: "42"
+    shm_size: 512m
+    healthcheck:
+      # Healthy once the fault manager publishes its snapshot.
+      test: ["CMD", "monitor", "--once", "--timeout", "5"]
+      interval: 10s
+      timeout: 20s
+      start_period: 10s
+      retries: 6

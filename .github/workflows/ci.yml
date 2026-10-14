@@ -20,6 +20,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Core stays ROS-free (ADR-0001)
         run: scripts/check_core_ros_free.sh
+      - name: shellcheck
+        run: shellcheck demo docker/demo/bin/* docker/demo/smoke_test.sh
       - name: clang-format
         run: |
           find core ros \( -name '*.cpp' -o -name '*.hpp' \) -print0 \
@@ -91,3 +93,25 @@ jobs:
         run: |
           source /opt/ros/jazzy/setup.bash
           colcon test-result --verbose
+
+  demo:
+    name: Docker demo (build + smoke test)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the demo image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: demo
+          tags: jarvis_ros2:demo
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test (the commands from the README)
+        run: docker/demo/smoke_test.sh
+      - name: Stop the demo
+        if: always()
+        run: docker compose down

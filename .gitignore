@@ -18,3 +18,4 @@ __pycache__/
 *.swp
 # runtime data (bags, lake, state)
 /data/
+/demo-data/

@@ -28,6 +28,7 @@ add_library(jarvis_core
   src/fault_catalog.cpp
   src/fault_manager.cpp
   src/json.cpp
+  src/rules.cpp
   src/types.cpp
   src/util.cpp
 )
@@ -86,10 +87,12 @@ if(BUILD_TESTING)
     test/test_event_hub.cpp
     test/test_fault_catalog.cpp
     test/test_fault_manager.cpp
+    test/test_rules.cpp
   )
   target_link_libraries(jarvis_core_tests PRIVATE jarvis_core GTest::gtest_main)
   target_compile_definitions(jarvis_core_tests PRIVATE
     JARVIS_SCHEMA_EXAMPLES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../schemas/examples"
+    JARVIS_DOCS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../docs"
   )
   include(GoogleTest)
   gtest_discover_tests(jarvis_core_tests DISCOVERY_MODE PRE_TEST)

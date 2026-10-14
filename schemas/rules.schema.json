@@ -1,0 +1,483 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/guilyx/jarvis_ros2/schemas/rules.schema.json",
+  "title": "Jarvis rules (jarvis.rules/v1)",
+  "description": "Rules: when (pattern over events) + guard (current state) + then (actions) + policy. See docs/design/05-rules-and-recovery.md. The C++ parser (jarvis_core::RuleSet) is stricter: it also checks template variables and sequence timing.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema"
+  ],
+  "properties": {
+    "schema": {
+      "const": "jarvis.rules/v1"
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rule"
+      }
+    }
+  },
+  "$defs": {
+    "duration": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|min|h)?$"
+    },
+    "positive_duration": {
+      "$ref": "#/$defs/duration",
+      "not": {
+        "pattern": "^0+(\\.0+)?[a-z]*$"
+      }
+    },
+    "scalar": {
+      "type": [
+        "string",
+        "number",
+        "boolean"
+      ]
+    },
+    "test": {
+      "description": "A value (strings with * or ? are globs; severities accept \">=WARN\") or an operator mapping. Several operators must all hold.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/scalar"
+        },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "in": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/test"
+              }
+            },
+            "not": {
+              "$ref": "#/$defs/test"
+            },
+            "glob": {
+              "type": "string"
+            },
+            "regex": {
+              "type": "string"
+            },
+            "gt": {
+              "type": "number"
+            },
+            "gte": {
+              "type": "number"
+            },
+            "lt": {
+              "type": "number"
+            },
+            "lte": {
+              "type": "number"
+            },
+            "exists": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "matcher": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^(kind|code|severity|message|id|seq|correlation_id|causation_id|source\\.(robot|node|component|host)|attrs\\..+|tags)$"
+      },
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/test"
+        },
+        "tags": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/test"
+      }
+    },
+    "pattern": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/matcher"
+        },
+        "count": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "event",
+            "threshold",
+            "within"
+          ],
+          "properties": {
+            "event": {
+              "$ref": "#/$defs/matcher"
+            },
+            "threshold": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "within": {
+              "$ref": "#/$defs/positive_duration"
+            }
+          }
+        },
+        "sequence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "within",
+            "steps"
+          ],
+          "properties": {
+            "within": {
+              "$ref": "#/$defs/positive_duration"
+            },
+            "steps": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "event": {
+                    "$ref": "#/$defs/matcher"
+                  },
+                  "absent": {
+                    "$ref": "#/$defs/matcher"
+                  },
+                  "for": {
+                    "$ref": "#/$defs/positive_duration"
+                  }
+                },
+                "oneOf": [
+                  {
+                    "required": [
+                      "event"
+                    ],
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "absent"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "for"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "required": [
+                      "absent",
+                      "for"
+                    ],
+                    "not": {
+                      "required": [
+                        "event"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "all": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "within",
+            "of"
+          ],
+          "properties": {
+            "within": {
+              "$ref": "#/$defs/positive_duration"
+            },
+            "of": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/pattern"
+              }
+            }
+          }
+        },
+        "any": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/pattern"
+          }
+        }
+      }
+    },
+    "guard": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "faults_active": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "faults_inactive": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "state": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "event.schema.json#/$defs/code"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/test"
+          }
+        }
+      }
+    },
+    "string_map": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/scalar"
+      }
+    },
+    "action": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "recover": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "plan"
+          ],
+          "properties": {
+            "plan": {
+              "type": "string"
+            },
+            "args": {
+              "$ref": "#/$defs/string_map"
+            },
+            "rationale": {
+              "type": "string"
+            }
+          }
+        },
+        "emit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "code"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "LOG",
+                "STATE",
+                "FAULT_RAISE",
+                "FAULT_CLEAR",
+                "SYSTEM"
+              ]
+            },
+            "code": {
+              "type": "string"
+            },
+            "severity": {
+              "$ref": "event.schema.json#/$defs/severity"
+            },
+            "message": {
+              "type": "string"
+            },
+            "attrs": {
+              "$ref": "#/$defs/string_map"
+            }
+          }
+        },
+        "incident": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "open": {
+              "const": true
+            },
+            "escalate": {
+              "const": true
+            }
+          },
+          "maxProperties": 1
+        },
+        "notify": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "message"
+          ],
+          "properties": {
+            "channel": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          }
+        },
+        "ask_agent": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "focus"
+          ],
+          "properties": {
+            "focus": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cooldown": {
+          "$ref": "#/$defs/duration"
+        },
+        "max_fires": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "count",
+            "per"
+          ],
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "per": {
+              "$ref": "#/$defs/positive_duration"
+            }
+          }
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "dry_run": {
+          "type": "boolean"
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "when",
+        "then"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "partition_by": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "time_basis": {
+          "enum": [
+            "received",
+            "source"
+          ]
+        },
+        "when": {
+          "$ref": "#/$defs/pattern"
+        },
+        "guard": {
+          "$ref": "#/$defs/guard"
+        },
+        "then": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/action"
+          }
+        },
+        "policy": {
+          "$ref": "#/$defs/policy"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,70 @@
+# Fault catalog of the demo robot: the default catalog (jarvis_bringup/config/faults.yaml) plus the
+# demo's own sensor and safety faults. Catalogs don't include each other yet, so the generic part is
+# repeated here.
+schema: jarvis.faults/v1
+
+defaults:
+  severity: ERROR
+  debounce: immediate
+  heal: { on_clear: true }
+
+faults:
+  # -- demo robot ----------------------------------------------------------------------------------
+  - code: sensor.scan.stale
+    description: The lidar stopped publishing; Nav2's costmaps and collision monitor go blind.
+    debounce: { persist: 500ms }
+    capture: { blackbox: true }
+  - code: diag.scan_relay.output_rate
+    description: The lidar rate dropped below what the costmaps expect.
+    severity: WARN
+  - code: safety.estop.engaged
+    description: The emergency stop is pressed. An operator clears it after checking the area.
+    severity: CRITICAL
+    latch: true
+    incident: always
+    capture: { blackbox: true }
+
+  # -- generic bridges (same as the default catalog) -----------------------------------------------
+  - code: ros.log.error
+    description: A node keeps logging errors.
+    debounce: { count: 3, within: 10s }
+    heal: { on_clear: false, after: 60s }
+  - code: ros.log.fatal
+    description: A node logged a fatal error and has likely exited.
+    severity: CRITICAL
+    heal: { on_clear: false, after: 5m }
+    capture: { blackbox: true }
+  - code: ros.action.navigate_to_pose.aborted
+    description: Nav2 gave up on the goal after its own recoveries.
+    capture: { blackbox: true }
+  - code: ros.action.navigate_through_poses.aborted
+    description: Nav2 gave up on the waypoints after its own recoveries.
+    capture: { blackbox: true }
+  - code: ros.action.follow_path.aborted
+    description: The controller server could not follow the path.
+    severity: WARN
+  - code: ros.action.compute_path_to_pose.aborted
+    description: The planner server found no path.
+    severity: WARN
+
+correlation:
+  # A stalled lidar also collapses its rate: show the stall, mute the rate.
+  - id: scan-stall
+    root: [sensor.scan.stale]
+    symptoms: ["diag.scan_relay.*"]
+    window: 3s
+    mute_symptoms: true
+    clear_with_root: false
+  # Pressing the e-stop makes Nav2 abort: the e-stop is the root cause.
+  - id: estop-cascade
+    root: [safety.estop.engaged]
+    symptoms: ["ros.action.*"]
+    window: 5s
+    mute_symptoms: true
+    clear_with_root: false
+  - id: nav-goal-aborted
+    root: [ros.action.navigate_to_pose.aborted, ros.action.navigate_through_poses.aborted]
+    symptoms: [ros.action.follow_path.aborted, ros.action.compute_path_to_pose.aborted]
+    window: 5s
+    mute_symptoms: true
+    clear_with_root: true

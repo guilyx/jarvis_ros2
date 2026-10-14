@@ -41,7 +41,7 @@ def test_fault_examples_validate(path):
 
 
 @pytest.mark.parametrize(
-    "path", sorted(REPO.glob("ros/*/config/**/faults*.yaml")), ids=lambda p: str(p.relative_to(REPO))
+    "path", sorted(REPO.glob("ros/*/config/**/*faults*.yaml")), ids=lambda p: str(p.relative_to(REPO))
 )
 def test_shipped_fault_catalogs_validate(path):
     _validator("fault_catalog.schema.json").validate(yaml.safe_load(path.read_text()) or {})

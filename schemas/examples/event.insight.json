@@ -1,0 +1,16 @@
+{
+  "id": "01928f71-1111-7aaa-8bbb-cccccccccccc",
+  "seq": "281474976711740",
+  "stamp": "2026-10-13T09:15:10.000000000Z",
+  "recv_stamp": "2026-10-13T09:15:10.002000000Z",
+  "source": {"robot": "tb4-sim", "node": "/jarvis/agent"},
+  "kind": "INSIGHT",
+  "code": "jarvis.insight",
+  "severity": "INFO",
+  "message": "Relay stalls follow Gazebo real-time-factor drops",
+  "attrs": {"confidence": 0.62},
+  "payload": "{\"title\":\"Relay stalls follow Gazebo real-time-factor drops\"}",
+  "payload_schema": "jarvis.insight/v1",
+  "correlation_id": "01928f6e-9999-7999-8999-999999999999",
+  "causation_id": "01928f6e-7c1a-7b3e-9a51-3f0c2d4e5a61"
+}

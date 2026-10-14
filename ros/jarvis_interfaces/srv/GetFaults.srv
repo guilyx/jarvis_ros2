@@ -1,0 +1,7 @@
+bool include_cleared                 # also return recently cleared episodes
+bool include_muted                   # also return symptoms muted by a root cause
+string[] codes                       # globs; empty = all
+string component
+uint32 limit                         # 0 = no limit
+---
+Fault[] faults

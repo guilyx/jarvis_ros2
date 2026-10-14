@@ -1,0 +1,21 @@
+# colcon
+build/
+install/
+log/
+# cmake (standalone core builds)
+/core/*/build*/
+compile_commands.json
+# python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+# editors
+.vscode/
+.idea/
+*.swp
+# runtime data (bags, lake, state)
+/data/
+/demo-data/

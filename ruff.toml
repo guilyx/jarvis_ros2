@@ -1,0 +1,10 @@
+# Python lint/format settings for the whole repo (agent, gateway, lake, tests, launch files).
+line-length = 110
+target-version = "py312"
+extend-exclude = ["build", "install", "log"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+
+[format]
+quote-style = "double"

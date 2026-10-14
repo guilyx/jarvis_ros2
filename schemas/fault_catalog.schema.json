@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/guilyx/jarvis_ros2/schemas/fault_catalog.schema.json",
+  "title": "Jarvis fault catalog (jarvis.faults/v1)",
+  "description": "Per-code fault policies and correlation rules. See docs/design/03-data-model.md §5.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": "jarvis.faults/v1"},
+    "defaults": {"$ref": "#/$defs/policy"},
+    "faults": {
+      "type": "array",
+      "items": {
+        "allOf": [{"$ref": "#/$defs/policy"}],
+        "type": "object",
+        "required": ["code"],
+        "properties": {
+          "code": {"$ref": "event.schema.json#/$defs/code"},
+          "description": {"type": "string"},
+          "runbook": {"type": "string"},
+          "capture": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "freeze_frame": {"type": "array", "items": {"type": "string", "pattern": "^/"}},
+              "blackbox": {"type": "boolean"}
+            }
+          },
+          "severity": true, "debounce": true, "heal": true, "latch": true, "incident": true
+        },
+        "unevaluatedProperties": false
+      }
+    },
+    "correlation": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "root", "symptoms"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "root": {"$ref": "#/$defs/globs"},
+          "symptoms": {"$ref": "#/$defs/globs"},
+          "window": {"$ref": "#/$defs/duration"},
+          "mute_symptoms": {"type": "boolean"},
+          "clear_with_root": {"type": "boolean"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "duration": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|min|h)?$"},
+    "globs": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}]},
+    "policy": {
+      "type": "object",
+      "properties": {
+        "severity": {"$ref": "event.schema.json#/$defs/severity"},
+        "debounce": {
+          "oneOf": [
+            {"const": "immediate"},
+            {"type": "object", "additionalProperties": false, "required": ["count", "within"],
+             "properties": {"count": {"type": "integer", "minimum": 1}, "within": {"$ref": "#/$defs/duration"}}},
+            {"type": "object", "additionalProperties": false, "required": ["persist"],
+             "properties": {"persist": {"$ref": "#/$defs/duration"}}},
+            {"type": "object", "additionalProperties": false, "required": ["counter"],
+             "properties": {"counter": {"type": "object", "additionalProperties": false,
+               "properties": {"confirm_at": {"type": "integer", "maximum": -1}, "heal_at": {"type": "integer", "minimum": 1}}}}}
+          ]
+        },
+        "heal": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {"on_clear": {"type": "boolean"}, "after": {"$ref": "#/$defs/duration"}}
+        },
+        "latch": {"type": "boolean"},
+        "incident": {"enum": ["auto", "always", "never"]}
+      }
+    }
+  }
+}

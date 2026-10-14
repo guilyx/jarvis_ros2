@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Jarvis demo in Docker: one container with Jarvis, a fake lidar and a Foxglove bridge.
+#
+#   ./demo              build and start, then play the guided tour in the live view (Ctrl-C to leave)
+#   ./demo up           build and start in the background
+#   ./demo watch        live view of open faults and recent events
+#   ./demo tour         play the guided tour (watch it with ./demo watch in another terminal)
+#   ./demo inject X     one scenario: scan-stall, scan-slow, rosout-error, diag-error, estop
+#   ./demo clear        an operator clears the latched faults
+#   ./demo shell        a shell with ROS 2 ready (ros2 topic echo /jarvis/faults, ...)
+#   ./demo logs         follow the container logs
+#   ./demo down         stop; recordings stay in ./demo-data
+#
+# Foxglove: connect to ws://localhost:8765. Recordings (MCAP): ./demo-data/bags/.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+if ! docker compose version >/dev/null 2>&1; then
+  echo "This demo needs Docker with the compose plugin: https://docs.docker.com/get-docker/" >&2
+  exit 1
+fi
+
+compose() { docker compose "$@"; }
+in_demo() {
+  # A TTY only when we have one, so the commands also work from scripts and CI.
+  if [ -t 0 ] && [ -t 1 ]; then compose exec demo "$@"; else compose exec -T demo "$@"; fi
+}
+
+up() {
+  echo "Starting Jarvis (the first build takes about 10 minutes)..."
+  compose up -d "$@"
+  wait_ready
+}
+
+wait_ready() {
+  local id status
+  id=$(compose ps -q demo)
+  printf "Waiting for Jarvis"
+  for _ in $(seq 1 90); do
+    status=$(docker inspect -f '{{.State.Health.Status}}' "$id" 2>/dev/null || echo missing)
+    case "$status" in
+      healthy) echo " ready."; return 0 ;;
+      unhealthy | missing) break ;;
+    esac
+    printf "."
+    sleep 2
+  done
+  echo " not ready (status: $status). Logs:" >&2
+  compose logs --tail 40 demo >&2
+  return 1
+}
+
+next_steps() {
+  cat <<'EOF'
+
+Jarvis is running. Next:
+  ./demo watch              live view of faults and events
+  ./demo inject scan-stall  break the lidar (also: scan-slow, rosout-error, diag-error, estop)
+  ./demo clear              clear the latched e-stop as an operator
+  ./demo down               stop
+Foxglove: ws://localhost:8765 · Recordings: ./demo-data/bags/
+EOF
+}
+
+case "${1:-play}" in
+  play)
+    up --build
+    compose exec -d demo inject tour
+    echo "Playing the guided tour in the live view. Ctrl-C leaves the view; Jarvis keeps running."
+    sleep 1
+    in_demo monitor || true
+    next_steps
+    ;;
+  up) up --build && next_steps ;;
+  wait) wait_ready ;;
+  watch) in_demo monitor ;;
+  tour) in_demo inject tour ;;
+  inject) shift && in_demo inject "$@" ;;
+  clear) shift && in_demo inject clear "$@" ;;
+  shell) in_demo bash ;;
+  logs) compose logs -f demo ;;
+  down) compose down ;;
+  -h | --help | help) awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "$0" ;;
+  *)
+    echo "unknown command: $1 (try ./demo help)" >&2
+    exit 2
+    ;;
+esac

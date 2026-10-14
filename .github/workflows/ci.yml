@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Core stays ROS-free (ADR-0001)
+        run: scripts/check_core_ros_free.sh
+      - name: shellcheck
+        run: shellcheck demo docker/demo/bin/* docker/demo/smoke_test.sh
+      - name: clang-format
+        run: |
+          find core ros \( -name '*.cpp' -o -name '*.hpp' \) -print0 \
+            | xargs -0 --no-run-if-empty clang-format-18 --dry-run --Werror
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: ruff
+        run: |
+          pip install ruff==0.17.0
+          ruff check .
+          ruff format --check .
+
+  core:
+    name: Core (ROS-free, ASan/UBSan)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build libyaml-cpp-dev nlohmann-json3-dev libgtest-dev libgmock-dev
+      - name: Build
+        run: |
+          cmake -S core/jarvis_core -B build/core -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug -DJARVIS_SANITIZE=ON -DJARVIS_WERROR=ON
+          cmake --build build/core
+      - name: Test
+        run: ctest --test-dir build/core --output-on-failure
+
+  schemas:
+    name: Schemas
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install jsonschema pyyaml pytest
+      - run: pytest -q schemas/tests
+
+  ros:
+    name: ROS 2 Jazzy (build + test)
+    runs-on: ubuntu-24.04
+    container: ros:jazzy-ros-base
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          apt-get update
+          rosdep update --rosdistro jazzy
+          rosdep install --from-paths core ros --ignore-src -y --rosdistro jazzy
+      - name: Build
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build --event-handlers console_cohesion+ \
+            --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - name: Test
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          export ROS_LOCALHOST_ONLY=1 ROS_DOMAIN_ID=42
+          colcon test --event-handlers console_cohesion+ --return-code-on-test-failure
+      - name: Test results
+        if: always()
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon test-result --verbose
+
+  demo:
+    name: Docker demo (build + smoke test)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the demo image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: demo
+          tags: jarvis_ros2:demo
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test (the commands from the README)
+        run: docker/demo/smoke_test.sh
+      - name: Stop the demo
+        if: always()
+        run: docker compose down

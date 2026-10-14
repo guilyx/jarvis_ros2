@@ -1,0 +1,46 @@
+# Default fault catalog (docs/design/03-data-model.md §5). It covers the codes the generic bridges
+# produce. Codes not listed are accepted with the defaults and flagged uncataloged, so diagnostics
+# faults (diag.<status name>) work as is: they heal when the status goes back to OK.
+# Robot-specific catalogs start from a copy of this file: `catalog:=/path/to/faults.yaml`.
+schema: jarvis.faults/v1
+
+defaults:
+  severity: ERROR
+  debounce: immediate
+  heal: { on_clear: true }
+
+faults:
+  # rosout bridge: one fault per logger. The bridge repeats it at most once a second while errors
+  # continue, so a single stray line stays an event and only a sustained error becomes a fault.
+  - code: ros.log.error
+    description: A node keeps logging errors.
+    debounce: { count: 3, within: 10s }
+    heal: { on_clear: false, after: 60s }
+  - code: ros.log.fatal
+    description: A node logged a fatal error and has likely exited.
+    severity: CRITICAL
+    heal: { on_clear: false, after: 5m }
+    capture: { blackbox: true }
+
+  # action status bridge, Nav2 servers. The next successful goal clears the fault.
+  - code: ros.action.navigate_to_pose.aborted
+    description: Nav2 gave up on the goal after its own recoveries.
+    capture: { blackbox: true }
+  - code: ros.action.navigate_through_poses.aborted
+    description: Nav2 gave up on the waypoints after its own recoveries.
+    capture: { blackbox: true }
+  - code: ros.action.follow_path.aborted
+    description: The controller server could not follow the path.
+    severity: WARN
+  - code: ros.action.compute_path_to_pose.aborted
+    description: The planner server found no path.
+    severity: WARN
+
+correlation:
+  # Inner servers abort first; the navigator's abort is the fault worth showing.
+  - id: nav-goal-aborted
+    root: [ros.action.navigate_to_pose.aborted, ros.action.navigate_through_poses.aborted]
+    symptoms: [ros.action.follow_path.aborted, ros.action.compute_path_to_pose.aborted]
+    window: 5s
+    mute_symptoms: true
+    clear_with_root: true

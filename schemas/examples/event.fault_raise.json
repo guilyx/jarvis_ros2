@@ -1,0 +1,13 @@
+{
+  "id": "01928f6e-7c1a-7b3e-9a51-3f0c2d4e5a61",
+  "seq": "281474976711698",
+  "stamp": "2026-10-13T09:14:03.120000000Z",
+  "recv_stamp": "2026-10-13T09:14:03.124000000Z",
+  "source": {"robot": "tb4-sim", "node": "/jarvis/bridges/topic_watchdog", "component": "lidar", "host": "devbox"},
+  "kind": "FAULT_RAISE",
+  "code": "ros.topic.stale",
+  "severity": "ERROR",
+  "message": "/scan silent for 1.6 s (expected 10 Hz)",
+  "attrs": {"topic": "/scan", "expected_hz": 10.5, "silence_ms": 1600, "node": "/demo/scan_relay", "stale": true},
+  "tags": ["perception"]
+}

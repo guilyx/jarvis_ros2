@@ -1,0 +1,26 @@
+{
+  "name": "jarvis_ros2 (ROS 2 Jazzy)",
+  "build": {
+    "dockerfile": "../docker/Dockerfile",
+    "context": "..",
+    "target": "dev"
+  },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/ws/src/jarvis_ros2,type=bind",
+  "workspaceFolder": "/ws/src/jarvis_ros2",
+  "runArgs": ["--network=host", "--ipc=host"],
+  "containerEnv": {
+    "ROS_DOMAIN_ID": "42"
+  },
+  "postCreateCommand": "bash -lc 'source /opt/ros/jazzy/setup.bash && cd /ws && colcon build --symlink-install'",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "xaver.clang-format",
+        "redhat.vscode-yaml"
+      ]
+    }
+  }
+}

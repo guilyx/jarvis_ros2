@@ -86,7 +86,7 @@
 | Prefix | Reserved for |
 |--------|--------------|
 | `jarvis.*` | Jarvis internals (`jarvis.ingest.suppressed`, `jarvis.recorder.down`, `jarvis.recovery.interrupted`) |
-| `ros.*` | Generic bridges (`ros.topic.stale`, `ros.node.missing`, `ros.lifecycle.error`, `ros.log.error`) |
+| `ros.*` | Generic bridges: topic watchdog (`ros.topic.stale`, `ros.topic.slow`), node watchdog (`ros.node.missing`), lifecycle bridge (`ros.lifecycle.inactive`, `ros.lifecycle.failed`, STATE `ros.lifecycle.<node>.state`), rosout bridge (`ros.log.error`) |
 | `ros.action.*` | Action status bridge (`ros.action.navigate_to_pose.aborted`) |
 | `diag.*` | Diagnostics bridge default mapping (`diag.<normalized status name>`) |
 

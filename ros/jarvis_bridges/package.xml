@@ -3,7 +3,7 @@
 <package format="3">
   <name>jarvis_bridges</name>
   <version>0.1.0</version>
-  <description>Lifecycle components that turn /diagnostics, /rosout and action goal status into Jarvis events.</description>
+  <description>Lifecycle components that turn /diagnostics, /rosout, action goal status, lifecycle transitions and topic and node watchdogs into Jarvis events.</description>
   <maintainer email="erwin.lejeune15@gmail.com">Erwin L.</maintainer>
   <license>Apache-2.0</license>
 
@@ -14,6 +14,7 @@
   <depend>diagnostic_msgs</depend>
   <depend>jarvis_core</depend>
   <depend>jarvis_ros</depend>
+  <depend>lifecycle_msgs</depend>
   <depend>rcl_interfaces</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
@@ -26,6 +27,7 @@
   <test_depend>launch_testing</test_depend>
   <test_depend>launch_testing_ament_cmake</test_depend>
   <test_depend>rclpy</test_depend>
+  <test_depend>std_msgs</test_depend>
   <test_depend>unique_identifier_msgs</test_depend>
 
   <export>

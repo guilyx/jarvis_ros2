@@ -1,6 +1,6 @@
 # Copyright 2026 Erwin L.
 # SPDX-License-Identifier: Apache-2.0
-"""End-to-end: the three bridges composed with the event hub, fed by real ROS 2 traffic.
+"""End-to-end: the bridges composed with the event hub, fed by real ROS 2 traffic.
 
 Each scenario keeps producing fresh input until the expected event shows up on /jarvis/events, so it
 doesn't depend on discovery timing or on which latched sample a bridge saw first.
@@ -20,7 +20,9 @@ from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from jarvis_interfaces.msg import Event
 from launch_ros.actions import ComposableNodeContainer
 from launch_ros.descriptions import ComposableNode
+from rclpy.lifecycle import LifecycleNode
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from std_msgs.msg import String
 
 
 @pytest.mark.launch_test
@@ -46,6 +48,15 @@ def generate_test_description():
             bridge("DiagnosticsBridge"),
             bridge("RosoutBridge"),
             bridge("ActionStatusBridge", discovery_period_s=0.2),
+            bridge(
+                "TopicWatchdogBridge",
+                topics=["chatter"],
+                chatter={"topic": "/test/chatter", "stale_after_s": 0.5, "startup_grace_s": 1.0},
+                tick_period_s=0.05,
+                discovery_period_s=0.2,
+            ),
+            bridge("NodeWatchdogBridge", nodes=["/test/ephemeral"], grace_s=0.5, period_s=0.1),
+            bridge("LifecycleBridge", discovery_period_s=0.2),
         ],
         output="screen",
     )
@@ -172,6 +183,96 @@ class TestBridges(unittest.TestCase):
             lambda e: e.code == "ros.action.fake_nav.aborted" and e.kind == Event.KIND_FAULT_CLEAR,
             "clear on success",
         )
+
+    def wait_for(self, predicate, what, timeout=20.0):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            rclpy.spin_once(self.node, timeout_sec=0.02)
+            if predicate():
+                return
+        self.fail(f"timed out waiting for {what}")
+
+    def after(self, start, predicate):
+        return next((e for e in self.events[start:] if predicate(e)), None)
+
+    def test_topic_watchdog_reports_silence_until_messages_resume(self):
+        chatter = self.node.create_publisher(String, "/test/chatter", 10)
+        self.wait_for(lambda: chatter.get_subscription_count() > 0, "the watchdog to subscribe")
+        for _ in range(10):
+            chatter.publish(String(data="hi"))
+            rclpy.spin_once(self.node, timeout_sec=0.05)
+        start = len(self.events)
+
+        def stale(e):
+            return e.code == "ros.topic.stale" and e.kind == Event.KIND_FAULT_RAISE
+
+        self.wait_for(lambda: self.after(start, stale), "stale after silence")
+        raised = self.after(start, stale)
+        self.assertEqual(raised.source.component, "chatter")
+        self.assertEqual(next(a.string_value for a in raised.attrs if a.key == "reason"), "silent")
+        self.assertEqual(raised.source.node, "/jarvis/bridges/topic_watchdog")
+        self.keep_trying(
+            lambda: chatter.publish(String(data="back")),
+            lambda e: (
+                e.code == "ros.topic.stale" and e.kind == Event.KIND_FAULT_CLEAR and e in self.events[start:]
+            ),
+            "clear on the next message",
+        )
+
+    def test_node_watchdog_reports_a_missing_node_until_it_appears(self):
+        missing = self.keep_trying(
+            lambda: None,
+            lambda e: e.code == "ros.node.missing" and e.kind == Event.KIND_FAULT_RAISE,
+            "missing node",
+        )
+        self.assertEqual(missing.source.component, "ephemeral")
+        ephemeral = rclpy.create_node("ephemeral", namespace="/test")
+        try:
+            self.keep_trying(
+                lambda: None,
+                lambda e: e.code == "ros.node.missing" and e.kind == Event.KIND_FAULT_CLEAR,
+                "node back",
+            )
+        finally:
+            ephemeral.destroy_node()
+
+    def test_lifecycle_transitions_become_states_and_faults(self):
+        managed = LifecycleNode("managed", namespace="/test")
+        try:
+            topic = "/test/managed/transition_event"
+            self.wait_for(lambda: self.node.count_subscribers(topic) > 0, "the bridge to discover the node")
+            code = "ros.lifecycle.test.managed.state"
+            start = len(self.events)
+            managed.trigger_configure()
+            managed.trigger_activate()
+            managed.trigger_deactivate()
+
+            def values():
+                return [
+                    next(a.string_value for a in e.attrs if a.key == "value")
+                    for e in self.events[start:]
+                    if e.code == code
+                ]
+
+            self.wait_for(lambda: values() == ["inactive", "active", "inactive"], "lifecycle states")
+            state = self.after(start, lambda e: e.code == code)
+            self.assertEqual(state.kind, Event.KIND_STATE)
+            self.assertEqual(state.source.component, "managed")
+            self.wait_for(
+                lambda: self.after(
+                    start, lambda e: e.code == "ros.lifecycle.inactive" and e.kind == Event.KIND_FAULT_RAISE
+                ),
+                "left active",
+            )
+            managed.trigger_activate()
+            self.wait_for(
+                lambda: self.after(
+                    start, lambda e: e.code == "ros.lifecycle.inactive" and e.kind == Event.KIND_FAULT_CLEAR
+                ),
+                "active again",
+            )
+        finally:
+            managed.destroy_node()
 
 
 @launch_testing.post_shutdown_test()

@@ -37,7 +37,7 @@ ARGUMENTS = {
     "params_file": (str(SHARE / "config" / "jarvis.yaml"), "Parameters of the Jarvis components"),
     "use_sim_time": ("false", "Use /clock"),
     "autostart": ("true", "Configure and activate the lifecycle components on startup"),
-    "bridges": ("true", "Bridge /diagnostics, /rosout and action goal status"),
+    "bridges": ("true", "Bridge /diagnostics, /rosout, action goal status, lifecycle and watchdogs"),
     "record": ("true", "Record /jarvis/** to MCAP"),
     "record_extra_topics": ("/diagnostics /rosout", "Context topics recorded with /jarvis/**"),
     "split_duration_s": ("300", "Length of a recorder split"),
@@ -110,6 +110,9 @@ def _setup(context):
             ("DiagnosticsBridge", "diagnostics"),
             ("RosoutBridge", "rosout"),
             ("ActionStatusBridge", "action_status"),
+            ("LifecycleBridge", "lifecycle"),
+            ("TopicWatchdogBridge", "topic_watchdog"),
+            ("NodeWatchdogBridge", "node_watchdog"),
         ):
             nodes.append(
                 ComposableNode(

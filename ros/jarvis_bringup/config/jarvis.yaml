@@ -55,3 +55,24 @@
 /jarvis/bridges/action_status:
   ros__parameters:
     discovery_period_s: 2.0       # watches every action server; set `actions` to narrow it
+
+/jarvis/bridges/lifecycle:
+  ros__parameters:
+    discovery_period_s: 2.0       # watches every managed node; set `nodes` to narrow it
+
+# What to watch is robot-specific: add it in your own params file, e.g.
+#   /jarvis/bridges/topic_watchdog:
+#     ros__parameters:
+#       topics: [scan]
+#       scan: { topic: /scan, component: lidar, stale_after_s: 1.0, min_rate_hz: 5.0 }
+#   /jarvis/bridges/node_watchdog:
+#     ros__parameters:
+#       nodes: [/controller_server, /planner_server]
+/jarvis/bridges/topic_watchdog:
+  ros__parameters:
+    tick_period_s: 0.1
+
+/jarvis/bridges/node_watchdog:
+  ros__parameters:
+    grace_s: 5.0
+    period_s: 1.0

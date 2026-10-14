@@ -52,6 +52,14 @@ cmake --build build/core && ctest --test-dir build/core --output-on-failure
 pytest -q schemas/tests
 ```
 
+Launch tests start real Jarvis nodes with the usual names, and colcon tests packages in parallel, so
+each launch test runs in its own ROS domain: `add_launch_test(... ENV ROS_DOMAIN_ID=<n>)`. Domains 61
+to 64 are taken (`jarvis_ros`, `jarvis_bridges`, `jarvis_bringup`, `jarvis_demo`); a new launch test
+takes the next free one.
+
+Launch tests wait for outcomes (`keep_trying` / `wait_for`) instead of sleeping: discovery and
+coalesced writes take a variable time, and fixed sleeps are what made the first CI run flaky.
+
 ## Style
 
 - C++: `.clang-format` (the ament settings). Python: `ruff` (`ruff.toml`).

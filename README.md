@@ -11,7 +11,52 @@ The core is ROS-agnostic; ROS 2 is the communication layer.
 
 ## Status
 
-🚧 **Design accepted, M1 in progress.** Start with the design package: [`docs/design/README.md`](docs/design/README.md).
+**M1 (record & manage faults) is in.** Next up: M2, rules and automated recovery
+([roadmap](docs/design/09-roadmap.md)). The design package starts at
+[`docs/design/README.md`](docs/design/README.md).
+
+## Quick start
+
+ROS 2 Jazzy, from the root of this repository:
+
+```bash
+rosdep install --from-paths core ros --ignore-src -y
+colcon build && source install/setup.bash
+
+ros2 launch jarvis_demo demo.launch.py          # Jarvis + a fake lidar, no simulator needed
+ros2 run jarvis_demo inject scan-stall          # in another shell: the lidar stops
+ros2 topic echo /jarvis/faults                  # sensor.scan.stale goes PENDING, then ACTIVE
+```
+
+Other scenarios: `inject --help`. With Nav2 and Gazebo installed, `nav2_sim.launch.py` runs the same
+demo on a simulated TurtleBot 4. Recordings (MCAP, opens in Foxglove) land in
+`~/.local/share/jarvis/demo/`.
+
+Reporting from your own node is one line, in C++ or Python:
+
+```cpp
+jarvis_reporter::Reporter jarvis(node, "lidar");
+jarvis.fault("sensor.lidar.stale", Severity::Error, "no scan for 1.2 s", {{"silence_ms", 1200}});
+jarvis.clear("sensor.lidar.stale");
+```
+
+Or don't report at all: the bridges turn `/diagnostics`, `/rosout` errors and aborted action goals into
+faults on their own.
+
+## Packages
+
+| Package | What it does |
+|---------|--------------|
+| [`core/jarvis_core`](core/jarvis_core) | ROS-free C++ domain: event hub, fault lifecycle, incidents, catalog |
+| [`ros/jarvis_interfaces`](ros/jarvis_interfaces) | Messages and services |
+| [`ros/jarvis_ros`](ros/jarvis_ros) | Event hub and fault manager lifecycle components |
+| [`ros/jarvis_reporter`](ros/jarvis_reporter) | C++ and Python client libraries for apps |
+| [`ros/jarvis_bridges`](ros/jarvis_bridges) | Diagnostics, rosout and action status bridges |
+| [`ros/jarvis_bringup`](ros/jarvis_bringup) | Launch, parameters, default fault catalog, recorder and black box |
+| [`ros/jarvis_demo`](ros/jarvis_demo) | Lidar relay, fault injector, demo launch files |
+| [`schemas`](schemas) | JSON Schema contracts (canonical) |
+
+## Design
 
 | Area | Doc |
 |------|-----|

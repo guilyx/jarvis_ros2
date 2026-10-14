@@ -105,6 +105,14 @@ class TestDemo(unittest.TestCase):
         reply = self.call(self.change_state, ChangeState.Request(transition=Transition(id=transition_id)))
         self.assertTrue(reply.success, f"transition {transition_id}")
 
+    def test_0_a_healthy_start_raises_no_fault(self):
+        # The relay's rate window fills and its first scan arrives without any fault on the way.
+        until = time.time() + 3.0
+        while time.time() < until:
+            rclpy.spin_once(self.node, timeout_sec=0.05)
+        raised = [e.code for e in self.events if e.kind == Event.KIND_FAULT_RAISE]
+        self.assertEqual(raised, [], "no fault while everything is healthy")
+
     def test_1_scan_stall_is_one_fault_with_its_symptom_muted(self):
         proc = inject("scan-stall", "--seconds", "4", wait=False)
         try:

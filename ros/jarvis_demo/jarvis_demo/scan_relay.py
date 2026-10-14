@@ -26,6 +26,7 @@ from sensor_msgs.msg import LaserScan
 
 INJECTIONS = ("none", "stall", "slow")
 RATE_WINDOW_S = 2.0
+RATE_WINDOW_NS = int(RATE_WINDOW_S * 1e9)
 STALE_CODE = "sensor.scan.stale"
 
 
@@ -36,6 +37,7 @@ class ScanRelay(LifecycleNode):
         self.declare_parameter("output_topic", "/scan")
         self.declare_parameter("expected_rate_hz", 10.0)
         self.declare_parameter("stale_after_s", 0.5)
+        self.declare_parameter("startup_grace_s", 3.0)  # how long the first scan may take to arrive
         self.declare_parameter("component", "lidar")
         self.declare_parameter("autostart", False)
         self.declare_parameter("inject", "none", ParameterDescriptor(description=" | ".join(INJECTIONS)))
@@ -45,6 +47,8 @@ class ScanRelay(LifecycleNode):
         self._pub = self._sub = self._watchdog = None
         self._sent = collections.deque()  # node-clock stamps (ns) of relayed scans
         self._since = 0  # last relayed scan, or activation
+        self._activated = 0
+        self._first_sent = None  # first relayed scan since activation
         self._received = 0
         self._jarvis = Reporter(self, self.get_parameter("component").value)
         # The updater declares parameters, so it lives as long as the node, not one configuration.
@@ -64,11 +68,13 @@ class ScanRelay(LifecycleNode):
         self._topic = self.get_parameter("output_topic").value
         self._expected = self.get_parameter("expected_rate_hz").value
         self._stale_after = int(self.get_parameter("stale_after_s").value * 1e9)
+        self._grace = int(self.get_parameter("startup_grace_s").value * 1e9)
         self._pub = self.create_lifecycle_publisher(LaserScan, self._topic, qos_profile_sensor_data)
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, state):
-        self._since = self._now()
+        self._since = self._activated = self._now()
+        self._first_sent = None
         self._sub = self.create_subscription(
             LaserScan, self.get_parameter("input_topic").value, self._on_scan, qos_profile_sensor_data
         )
@@ -101,9 +107,24 @@ class ScanRelay(LifecycleNode):
         self._pub.publish(msg)
         self._since = self._now()
         self._sent.append(self._since)
+        if self._first_sent is None:
+            self._first_sent = self._since
+
+    def _starting(self, now):
+        """True while the lidar may still be coming up: no stale fault is reported then."""
+        return self._first_sent is None and now - self._activated < self._grace
+
+    def _warming(self, now):
+        """True until the rate window holds a full window of output: a partial one reads low."""
+        if self._first_sent is None:
+            return self._starting(now)
+        return now - self._first_sent < RATE_WINDOW_NS
 
     def _check_stale(self):
-        silence = self._now() - self._since
+        now = self._now()
+        if self._starting(now):
+            return
+        silence = now - self._since
         if silence > self._stale_after:
             self._jarvis.fault(
                 STALE_CODE,
@@ -115,13 +136,15 @@ class ScanRelay(LifecycleNode):
             self._jarvis.clear(STALE_CODE, "scans are flowing again")
 
     def _rate_status(self, stat):
-        horizon = self._now() - int(RATE_WINDOW_S * 1e9)
-        while self._sent and self._sent[0] < horizon:
+        now = self._now()
+        while self._sent and self._sent[0] < now - RATE_WINDOW_NS:
             self._sent.popleft()
         rate = len(self._sent) / RATE_WINDOW_S
         ratio = rate / self._expected if self._active and self._expected > 0 else 1.0
         if not self._active:
             stat.summary(DiagnosticStatus.OK, "inactive")
+        elif self._warming(now):
+            stat.summary(DiagnosticStatus.OK, "starting")
         elif ratio >= 0.8:
             stat.summary(DiagnosticStatus.OK, "nominal")
         elif ratio >= 0.3:

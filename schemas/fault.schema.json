@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/guilyx/jarvis_ros2/schemas/fault.schema.json",
+  "title": "Jarvis Fault episode",
+  "description": "One lifecycle of a fault keyed by (robot, code, component). See docs/design/03-data-model.md §5.",
+  "type": "object",
+  "required": ["fault_id", "code", "source", "state", "severity", "occurrences", "first_seen"],
+  "properties": {
+    "fault_id": {"type": "string", "minLength": 1},
+    "code": {"$ref": "event.schema.json#/$defs/code"},
+    "source": {"$ref": "event.schema.json#/$defs/source"},
+    "reporting_sources": {"type": "array", "items": {"type": "string"}},
+    "state": {"enum": ["PENDING", "ACTIVE", "LATCHED", "CLEARED"]},
+    "severity": {"$ref": "event.schema.json#/$defs/severity"},
+    "occurrences": {"type": "integer", "minimum": 0},
+    "first_seen": {"$ref": "#/$defs/optional_timestamp"},
+    "last_seen": {"$ref": "#/$defs/optional_timestamp"},
+    "confirmed_at": {"$ref": "#/$defs/optional_timestamp"},
+    "cleared_at": {"$ref": "#/$defs/optional_timestamp"},
+    "acknowledged": {"type": "boolean"},
+    "acknowledged_by": {"type": "string"},
+    "acknowledged_at": {"$ref": "#/$defs/optional_timestamp"},
+    "latch": {"type": "boolean"},
+    "cataloged": {"type": "boolean"},
+    "muted_by": {"type": "string"},
+    "muted_rule": {"type": "string"},
+    "incident_id": {"type": "string"},
+    "snapshot_ref": {"type": "string"},
+    "description": {"type": "string"},
+    "message": {"type": "string"},
+    "report_attrs": {"$ref": "event.schema.json#/properties/attrs"},
+    "freeze_frame": {"type": "object", "additionalProperties": {"type": ["string", "integer", "number", "boolean"]}},
+    "debounce": {"type": "object", "description": "Internal debounce bookkeeping (state snapshots only)."}
+  },
+  "$defs": {
+    "optional_timestamp": {
+      "anyOf": [{"$ref": "event.schema.json#/$defs/timestamp"}, {"const": ""}]
+    }
+  }
+}

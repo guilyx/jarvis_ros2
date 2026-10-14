@@ -57,7 +57,9 @@ protected:
     return e;
   }
 
-  Effects feed(const Event & e) { return engine_->on_event(e, e.recv_stamp); }
+  // As live: the engine sees an event a little after the hub received it.
+  Effects feed(const Event & e) { return engine_->on_event(e, e.recv_stamp + kLatency); }
+  static constexpr Duration kLatency = kMillisecond / 20;
 
   static std::vector<Event> emitted(const Effects & fx)
   {
@@ -529,6 +531,32 @@ TEST_F(EngineTest, ReloadKeepsFireHistoryForSurvivingRules)
   EXPECT_EQ(matches(feed(event(Kind::FaultRaise, "x.fault", kT0 + 10 * kSecond))), 0)
     << "still cooling down";
   EXPECT_EQ(stats("cooled").fires, 1u) << "stats survive too";
+}
+
+// Live, an event reaches the engine a little after the hub stamped it: a rule without any policy
+// (nothing keeps its partition alive) must still see it. Source time can be older still.
+TEST_F(EngineTest, RulesWithoutPolicyFireOnEventsThatArriveLate)
+{
+  load(R"(  - id: plain
+    when: { event: { code: x.fault } }
+    then: [ { notify: { message: x } } ]
+  - id: by-source-time
+    time_basis: source
+    partition_by: [source.component]
+    when: { event: { code: x.fault } }
+    then: [ { notify: { message: x } } ]
+    policy: { cooldown: 1s }
+)");
+  Event e = event(Kind::FaultRaise, "x.fault", kT0);
+  e.recv_stamp = kT0 + 2 * kMillisecond;
+  engine_->on_event(e, kT0 + 5 * kMillisecond);
+  EXPECT_EQ(stats("plain").fires, 1u) << "received 3 ms before the engine saw it";
+  EXPECT_EQ(stats("by-source-time").fires, 1u);
+  Event old = event(Kind::FaultRaise, "x.fault", kT0 + kSecond, "b");
+  old.recv_stamp = kT0 + 3 * kSecond;
+  engine_->on_event(old, kT0 + 3 * kSecond);
+  EXPECT_EQ(stats("plain").fires, 2u);
+  EXPECT_EQ(stats("by-source-time").fires, 2u) << "stamped 2 s before, past the 1 s horizon";
 }
 
 TEST_F(EngineTest, MaxFiresSurvivesARestart)

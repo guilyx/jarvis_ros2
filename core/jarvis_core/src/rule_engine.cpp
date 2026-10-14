@@ -567,7 +567,9 @@ Effects RuleEngine::on_event(const Event & e, Timestamp now)
       p.values = std::move(values);
       p.last_activity = t;
       it = rr.partitions.emplace(key, std::move(p)).first;
-      evict(rr, now);
+      // Its event may be older than `now` (it was received, or stamped at the source, earlier):
+      // it must not count as idle before it was even fed.
+      evict(rr, now, &key);
       it = rr.partitions.find(key);
       if (it == rr.partitions.end()) {
         continue;  // evicted at once: the rule is over its partition cap
@@ -618,10 +620,11 @@ std::optional<Timestamp> RuleEngine::next_deadline() const
   return d;
 }
 
-void RuleEngine::evict(RuleRuntime & rr, Timestamp now)
+void RuleEngine::evict(RuleRuntime & rr, Timestamp now, const std::string * keep)
 {
   for (auto it = rr.partitions.begin(); it != rr.partitions.end();) {
-    const bool stale = it->second.state->idle() && now - it->second.last_activity > rr.horizon;
+    const bool stale = (!keep || it->first != *keep) && it->second.state->idle() &&
+                       now - it->second.last_activity > rr.horizon;
     it = stale ? rr.partitions.erase(it) : std::next(it);
   }
   while (rr.partitions.size() > config_.max_partitions) {

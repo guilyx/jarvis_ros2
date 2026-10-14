@@ -137,7 +137,9 @@ private:
     Kind kind, std::string code, Severity severity, std::string message, const Event & cause,
     const std::string & causation_id, Timestamp at) const;
   void track_state(const Event & e);
-  void evict(RuleRuntime & rr, Timestamp now);
+  /// Drops idle partitions past the horizon (never `keep`, the one being fed), then the oldest
+  /// ones over the cap.
+  void evict(RuleRuntime & rr, Timestamp now, const std::string * keep = nullptr);
 
   RuleEngineConfig config_;
   RuleSet rules_;

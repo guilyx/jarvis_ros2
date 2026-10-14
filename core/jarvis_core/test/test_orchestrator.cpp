@@ -672,6 +672,10 @@ TEST_F(OrchestratorTest, TheKillSwitchStopsEverything)
   auto r = o_->set_mode(RecoveryMode::Disabled, "alice", "maintenance", true, now_);
   log(r.effects);
   EXPECT_TRUE(r.success);
+  EXPECT_TRUE(std::any_of(
+    r.effects.begin(), r.effects.end(),
+    [](const Effect & f) { return std::holds_alternative<ExecutionsChanged>(f); }))
+    << "the latched snapshot carries the mode";
   EXPECT_EQ(r.message, "ENABLED -> DISABLED");
   EXPECT_EQ(exec(running.execution_id).state, ExecState::Aborted);
   EXPECT_EQ(exec(running.execution_id).reason, "recovery disabled by alice: maintenance");

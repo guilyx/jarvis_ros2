@@ -68,6 +68,8 @@ public:
   bool matches(
     const std::optional<AttrValue> & value, const std::vector<std::string> * items = nullptr) const;
   Op op() const { return op_; }
+  /// The compared value (Equals, Glob as its pattern string).
+  const AttrValue & value() const { return value_; }
 
 private:
   Op op_{Op::Equals};

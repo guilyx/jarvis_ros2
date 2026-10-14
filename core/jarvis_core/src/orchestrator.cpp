@@ -1445,6 +1445,7 @@ CommandResult Orchestrator::set_mode(
   e.attrs["operator"] = who;
   e.attrs["cancel_running"] = cancel_running;
   r.effects.emplace_back(EmitEvent{std::move(e)});
+  r.effects.emplace_back(ExecutionsChanged{});  // the snapshot carries the mode
   r.effects.emplace_back(PersistState{});
   if (mode == RecoveryMode::Disabled) {
     const std::string why = with_note("recovery disabled by " + who, reason);

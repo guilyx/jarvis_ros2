@@ -100,6 +100,15 @@ ros2 service call /jarvis/recovery/set_mode jarvis_interfaces/srv/SetRecoveryMod
 ros2 topic echo /jarvis/executions   # what runs, what waits for approval, what just finished
 ```
 
+Before shipping rules, check them and replay a recording through them:
+
+```bash
+ros2 jarvis lint --rules rules/ --plans plans/ --catalog faults.yaml
+ros2 jarvis backtest ~/.local/share/jarvis/bags/jarvis_<stamp> --rules rules/ --plans plans/
+```
+
+The backtest runs the same engine the robot runs and lists every decision that would change.
+
 ## Packages
 
 | Package | What it does |
@@ -107,6 +116,7 @@ ros2 topic echo /jarvis/executions   # what runs, what waits for approval, what 
 | [`core/jarvis_core`](core/jarvis_core) | ROS-free C++ domain: event hub, fault lifecycle, incidents, catalog, rule engine, recovery orchestrator |
 | [`ros/jarvis_interfaces`](ros/jarvis_interfaces) | Messages, services and the `ExecuteRecovery` action |
 | [`ros/jarvis_ros`](ros/jarvis_ros) | Event hub, fault manager, rule engine and recovery lifecycle components; built-in actuators (lifecycle, std_srvs, parameters, bag snapshot) |
+| [`ros/jarvis_cli`](ros/jarvis_cli) | `ros2 jarvis`: faults, rules, recovery, approvals, kill switch, bag export, lint and backtest |
 | [`ros/jarvis_nav2`](ros/jarvis_nav2) | Nav2 actuators: lifecycle manager, costmaps, cancel and send goals |
 | [`ros/jarvis_reporter`](ros/jarvis_reporter) | C++ and Python client libraries for apps |
 | [`ros/jarvis_bridges`](ros/jarvis_bridges) | Diagnostics, rosout, action status and lifecycle bridges; topic and node watchdogs |

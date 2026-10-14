@@ -368,6 +368,7 @@ private:
   void apply(jarvis_core::Effects effects)
   {
     ++applying_;
+    bool snapshot_changed = false;
     std::vector<std::string> changed;
     for (auto & fx : effects) {
       if (auto * emit = std::get_if<jarvis_core::EmitEvent>(&fx)) {
@@ -387,12 +388,13 @@ private:
           flight.actuator->cancel(flight.attempt);
         }
       } else if (auto * ec = std::get_if<jarvis_core::ExecutionsChanged>(&fx)) {
+        snapshot_changed = true;
         changed.insert(changed.end(), ec->execution_ids.begin(), ec->execution_ids.end());
       } else if (std::holds_alternative<jarvis_core::PersistState>(fx)) {
         dirty_ = true;
       }
     }
-    if (!changed.empty()) {
+    if (snapshot_changed) {
       publish_executions();
       for (const auto & id : changed) {
         update_goal(id);

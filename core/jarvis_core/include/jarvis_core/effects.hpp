@@ -71,7 +71,8 @@ struct CancelAction
   int attempt{1};
 };
 
-/// These executions changed: republish /jarvis/executions and update their ExecuteRecovery goals.
+/// The executions snapshot changed (these executions, or the mode when the list is empty):
+/// republish /jarvis/executions and update the ExecuteRecovery goals of these executions.
 struct ExecutionsChanged
 {
   std::vector<std::string> execution_ids;

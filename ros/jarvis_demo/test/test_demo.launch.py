@@ -37,7 +37,8 @@ def generate_test_description():
     return launch.LaunchDescription(
         [
             IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(str(demo)), launch_arguments={"data_dir": DATA_DIR}.items()
+                PythonLaunchDescriptionSource(str(demo)),
+                launch_arguments={"data_dir": DATA_DIR, "gateway": "false"}.items(),
             ),
             launch_testing.actions.ReadyToTest(),
         ]

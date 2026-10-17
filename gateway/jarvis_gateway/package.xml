@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>jarvis_gateway</name>
+  <version>0.1.0</version>
+  <description>Jarvis gateway: the REST API and gap-free live WebSocket stream the dashboard uses, operator commands (attributed to the caller's token), webhooks for notify actions and Prometheus metrics. History and analytics come from jarvis_lake.</description>
+  <maintainer email="erwin.lejeune15@gmail.com">Erwin L.</maintainer>
+  <license>Apache-2.0</license>
+
+  <!-- Python dependencies are pinned in requirements.txt (pip): fastapi, uvicorn, websockets,
+       httpx, prometheus-client. -->
+  <exec_depend>jarvis_cli</exec_depend>
+  <exec_depend>jarvis_interfaces</exec_depend>
+  <exec_depend>jarvis_lake</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

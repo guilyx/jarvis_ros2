@@ -9,6 +9,9 @@
 Jarvis runs the demo's rules (config/rules: restart the lidar relay when it hangs, escalate when
 that keeps happening) with the generic recovery plans of jarvis_bringup.
 
+The gateway serves the API and dashboard on http://localhost:8080 (`gateway_host:=0.0.0.0` to reach
+it from other machines). Its demo settings let anyone in as admin: never use them on a real robot.
+
 `foxglove:=true` also starts foxglove_bridge on ws://localhost:8765 (the Docker demo does).
 
 Use nav2_sim.launch.py for the same demo on a simulated TurtleBot 4 with Nav2.
@@ -41,6 +44,10 @@ def generate_launch_description():
             "recovery_mode": arg("recovery_mode"),
             "blackbox_topics": "/scan /jarvis/events",
             "split_duration_s": "60",  # history (jarvis_lake) shows up within a minute
+            "gateway": arg("gateway"),
+            "gateway_host": arg("gateway_host"),
+            "gateway_port": arg("gateway_port"),
+            "gateway_config": str(DEMO / "config" / "gateway.yaml"),
         }.items(),
     )
     return LaunchDescription(
@@ -56,6 +63,9 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "foxglove", default_value="false", description="Serve the graph to Foxglove on port 8765"
             ),
+            DeclareLaunchArgument("gateway", default_value="true", description="Serve API and dashboard"),
+            DeclareLaunchArgument("gateway_host", default_value="127.0.0.1"),
+            DeclareLaunchArgument("gateway_port", default_value="8080"),
             jarvis,
             Node(
                 package="jarvis_demo",

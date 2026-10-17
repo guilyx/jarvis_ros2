@@ -215,6 +215,11 @@ On startup the lake also scans for splits it hasn't converted yet, including unf
 
 ## 7. Dashboard live stream with gap-free resume
 
+The gateway keeps the events the lake does not have yet (recordings become Parquet once a split
+closes): at startup it fetches them from the event hub (`query_events` after the lake's newest
+seq), then it adds what arrives live. History is one timeline: the lake up to its newest seq, then
+those recent events, joined in DuckDB. A resuming client is served from it.
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -224,21 +229,15 @@ sequenceDiagram
   participant LK as Lake (DuckDB)
   participant EV as /jarvis/events
 
+  GW->>HB: at startup: query_events after the lake's newest seq (pages of 1000)
+  HB-->>GW: recent events, kept in memory
+  EV-->>GW: live events, kept in memory until the lake has them
   UI->>GW: WS subscribe (since_seq S, filter min_severity WARN)
-  GW->>GW: start buffering live events from EV
-  GW->>HB: query_events after_seq S
-  alt ring buffer covers S
-    HB-->>GW: events up to seq N (complete = true)
-  else S is older than the ring buffer
-    HB-->>GW: complete = false
-    GW->>LK: SELECT where seq > S (older part)
-    LK-->>GW: rows
-    GW->>HB: query_events for the rest
-  end
-  GW-->>UI: backfill, then buffered live events with seq > N (dedupe by seq)
-  GW-->>UI: backfill_done
-  EV-->>GW: live events
-  GW-->>UI: live events, fault and execution snapshots
+  GW->>GW: start buffering live events for this client
+  GW->>LK: events with seq > S: the lake, then the gateway's recent events
+  LK-->>GW: rows up to seq N (at most 5000; truncated otherwise)
+  GW-->>UI: backfill, fault and execution snapshots, backfill_done (N)
+  GW-->>UI: buffered and live events with seq > N (dedupe by seq), snapshots as they change
 ```
 
 ## 8. Offline replay & backtesting

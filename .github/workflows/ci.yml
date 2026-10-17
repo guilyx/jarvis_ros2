@@ -76,6 +76,19 @@ jobs:
       - run: pip install numpy==1.26.4 -r lake/jarvis_lake/requirements.txt pytest
       - run: PYTHONPATH=lake/jarvis_lake pytest -q lake/jarvis_lake/test
 
+  gateway:
+    name: Gateway (ROS-free, fake Jarvis)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          pip install numpy==1.26.4 pyyaml pytest \
+            -r lake/jarvis_lake/requirements.txt -r gateway/jarvis_gateway/requirements.txt
+      - run: PYTHONPATH=lake/jarvis_lake:gateway/jarvis_gateway pytest -q gateway/jarvis_gateway/test
+
   ros:
     name: ROS 2 Jazzy (build + test)
     runs-on: ubuntu-24.04
@@ -89,9 +102,10 @@ jobs:
         run: |
           apt-get update
           rosdep update --rosdistro jazzy
-          rosdep install --from-paths core ros lake --ignore-src -y --rosdistro jazzy
+          rosdep install --from-paths core ros lake gateway --ignore-src -y --rosdistro jazzy
           apt-get install -y --no-install-recommends python3-pip
-          pip3 install --break-system-packages -r lake/jarvis_lake/requirements.txt
+          pip3 install --break-system-packages \
+            -r lake/jarvis_lake/requirements.txt -r gateway/jarvis_gateway/requirements.txt
       - name: Build
         run: |
           source /opt/ros/jazzy/setup.bash

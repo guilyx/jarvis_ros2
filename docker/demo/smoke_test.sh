@@ -14,12 +14,16 @@ fail() {
 screen() { docker compose exec -T demo monitor --once --history 300; }
 open_faults() { screen | sed -n '/^OPEN FAULTS/,/^RECOVERY/p'; }
 expect() { grep -Eq "$1" <<<"$2" || fail "$3"; }
+api() { curl -fsS "http://localhost:8080/api/v1$1"; }
+json() { python3 -c "import json, sys; d = json.load(sys.stdin); print($1)"; }
 
 rm -rf demo-data
 docker compose up -d --no-build
 ./demo wait || fail "Jarvis never became healthy"
 for _ in $(seq 1 20); do [ -f demo-data/lake/status.json ] && break; sleep 1; done
 [ -f demo-data/lake/status.json ] || fail "the lake service is not running"
+for _ in $(seq 1 30); do [ "$(api /health 2>/dev/null | json 'd["status"]')" = ok ] && break; sleep 1; done
+[ "$(api /health | json 'd["status"]')" = ok ] || fail "the gateway is not healthy"
 expect "none, all good" "$(open_faults)" "faults on a healthy start"
 sleep 3 # a full rate window of the lidar relay, where a startup glitch would show
 if grep -q " RAISE " <<<"$(screen)"; then fail "a fault was raised on a healthy start"; fi
@@ -38,6 +42,16 @@ expect "jarvis\.blackbox\.captured" "$out" "no black-box snapshot"
 expect "diag\.fault_injector\.motor_driver → ACTIVE" "$out" "diagnostics fault missing"
 expect "ros\.log\.error → ACTIVE" "$out" "rosout fault missing"
 expect "LATCHED +CRIT +safety\.estop\.engaged" "$out" "e-stop not latched"
+
+# The same faults through the gateway, and an operator command there: attributed in the audit trail.
+estop=$(api /faults | json 'next(f["fault_id"] for f in d["faults"] if f["code"] == "safety.estop.engaged")') ||
+  fail "the e-stop is not in the gateway's faults"
+curl -fsS -X POST -H "Content-Type: application/json" -d '{"note": "smoke test"}' \
+  "http://localhost:8080/api/v1/faults/$estop:ack" >/dev/null || fail "ack through the gateway failed"
+expect "demo acknowledged safety\.estop\.engaged" \
+  "$(api /audit | json '"\n".join(e.get("message", "") for e in d["events"])')" "the ack is not audited"
+succeeded=$(api /recoveries | json 'sum(x["outcome"] == "SUCCEEDED" for x in d["history"])')
+[ "$succeeded" -ge 1 ] || fail "the gateway shows no successful recovery"
 
 expect "cleared safety\.estop\.engaged" "$(./demo clear)" "operator clear failed"
 if grep -q "safety.estop.engaged" <<<"$(open_faults)"; then fail "e-stop still open after the clear"; fi

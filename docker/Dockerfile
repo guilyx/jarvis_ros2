@@ -14,12 +14,14 @@ WORKDIR /ws/src/jarvis_ros2
 COPY core/jarvis_core/package.xml core/jarvis_core/package.xml
 COPY ros/ ros-manifests/
 COPY lake/ lake-manifests/
-RUN find ros-manifests lake-manifests -mindepth 1 -not -name package.xml -not -type d -delete \
+COPY gateway/ gateway-manifests/
+RUN find ros-manifests lake-manifests gateway-manifests -mindepth 1 -not -name package.xml -not -type d \
+         -delete \
     && apt-get update \
     && rosdep update --rosdistro "${ROS_DISTRO}" \
-    && rosdep install --from-paths core ros-manifests lake-manifests --ignore-src -y \
+    && rosdep install --from-paths core ros-manifests lake-manifests gateway-manifests --ignore-src -y \
          --rosdistro "${ROS_DISTRO}" \
-    && rm -rf /var/lib/apt/lists/* ros-manifests lake-manifests
+    && rm -rf /var/lib/apt/lists/* ros-manifests lake-manifests gateway-manifests
 
 FROM dev AS build
 COPY . .
@@ -32,12 +34,15 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 COPY --from=build /ws/src/jarvis_ros2/core/jarvis_core/package.xml /tmp/manifests/core/package.xml
 COPY --from=build /ws/src/jarvis_ros2/ros /tmp/manifests/ros
 COPY --from=build /ws/src/jarvis_ros2/lake /tmp/manifests/lake
-# jarvis_lake's Python libraries (DuckDB, Arrow, MCAP) are not in apt: pinned in its requirements.txt.
+COPY --from=build /ws/src/jarvis_ros2/gateway /tmp/manifests/gateway
+# The Python libraries of jarvis_lake (DuckDB, Arrow, MCAP) and jarvis_gateway (FastAPI, uvicorn)
+# are not in apt: pinned in their requirements.txt.
 RUN apt-get update && apt-get install -y --no-install-recommends python3-rosdep python3-pip \
     && (rosdep init || true) && rosdep update --rosdistro "${ROS_DISTRO}" \
     && rosdep install --from-paths /tmp/manifests --ignore-src -y -t exec --rosdistro "${ROS_DISTRO}" \
     && pip3 install --no-cache-dir --break-system-packages \
          -r /tmp/manifests/lake/jarvis_lake/requirements.txt \
+         -r /tmp/manifests/gateway/jarvis_gateway/requirements.txt \
     && rm -rf /var/lib/apt/lists/* /tmp/manifests
 COPY --from=build /ws/install /opt/jarvis
 RUN sed -i "s|^exec \"\$@\"|source /opt/jarvis/setup.bash\nexec \"\$@\"|" /ros_entrypoint.sh
@@ -53,5 +58,5 @@ COPY docker/demo/bin/ /usr/local/bin/
 RUN printf 'source /opt/ros/%s/setup.bash\nsource /opt/jarvis/setup.bash\n' "${ROS_DISTRO}" >> /etc/bash.bashrc
 # Everything runs in this one container: keep DDS discovery inside it.
 ENV ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
-EXPOSE 8765
-CMD ["ros2", "launch", "jarvis_demo", "demo.launch.py", "foxglove:=true"]
+EXPOSE 8080 8765
+CMD ["ros2", "launch", "jarvis_demo", "demo.launch.py", "foxglove:=true", "gateway_host:=0.0.0.0"]

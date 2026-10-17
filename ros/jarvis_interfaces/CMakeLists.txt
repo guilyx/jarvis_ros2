@@ -17,6 +17,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   msg/Execution.msg
   msg/ExecutionArray.msg
   msg/RuleStatus.msg
+  msg/PlanInfo.msg
   srv/QueryEvents.srv
   srv/GetFaults.srv
   srv/AcknowledgeFault.srv
@@ -27,6 +28,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   srv/SetRecoveryMode.srv
   srv/DecideApproval.srv
   srv/CancelExecution.srv
+  srv/CloseIncident.srv
+  srv/ListPlans.srv
   action/ExecuteRecovery.action
   DEPENDENCIES action_msgs builtin_interfaces
 )

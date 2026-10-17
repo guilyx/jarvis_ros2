@@ -15,50 +15,71 @@
 - Read path: live from `/jarvis/events`, `/jarvis/faults`, `/jarvis/executions`; recent history from the event hub (`query_events`); older history from the lake (DuckDB over Parquet, read-only).
 - Write path: the gateway never writes data itself. Commands go to ROS services and actions (`fault_manager`, `recovery`, `rule_engine`), so the graph stays the single source of truth.
 - Bags: lists recorded MCAP splits and black-box snapshots per incident, with download links (open them in Foxglove).
-- Notifications: subscribes to `jarvis.notify` events and delivers them to webhooks (Slack, PagerDuty, generic HTTP) with retries.
+- Notifications: delivers `jarvis.notify` events (the `notify` action of rules) to webhooks by channel, as Slack messages or the event as JSON, with retries and exponential backoff. Configured in `gateway.yaml`.
 - Network: **LAN-only**. Binds to a configured LAN interface (default `127.0.0.1` until configured), with no internet exposure planned. Roles `viewer` / `operator` / `admin` via simple static tokens from config, mainly so writes are attributed in the audit trail. OIDC/TLS are out of scope for v1.
 - Metrics: Prometheus `/metrics` (ingest rate, active faults, executions, agent cost).
 
 ### REST API (`/api/v1`)
 
+As built (M3.1–3.2). The OpenAPI document is at `/openapi.json`, browsable at `/docs`. `seq` is a
+decimal string everywhere: a uint64 does not fit a JavaScript number. Tokens go in
+`Authorization: Bearer <token>` (or `?token=`). Requests without one get the `anonymous` principal
+(a viewer by default; `null` in the config refuses them).
+
 | Method & path | Role | Purpose |
 |---------------|------|---------|
-| `GET /events` | viewer | Query: `after_seq, from, to, kind, code (glob), min_severity, component, correlation_id, q, limit` |
+| `GET /health` | — | `ok` once Jarvis answered and both snapshots arrived; `degraded` after 30 s without |
+| `GET /me` | viewer | Who the token is: `{name, role}` |
+| `GET /system` | viewer | Lifecycle states of the watched nodes, lake status, stream clients, webhook deliveries |
+| `GET /events` | viewer | `after_seq, before_seq, from, to, kind, code (glob), min_severity, component, correlation_id, q, limit, order`; `next_before_seq` pages back |
 | `GET /events/{id}` | viewer | One event, plus causal parent/children |
-| `GET /faults` | viewer | `state=active\|all`, `code`, `component` |
-| `GET /faults/{fault_id}` | viewer | Episode, freeze frame, occurrences, related executions |
-| `POST /faults/{fault_id}:ack` | operator | Acknowledge |
-| `POST /faults/{fault_id}:clear` | operator | Clear (latched or forced) |
-| `GET /incidents` · `GET /incidents/{id}` | viewer | List; detail with timeline (events by `correlation_id`) |
+| `GET /audit` | viewer | What operators did: OPERATOR events, and the recoveries they asked for, decided or stopped |
+| `GET /faults` | viewer | Open faults (live snapshot); `state=all` adds past episodes from history; `code`, `component` |
+| `GET /faults/{fault_id}` | viewer | Live fault, episode, state transitions, executions of its incident |
+| `POST /faults/{fault_id}:ack` | operator | Acknowledge (`note`) |
+| `POST /faults/{fault_id}:clear` | operator | Clear (`reason`, `skip_symptoms`) |
+| `GET /incidents` · `GET /incidents/{id}` | viewer | List (`state=open\|RESOLVED\|...`); detail with timeline (events by `correlation_id`), executions, faults |
 | `POST /incidents/{id}:close` | operator | Close a resolved incident |
-| `GET /rules` · `GET /rules/{id}` | viewer | Definitions + stats (fires 24 h, last fire, suppressed) |
-| `PATCH /rules/{id}` | admin | `enabled`, `dry_run` |
-| `POST /rules:validate` | admin | Validate YAML (for the future editor and CI) |
-| `POST /rules:reload` · `POST /plans:reload` | admin | Hot reload |
-| `GET /plans` · `GET /plans/{id}` | viewer | Catalog + success rates |
-| `POST /recoveries` | operator | Trigger a plan (`plan_id, args, dry_run, rationale`) |
-| `GET /recoveries` · `GET /recoveries/{id}` | viewer | Executions with steps and gate results |
+| `GET /rules` · `GET /rules/{id}` | viewer | Status and counters, fires in the window; detail adds the rule's YAML and recent matches |
+| `PATCH /rules/{id}` | admin | `enabled`, `dry_run`, `reason` |
+| `POST /rules:validate` | admin | `jarvis lint` on YAML against the loaded plans and catalog; changes nothing |
+| `POST /rules:reload` · `POST /plans:reload` | admin | Hot reload (`validate_only`) |
+| `GET /plans` · `GET /plans/{id}` | viewer | Catalog with parameters + effectiveness in the window; detail adds latest executions |
+| `POST /recoveries` | operator | Run a plan (`plan_id, args, dry_run, rationale, correlation_id`) → 202 `{execution_id, state}` |
+| `GET /recoveries` · `GET /recoveries/{id}` | viewer | Mode, live and recent executions (steps, gates), history |
 | `POST /recoveries/{id}:approve` · `:reject` · `:cancel` | operator | Approval flow / cancel |
-| `PUT /recovery/mode` | admin | `ENABLED` / `DRY_RUN` / `DISABLED` (kill switch) |
-| `GET /insights` · `GET /insights/{id}` | viewer | Agent insights |
-| `POST /agent/ask` | operator | Question → SSE stream of phases and the final insight |
-| `GET /stats?window=24h` | viewer | KPIs (below) |
-| `GET /bags` · `GET /bags/{id}` | viewer | Recorded splits and black-box snapshots (time range, size, linked incidents) + download |
-| `GET /health` | — | Liveness/readiness of gateway + Jarvis components |
+| `PUT /recovery/mode` | admin | `ENABLED` / `DRY_RUN` / `DISABLED` (kill switch), `cancel_running` |
+| `GET /insights` · `GET /insights/{id}` | viewer | Agent insights (payload decoded), with the events they cite |
+| `POST /agent/ask` | operator | 501 until M4: question → SSE stream of phases and the final insight |
+| `GET /stats?hours=24` | viewer | KPIs (below), open faults by severity, event rate, top codes, plans |
+| `GET /analytics/{name}?hours=24` | viewer | `components`, `top_codes`, `heatmap`, `flapping`, `plans`, `rules`, `event_rate` |
+| `GET /bags` | viewer | Recorded splits and black-box snapshots: time range, size, open, converted, linked incidents |
+| `GET /bags/{kind}/{bag}/{file}` | viewer | Download one MCAP file (open it in Foxglove) |
+| `GET /metrics` | — | Prometheus: events by kind and severity, open faults, live executions, recovery mode, commands, webhook deliveries, lake rows |
+
+Commands answer `200 {success, message, data}`, `409` when the component refuses (the message says
+why), `503` when it does not answer. Every change is recorded by the component that made it, with
+the caller's name: the gateway itself writes nothing.
 
 ### WebSocket `/api/v1/stream`
 
 ```jsonc
-// client → server
-{ "op": "subscribe", "since_seq": 9000, "filter": { "min_severity": "WARN", "kinds": ["FAULT_STATE", "RECOVERY"] } }
+// client → server (?token=... when anonymous access is off)
+{ "op": "subscribe", "since_seq": "9000", "filter": { "min_severity": "WARN", "kinds": ["FAULT_STATE", "RECOVERY"],
+                                                    "codes": ["ros.*"], "component": "", "correlation_id": "" } }
+{ "op": "ping" }
 
 // server → client
-{ "type": "event",         "data": { /* Event */ } }
-{ "type": "faults",        "data": { "last_seq": 9131, "faults": [ /* Fault */ ] } }
-{ "type": "backfill_done", "seq": 9131 }
-{ "type": "heartbeat",     "seq": 9140 }
+{ "type": "event",         "data": { /* Event */ } }                   // backfill, then live, in seq order
+{ "type": "faults",        "data": { "last_seq": "9131", "faults": [ /* Fault */ ] } }
+{ "type": "executions",    "data": { "mode": "ENABLED", "executions": [ /* Execution */ ], "recent": [ ] } }
+{ "type": "backfill_done", "seq": "9131", "truncated": false }        // truncated: more than 5000 to replay
+{ "type": "heartbeat",     "seq": "9140" }                            // every 15 s without traffic
+{ "type": "pong" }
 ```
 
+Without `since_seq` the stream starts now (no backfill). Close codes: `1008` bad token, `1003` bad
+subscribe, `1013` the client fell more than 10 000 messages behind (resume with `since_seq`).
 Gap-free resume protocol: see [04-data-flow §7](04-data-flow.md#7-dashboard-live-stream-with-gap-free-resume).
 
 ### KPIs (`/stats`)

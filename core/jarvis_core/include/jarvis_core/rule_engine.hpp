@@ -80,7 +80,7 @@ public:
 
   /// Replaces the rules atomically. Matching state of every rule is reset; fire history (cooldowns,
   /// max_fires) is kept for rules whose id survives.
-  Effects reload(RuleSet rules, Timestamp now);
+  Effects reload(RuleSet rules, Timestamp now, const std::string & operator_name = "");
 
   /// Feeds one event from the canonical stream. Events must arrive in `seq` order.
   Effects on_event(const Event & e, Timestamp now);
@@ -91,9 +91,19 @@ public:
   /// Replaces the known active faults (from the latched /jarvis/faults snapshot): fault_id -> code.
   void sync_active_faults(std::map<std::string, std::string> active);
 
-  /// Enables/disables a rule or toggles its shadow mode at runtime. False if the id is unknown.
-  bool set_rule_state(
-    const std::string & id, std::optional<bool> enabled, std::optional<bool> dry_run);
+  /// The outcome of an operator's change to a rule: `found` is false for an unknown id.
+  struct RuleStateChange
+  {
+    bool found{false};
+    Effects effects;  ///< an OPERATOR `rule.state` event (the audit trail) and PersistState
+    explicit operator bool() const { return found; }
+  };
+
+  /// Enables/disables a rule or toggles its shadow mode at runtime (kept across restarts, reset by
+  /// a reload).
+  RuleStateChange set_rule_state(
+    const std::string & id, std::optional<bool> enabled, std::optional<bool> dry_run,
+    const std::string & operator_name = "", const std::string & reason = "", Timestamp now = 0);
 
   std::vector<RuleStats> stats() const;
   const RuleSet & rules() const { return rules_; }

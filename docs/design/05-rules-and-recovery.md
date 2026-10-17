@@ -381,7 +381,7 @@ stateDiagram-v2
 | `jarvis lint [--rules DIR] [--plans DIR] [--catalog FILE]` | Parses everything, then cross-checks: rules that recover with unknown plans, plans that refuse RULE requests, missing or unknown arguments, unknown actions, cycles, plans that never verify, watched faults missing from the catalog. ROS-free (`jarvis_core`); `ros2 jarvis lint` wraps it. |
 | `jarvis backtest --rules DIR [--plans DIR] [--expect-same] EVENTS.jsonl` | Replays recorded events through the rules (and, with `--plans`, the plans in dry run) and compares every decision with the ones recorded live (`rule <- cause`). The live engines' own events are recomputed, not replayed. `--expect-same` makes a difference an exit code (for CI). |
 | `ros2 jarvis export BAG [-o FILE]` · `ros2 jarvis backtest BAG --rules DIR` | A recorded bag's `/jarvis/events` as JSON Lines (the schema's format), or straight into a backtest |
-| `ros2 jarvis rules [list\|reload [--check]\|enable\|disable\|dry-run [--off]]` · `ros2 jarvis plans reload [--check]` | Operate rules and plans live |
+| `ros2 jarvis rules [list\|reload [--check]\|enable\|disable\|dry-run] [ids] [--off] [--operator] [--reason]` · `ros2 jarvis plans [list\|reload [--check]]` | Operate rules and plans live |
 | `ros2 jarvis recover <plan> [-a k=v] [--dry-run]` | Operator-triggered recovery through the gates, with step feedback |
 | `ros2 jarvis mode [ENABLED\|DRY_RUN\|DISABLED] [--cancel-running]` | Kill switch (no argument: show the mode) |
 | `ros2 jarvis executions [--steps]` · `approve` · `reject` · `cancel` · `faults` | What runs and waits, decisions, open faults |

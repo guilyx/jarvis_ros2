@@ -174,7 +174,7 @@ public:
 
   /// Replaces the plans. Running executions finish with the plan they started with; waiting ones
   /// whose plan changed or disappeared are rejected.
-  Effects reload(PlanSet plans, Timestamp now);
+  Effects reload(PlanSet plans, Timestamp now, const std::string & operator_name = "");
 
   /// Runs the gates and starts, queues, parks for approval or rejects the request.
   Submitted submit(const RecoveryRequest & request, Timestamp now);

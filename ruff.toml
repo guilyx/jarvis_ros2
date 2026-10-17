@@ -8,3 +8,7 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 
 [format]
 quote-style = "double"
+
+[lint.flake8-bugbear]
+# FastAPI declares parameters with calls in defaults (Depends, Query, Header): that is the idiom.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header"]

@@ -1,23 +1,21 @@
 # Copyright 2026 Erwin L.
 # SPDX-License-Identifier: Apache-2.0
-"""`ros2 jarvis` against a running Jarvis (event hub, fault manager, rule engine, recovery)."""
+"""`ros2 jarvis` (jarvis_cli) against a running Jarvis (event hub, fault manager, rule engine,
+recovery). Here rather than in jarvis_cli: the gateway uses jarvis_cli, and the bringup the gateway."""
 
-import os
 import pathlib
 import subprocess
 import tempfile
 import time
 import unittest
 
-os.environ["ROS_DOMAIN_ID"] = "66"  # packages are tested in parallel; own domain, set before launch
-
-import launch  # noqa: E402
-import launch_testing  # noqa: E402
-import launch_testing.actions  # noqa: E402
-import pytest  # noqa: E402
-from ament_index_python.packages import get_package_share_directory  # noqa: E402
-from launch_ros.actions import ComposableNodeContainer  # noqa: E402
-from launch_ros.descriptions import ComposableNode  # noqa: E402
+import launch
+import launch_testing
+import launch_testing.actions
+import pytest
+from ament_index_python.packages import get_package_share_directory
+from launch_ros.actions import ComposableNodeContainer
+from launch_ros.descriptions import ComposableNode
 
 CONFIG = pathlib.Path(get_package_share_directory("jarvis_bringup")) / "config"
 STATE_DIR = tempfile.mkdtemp(prefix="jarvis_cli_")
@@ -100,8 +98,16 @@ class TestCli(unittest.TestCase):
     def test_5_services_and_errors(self):
         self.assertIn("rules are valid", jarvis("rules", "reload", "--check").stdout)
         self.assertIn("plans are valid", jarvis("plans", "reload", "--check").stdout)
+        listed = jarvis("plans").stdout
+        self.assertIn("restart-lifecycle-node(component, fault?, node)", listed)
+        self.assertIn("recovery mode:", listed)
         self.assertIn("no open faults", jarvis("faults").stdout)
         self.assertIn("unknown rule 'nope'", jarvis("rules", "disable", "nope", check=False).stdout)
+        out = jarvis("rules", "dry-run", "escalation-notify", "--operator", "carol", "--reason", "test")
+        self.assertIn("escalation-notify: updated", out.stdout)
+        self.assertIn("dry run", jarvis("rules", "list", "escalation-notify").stdout)
+        # Options after the ids: before Python 3.12.7, argparse rejects ids that follow an option.
+        jarvis("rules", "dry-run", "escalation-notify", "--off", "--operator", "carol")
         self.assertIn("unknown or finished execution", jarvis("approve", "nope", check=False).stdout)
         out = jarvis("lint", "--rules", str(CONFIG / "rules"), "--plans", str(CONFIG / "plans"))
         self.assertIn("0 error(s)", out.stdout)

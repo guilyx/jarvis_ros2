@@ -433,3 +433,27 @@ def test_only_the_adapters_import_ros():
         if "adapters" not in f.parts and re.search(r"^\s*(import|from) rclpy", f.read_text(), re.M)
     ]
     assert offenders == []
+
+
+def test_schema_json_round_trips_through_rows():
+    event = {
+        "id": "01a1",
+        "seq": "281474976710657",
+        "stamp": "2026-10-13T09:14:03.120000001Z",
+        "recv_stamp": "2026-10-13T09:14:03.200000000Z",
+        "source": {"robot": "bot", "node": "/n", "component": "lidar", "host": "h"},
+        "kind": "FAULT_STATE",
+        "code": "sensor.scan.stale",
+        "severity": "ERROR",
+        "message": "ACTIVE",
+        "attrs": {"state": "ACTIVE", "occurrences": 2, "ratio": 0.5, "muted": False},
+        "tags": ["a"],
+        "correlation_id": "inc-1",
+    }
+    row = model.row_from_event(event)
+    assert row["seq"] == 281474976710657 and row["severity_level"] == 40
+    assert row["ts"] == row["recv_stamp"]
+    assert model.event_from_row(row) == event
+    # DuckDB returns microsecond datetimes: the round trip keeps them.
+    as_datetime = dict(row, stamp=datetime.datetime(2026, 10, 13, 9, 14, 3, 120000, tzinfo=datetime.UTC))
+    assert model.event_from_row(as_datetime)["stamp"] == "2026-10-13T09:14:03.120000000Z"

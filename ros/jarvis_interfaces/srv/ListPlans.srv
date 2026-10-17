@@ -1,0 +1,5 @@
+# The plans the orchestrator has loaded.
+string[] ids                         # globs; empty = all
+---
+PlanInfo[] plans
+string mode                          # ENABLED, DRY_RUN or DISABLED

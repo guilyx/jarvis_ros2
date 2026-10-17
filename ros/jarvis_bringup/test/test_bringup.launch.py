@@ -35,7 +35,7 @@ def generate_test_description():
     launch_file = pathlib.Path(get_package_share_directory("jarvis_bringup")) / "launch" / "jarvis.launch.py"
     jarvis = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(str(launch_file)),
-        launch_arguments={"robot_id": "test-bot", "data_dir": str(DATA_DIR)}.items(),
+        launch_arguments={"robot_id": "test-bot", "data_dir": str(DATA_DIR), "gateway": "false"}.items(),
     )
     return launch.LaunchDescription([jarvis, launch_testing.actions.ReadyToTest()])
 

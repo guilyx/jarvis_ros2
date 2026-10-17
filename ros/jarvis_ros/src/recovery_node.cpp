@@ -8,15 +8,18 @@
 #include <cmath>
 #include <diagnostic_updater/diagnostic_updater.hpp>
 #include <jarvis_core/orchestrator.hpp>
+#include <jarvis_core/util.hpp>
 #include <jarvis_interfaces/action/execute_recovery.hpp>
 #include <jarvis_interfaces/msg/execution_array.hpp>
 #include <jarvis_interfaces/msg/fault_array.hpp>
 #include <jarvis_interfaces/srv/cancel_execution.hpp>
 #include <jarvis_interfaces/srv/decide_approval.hpp>
+#include <jarvis_interfaces/srv/list_plans.hpp>
 #include <jarvis_interfaces/srv/reload_config.hpp>
 #include <jarvis_interfaces/srv/set_recovery_mode.hpp>
 #include <map>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <pluginlib/class_loader.hpp>
 #include <rclcpp/create_timer.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
@@ -41,6 +44,7 @@ using jarvis_interfaces::msg::ExecutionArray;
 using jarvis_interfaces::msg::FaultArray;
 using jarvis_interfaces::srv::CancelExecution;
 using jarvis_interfaces::srv::DecideApproval;
+using jarvis_interfaces::srv::ListPlans;
 using jarvis_interfaces::srv::ReloadConfig;
 using jarvis_interfaces::srv::SetRecoveryMode;
 using GoalHandle = rclcpp_action::ServerGoalHandle<ExecuteRecovery>;
@@ -179,6 +183,10 @@ public:
       "~/reload", [this](
                     const std::shared_ptr<ReloadConfig::Request> req,
                     std::shared_ptr<ReloadConfig::Response> res) { on_reload(*req, *res); });
+    list_plans_srv_ = create_service<ListPlans>(
+      "~/list_plans", [this](
+                        const std::shared_ptr<ListPlans::Request> req,
+                        std::shared_ptr<ListPlans::Response> res) { on_list_plans(*req, *res); });
 
     self_diagnostics_ = std::make_unique<diagnostic_updater::Updater>(this);
     self_diagnostics_->setHardwareID("jarvis");
@@ -264,6 +272,7 @@ public:
     decide_srv_.reset();
     cancel_srv_.reset();
     reload_srv_.reset();
+    list_plans_srv_.reset();
     executions_pub_.reset();
     ingest_pub_.reset();
     orch_.reset();
@@ -362,7 +371,61 @@ private:
       return;
     }
     res.message = "loaded " + std::to_string(plans.plans().size()) + " plans";
-    apply(orch_->reload(std::move(plans), now_ns(*this)));
+    apply(orch_->reload(std::move(plans), now_ns(*this), req.operator_name));
+  }
+
+  /// The loaded plans, with what a form needs to run one (parameters) and to explain it.
+  void on_list_plans(const ListPlans::Request & req, ListPlans::Response & res)
+  {
+    using jarvis_core::ParamSpec;
+    res.mode = std::string(jarvis_core::to_string(orch_->mode()));
+    for (const auto & plan : orch_->plans().plans()) {
+      if (!req.ids.empty() && std::none_of(req.ids.begin(), req.ids.end(), [&plan](const auto & g) {
+            return jarvis_core::glob_match(g, plan.id);
+          })) {
+        continue;
+      }
+      jarvis_interfaces::msg::PlanInfo info;
+      info.id = plan.id;
+      info.description = plan.description;
+      info.rev = plan.rev;
+      info.file = plan.file;
+      nlohmann::json params = nlohmann::json::object();
+      for (const auto & [name, spec] : plan.params) {
+        static const std::map<ParamSpec::Type, std::string> types{
+          {ParamSpec::Type::String, "string"},
+          {ParamSpec::Type::Int, "int"},
+          {ParamSpec::Type::Number, "number"},
+          {ParamSpec::Type::Bool, "bool"}};
+        nlohmann::json p = {
+          {"type", types.at(spec.type)},
+          {"required", spec.required},
+          {"description", spec.description}};
+        if (spec.default_value) {
+          p["default"] = *spec.default_value;
+        }
+        if (!spec.pattern.empty()) {
+          p["pattern"] = spec.pattern;
+        }
+        if (!spec.one_of.empty()) {
+          p["one_of"] = spec.one_of;
+        }
+        params[name] = std::move(p);
+      }
+      info.params_json = params.dump();
+      for (auto r : plan.allowed_requesters) {
+        info.allowed_requesters.emplace_back(jarvis_core::to_string(r));
+      }
+      for (auto r : plan.requires_approval) {
+        info.requires_approval.emplace_back(jarvis_core::to_string(r));
+      }
+      info.agent_policy = std::string(jarvis_core::to_string(plan.agent_policy));
+      for (const auto & step : plan.steps) {
+        info.steps.push_back(step.id);
+      }
+      info.timeout_s = static_cast<double>(plan.timeout) / 1e9;
+      res.plans.push_back(std::move(info));
+    }
   }
 
   void apply(jarvis_core::Effects effects)
@@ -646,6 +709,7 @@ private:
   rclcpp::Service<DecideApproval>::SharedPtr decide_srv_;
   rclcpp::Service<CancelExecution>::SharedPtr cancel_srv_;
   rclcpp::Service<ReloadConfig>::SharedPtr reload_srv_;
+  rclcpp::Service<ListPlans>::SharedPtr list_plans_srv_;
   rclcpp::TimerBase::SharedPtr deadline_timer_;
   rclcpp::TimerBase::SharedPtr deferred_timer_;
   rclcpp::TimerBase::SharedPtr persist_timer_;

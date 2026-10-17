@@ -13,6 +13,7 @@
 #include <jarvis_interfaces/msg/fault_array.hpp>
 #include <jarvis_interfaces/srv/acknowledge_fault.hpp>
 #include <jarvis_interfaces/srv/clear_fault.hpp>
+#include <jarvis_interfaces/srv/close_incident.hpp>
 #include <jarvis_interfaces/srv/get_faults.hpp>
 #include <memory>
 #include <rclcpp/create_timer.hpp>
@@ -33,6 +34,7 @@ using diagnostic_msgs::msg::DiagnosticStatus;
 using jarvis_interfaces::msg::FaultArray;
 using jarvis_interfaces::srv::AcknowledgeFault;
 using jarvis_interfaces::srv::ClearFault;
+using jarvis_interfaces::srv::CloseIncident;
 using jarvis_interfaces::srv::GetFaults;
 using Snapshot = rosbag2_interfaces::srv::Snapshot;
 
@@ -135,6 +137,15 @@ public:
         res->message = r.message;
         apply(std::move(r.effects));
       });
+    close_srv_ = create_service<CloseIncident>(
+      "~/close_incident", [this](
+                            const std::shared_ptr<CloseIncident::Request> req,
+                            std::shared_ptr<CloseIncident::Response> res) {
+        auto r = manager_->close_incident(req->incident_id, req->operator_name, now_ns(*this));
+        res->success = r.success;
+        res->message = r.message;
+        apply(std::move(r.effects));
+      });
     clear_srv_ = create_service<ClearFault>(
       "~/clear_fault",
       [this](
@@ -211,6 +222,7 @@ public:
     get_faults_srv_.reset();
     ack_srv_.reset();
     clear_srv_.reset();
+    close_srv_.reset();
     blackbox_client_.reset();
     diagnostics_pub_.reset();
     faults_pub_.reset();
@@ -456,6 +468,7 @@ private:
   rclcpp::Service<GetFaults>::SharedPtr get_faults_srv_;
   rclcpp::Service<AcknowledgeFault>::SharedPtr ack_srv_;
   rclcpp::Service<ClearFault>::SharedPtr clear_srv_;
+  rclcpp::Service<CloseIncident>::SharedPtr close_srv_;
   rclcpp::Client<Snapshot>::SharedPtr blackbox_client_;
   rclcpp::TimerBase::SharedPtr deadline_timer_;
   rclcpp::TimerBase::SharedPtr blackbox_retry_timer_;

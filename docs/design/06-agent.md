@@ -167,7 +167,7 @@ set, and uploads the report, the `results.tsv` rows and the traces.
 - Collapse repeats: `ros.topic.stale ×37 (first …, last …)` instead of 37 rows.
 - Rank by severity, recency, and causal proximity to the trigger event.
 - Compute facts the model is bad at computing from raw rows: time deltas, counts, first-occurrence ordering, co-occurrence across components.
-- **Redact** configured attributes (`agent.redact: ["attrs.gps.*", "attrs.operator_name"]`) before anything leaves the robot.
+- **Redact** what a model may not see (`agent.redact: ["attrs.gps.*", "@identities"]`) where the agent reads it: the windows, the triage, the prompt and every tool see the same redacted records. Ids, stamps, states and the attributes Jarvis writes stay. Right before each call, every message is also scrubbed of secrets (keys, tokens, passwords, e-mail addresses). See the [security guide](../guides/security.md#3-the-agent-what-reaches-the-llm).
 - Hard cap the rendered window (default 30 k tokens). The model can fetch more with tools.
 - **Skip the LLM** if triage alone is conclusive (e.g. a single known fault with a runbook and a successful recovery). It emits a heuristic insight instead.
 

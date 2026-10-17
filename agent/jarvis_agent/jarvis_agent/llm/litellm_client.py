@@ -14,6 +14,8 @@ prompt is marked cacheable for the providers that take the hint.
 import logging
 import os
 
+from jarvis_agent.core.redaction import Scrubber
+
 log = logging.getLogger("jarvis_agent.llm")
 
 
@@ -50,6 +52,7 @@ class LiteLLMClient:
             self.caching = False
         self.api_base = api_base
         self._key = api_key
+        self._scrub = Scrubber()
         self.timeout_s = timeout_s
         self.max_retries = max_retries
         self.max_output_tokens = max_output_tokens
@@ -99,8 +102,10 @@ class LiteLLMClient:
         except self.errors as e:
             raise ModelUnavailable(self._safe(f"{type(e).__name__}: {e}")) from e
         except Exception as e:  # an unmapped litellm failure: the heuristic analyst still answers
-            log.warning("%s: unexpected %s", self.name, type(e).__name__, exc_info=True)
-            raise ModelUnavailable(self._safe(f"{type(e).__name__}: {e}")) from e
+            # No traceback: its frames and messages can carry the request (the prompt, the key).
+            reason = self._safe(f"{type(e).__name__}: {e}")
+            log.warning("%s: unexpected %s", self.name, reason)
+            raise ModelUnavailable(reason) from e
         if not r.choices:
             raise ModelUnavailable("the model returned no choices")
         choice = r.choices[0]
@@ -131,7 +136,7 @@ class LiteLLMClient:
         )
 
     def _safe(self, text):
-        """An error for the logs and the insight: short, and never the key."""
+        """An error for the logs and the insight: short, and never a key or token."""
         if self._key:
-            text = text.replace(self._key, "***")
-        return " ".join(text.split())[:300]
+            text = text.replace(self._key, "[secret]")
+        return " ".join(self._scrub.text(text).split())[:300]

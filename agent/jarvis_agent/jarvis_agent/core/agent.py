@@ -15,6 +15,7 @@ import time
 
 from jarvis_agent.core.checks import check, validate_args
 from jarvis_agent.core.policy import AutonomyPolicy
+from jarvis_agent.core.redaction import redacting
 from jarvis_agent.core.triage import triage
 from jarvis_agent.core.windows import WindowManager
 from jarvis_agent.llm.heuristic import HeuristicAnalyst
@@ -35,12 +36,12 @@ class Agent:
         clock=time.time_ns,
         recovery=None,
     ):
-        self.query = query
+        self.query = redacting(query, redact)
         self.sink = sink
         self.analyst = analyst or HeuristicAnalyst()
         self.policy = policy or AutonomyPolicy()
         self.redact = tuple(redact)
-        self.windows = windows or WindowManager(query)
+        self.windows = windows or WindowManager(self.query)
         self.clock = clock
         self.recovery = recovery  # RecoveryClient, or None: proposals stay advice
 

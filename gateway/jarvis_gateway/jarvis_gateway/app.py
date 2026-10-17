@@ -132,12 +132,9 @@ def create_app(settings, port, notifier=None):
 
     def caller(role):
         def dep(request: Request, authorization: str | None = Header(None), token: str | None = Query(None)):
-            presented = token
-            if authorization and authorization.lower().startswith("bearer "):
-                presented = authorization[7:].strip()
             client = request.client.host if request.client else None
             try:
-                who = auth.identify(settings, presented, request.headers, client)
+                who = auth.identify(settings, auth.presented(token, authorization), request.headers, client)
             except auth.Refused as e:
                 raise HTTPException(e.status, e.detail) from None
             if not who.can(role):
@@ -522,8 +519,10 @@ def create_app(settings, port, notifier=None):
 
     @app.websocket("/api/v1/stream")
     async def live(ws: WebSocket, token: str | None = None):
+        # A token in the Authorization header (programs), else ?token= (browsers cannot set headers).
+        presented = auth.presented(token, ws.headers.get("authorization"))
         try:
-            auth.identify(settings, token, ws.headers, ws.client.host if ws.client else None)
+            auth.identify(settings, presented, ws.headers, ws.client.host if ws.client else None)
         except auth.Refused as e:
             await ws.close(code=1008, reason=e.detail)
             return

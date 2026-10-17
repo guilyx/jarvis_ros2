@@ -10,8 +10,11 @@ flags. The API is documented at /docs once it runs.
 """
 
 import argparse
+import copy
+import logging
 import os
 import pathlib
+import re
 import sys
 
 from jarvis_gateway import __version__
@@ -88,6 +91,34 @@ def settings_from(args):
     return s
 
 
+TOKEN_IN_URL = re.compile(r"(?i)([?&]token=)[^&\s\"]+")
+
+
+class MaskTokens(logging.Filter):
+    """A `?token=...` in a logged URL (the dashboard's live stream: browsers cannot send headers on
+    a WebSocket) reads `token=***`: logs are not where tokens belong."""
+
+    def filter(self, record):
+        if isinstance(record.msg, str):
+            record.msg = TOKEN_IN_URL.sub(r"\1***", record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                TOKEN_IN_URL.sub(r"\1***", a) if isinstance(a, str) else a for a in record.args
+            )
+        return True
+
+
+def log_config():
+    """uvicorn's logging, with tokens masked on every handler."""
+    from uvicorn.config import LOGGING_CONFIG
+
+    config = copy.deepcopy(LOGGING_CONFIG)
+    config["filters"] = {"tokens": {"()": MaskTokens}}
+    for handler in config["handlers"].values():
+        handler["filters"] = ["tokens"]
+    return config
+
+
 def main(argv=None):
     args = parser().parse_args(strip_ros_args(sys.argv[1:] if argv is None else argv))
     import uvicorn
@@ -105,7 +136,15 @@ def main(argv=None):
         port = RosPort(namespace=args.namespace)
     app = create_app(settings, port)
     tls = {"ssl_certfile": settings.tls_cert, "ssl_keyfile": settings.tls_key} if settings.tls_cert else {}
-    uvicorn.run(app, host=settings.host, port=settings.port, log_level=args.log_level, loop="asyncio", **tls)
+    uvicorn.run(
+        app,
+        host=settings.host,
+        port=settings.port,
+        log_level=args.log_level,
+        log_config=log_config(),
+        loop="asyncio",
+        **tls,
+    )
     return 0
 
 

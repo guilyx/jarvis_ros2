@@ -7,13 +7,12 @@
 - Rows are ranked by severity, kind and closeness to what triggered the analysis.
 - Facts a model gets wrong from raw rows are computed here: orderings, durations, counts, which
   faults were muted as symptoms, how recoveries went, and what history says about each code.
-- Configured attributes are redacted before anything is rendered.
+- Configured attributes and fields are redacted before anything is rendered (core/redaction.py).
 """
 
-import copy
 import dataclasses
-import fnmatch
 
+from jarvis_agent.core.redaction import Redactor
 from jarvis_agent.events import clock, component, incident_of, level, ns, seconds
 
 COLLAPSIBLE = {"LOG", "FAULT_RAISE", "FAULT_CLEAR", "STATE"}
@@ -66,22 +65,9 @@ class Triage:
 
 
 def redact(events, patterns):
-    """Copies of the events with matching attributes replaced (`attrs.gps.*`, `attrs.operator`)."""
-    if not patterns:
-        return events
-    attr_globs = [p[len("attrs.") :] for p in patterns if p.startswith("attrs.")]
-    fields = [p for p in patterns if not p.startswith("attrs.")]
-    out = []
-    for e in events:
-        e = copy.deepcopy(e)
-        for key in list((e.get("attrs") or {}).keys()):
-            if any(fnmatch.fnmatchcase(key, g) for g in attr_globs):
-                e["attrs"][key] = "[redacted]"
-        for f in fields:
-            if f in e:
-                e[f] = "[redacted]"
-        out.append(e)
-    return out
+    """Copies of the events with what the patterns name hidden (core/redaction.py: `attrs.gps.*`,
+    `message`, `@identities` ...)."""
+    return Redactor(patterns).records(events)
 
 
 def collapse(events):

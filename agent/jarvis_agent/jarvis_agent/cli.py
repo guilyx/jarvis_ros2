@@ -29,6 +29,7 @@ from jarvis_agent import __version__
 from jarvis_agent.config import AgentConfig
 from jarvis_agent.core.agent import Agent
 from jarvis_agent.core.policy import AutonomyPolicy
+from jarvis_agent.core.redaction import Scrubber, redacting
 from jarvis_agent.core.triggers import TriggerPolicy
 from jarvis_agent.core.windows import WindowManager
 from jarvis_agent.events import iso_ns
@@ -135,12 +136,13 @@ def make_analyst(config, query, proposals=False, budget=None):
 
     return LLMAnalyst(
         client(config.model),
-        query,
+        redacting(query, config.redact),
         budget=budget or Budget(config.usd_per_hour, config.usd_per_day),
         max_tool_calls=config.max_tool_calls,
         tokens_per_analysis=config.tokens_per_analysis,
         context_tokens=config.context_tokens,
         redact=config.redact,
+        scrubber=Scrubber(emails=config.scrub_emails),
         traces_dir=config.traces_dir,
         skip_when_conclusive=config.skip_when_conclusive,
         clients={TriggerType(t): client(name) for t, name in config.per_trigger.items()},
@@ -150,6 +152,7 @@ def make_analyst(config, query, proposals=False, budget=None):
 
 def make_agent(config, query, sink=None, recovery=None):
     proposals = recovery is not None and config.level in ("supervised", "autonomous")
+    query = redacting(query, config.redact)  # windows, triage, prompts and tools: one redaction
     return Agent(
         query,
         sink=sink,
@@ -188,7 +191,9 @@ def cmd_run(args, config):
     from jarvis_agent.app import StdoutSink, run
 
     logging.basicConfig(level=args.log_level, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-    logging.getLogger("httpx").setLevel(logging.WARNING)  # not every request
+    # Not every request, and never a request body: these log prompts and headers at INFO/DEBUG.
+    for noisy in ("httpx", "httpcore", "openai", "LiteLLM", "litellm", "websockets"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     recovery = None
     if args.publish == "ros":
         from jarvis_agent.adapters.ros2 import RosAgent  # rclpy only here

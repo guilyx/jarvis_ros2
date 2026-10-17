@@ -128,6 +128,7 @@ def test_http_errors_are_an_unavailable_model(stub, query):
     stub.script = [
         {"status": 429, "status_text": "slow down"},
         {"status": 401, "status_text": "bad key sk-secret"},
+        {"status": 400, "status_text": "no access for ops@example.com with Bearer sk-or-v1-0123456789abcdef"},
     ]
     client = LiteLLMClient("openai/jarvis-test", api_base=stub.url, api_key="sk-secret", max_retries=0)
     with pytest.raises(ModelUnavailable, match="RateLimitError"):
@@ -135,6 +136,9 @@ def test_http_errors_are_an_unavailable_model(stub, query):
     with pytest.raises(ModelUnavailable) as e:
         client.complete([{"role": "user", "content": "hi"}], [])
     assert "AuthenticationError" in str(e.value) and "sk-secret" not in str(e.value)
+    with pytest.raises(ModelUnavailable) as e:  # what a provider echoes back is scrubbed too
+        client.complete([{"role": "user", "content": "hi"}], [])
+    assert "ops@" not in str(e.value) and "0123456789abcdef" not in str(e.value)
 
     closed = LiteLLMClient(
         "openai/jarvis-test", api_base="http://127.0.0.1:9/v1", api_key="k", max_retries=0, timeout_s=3

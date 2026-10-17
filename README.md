@@ -241,6 +241,20 @@ it). Tokens give names and roles (viewer, operator, admin) in
 [docs/design/07-dashboard.md](docs/design/07-dashboard.md) lists it. `jarvis-gateway --fake
 --scenario` runs it over an in-memory Jarvis, without ROS.
 
+## Security
+
+[docs/guides/security.md](docs/guides/security.md) closes Jarvis up for a real deployment:
+
+- **SROS2**: `ros2 run jarvis_bringup jarvis_keystore ~/keystore` makes a keystore with one enclave
+  per Jarvis process, each allowed what it uses and nothing more: only the core can publish the
+  stream or answer as Jarvis, and a node outside the keystore cannot join. CI runs the stack with
+  security enforced.
+- **The gateway**: HTTPS (`tls: {cert, key}`), and single sign-on through an authenticating proxy
+  (oauth2-proxy, Pomerium ...) whose identity headers it believes from the proxy only, mapping
+  groups to roles.
+- **The agent**: `redact` patterns hide what a model may not see, in the prompt and in every tool
+  result; secrets and e-mail addresses are scrubbed from every message before it leaves.
+
 ## Under load
 
 ```bash

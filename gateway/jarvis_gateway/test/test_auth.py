@@ -78,6 +78,37 @@ def test_the_live_stream_knows_who_is_connecting(make_gateway):
         ws.receive_text()
 
 
+def test_programs_present_their_token_in_a_header_on_the_live_stream_too(make_gateway):
+    # The agent sends `Authorization` (URLs get logged); the dashboard ?token= (browsers cannot).
+    h = make_gateway(anonymous=None)
+    with h.client.websocket_connect(STREAM, headers=OPERATOR) as ws:
+        ws.send_text(json.dumps({"subscribe": {}}))
+    with h.client.websocket_connect(STREAM + "?token=o-token") as ws:
+        ws.send_text(json.dumps({"subscribe": {}}))
+    bad = {"Authorization": "Bearer nope"}
+    with pytest.raises(WebSocketDisconnect), h.client.websocket_connect(STREAM, headers=bad) as ws:
+        ws.receive_text()
+
+
+def test_tokens_in_urls_are_masked_in_the_logs():
+    import logging
+
+    from jarvis_gateway.cli import MaskTokens, log_config
+
+    access = logging.LogRecord(
+        "uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d',
+        ("10.0.0.7:5000", "GET", "/api/v1/stream?since=4&token=s3cret&x=1", "1.1", 101), None,
+    )  # fmt: skip
+    assert MaskTokens().filter(access)
+    assert access.args[2] == "/api/v1/stream?since=4&token=***&x=1" and access.args[4] == 101
+    ws = logging.LogRecord(
+        "uvicorn.error", logging.INFO, "", 0, '"WebSocket /api/v1/stream?token=s3cret"', (), None
+    )
+    MaskTokens().filter(ws)
+    assert "s3cret" not in ws.getMessage()
+    assert all(h["filters"] == ["tokens"] for h in log_config()["handlers"].values())
+
+
 def test_the_settings_reject_half_configurations(tmp_path):
     bad = tmp_path / "gateway.yaml"
     bad.write_text("schema: jarvis.gateway/v1\ntls: { cert: /x.crt }\n")

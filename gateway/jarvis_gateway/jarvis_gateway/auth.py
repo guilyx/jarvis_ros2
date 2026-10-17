@@ -52,6 +52,13 @@ class Refused(Exception):
         self.status, self.detail = status, detail
 
 
+def presented(token, authorization):
+    """The token a caller presents: `Authorization: Bearer ...` first, else `?token=`."""
+    if authorization and authorization.lower().startswith("bearer "):
+        return authorization[7:].strip()
+    return token
+
+
 def identify(settings, token, headers, client_host):
     """The caller's Principal; Refused(401) if they cannot be identified and must be."""
     if token:

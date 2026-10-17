@@ -17,6 +17,7 @@ import dataclasses
 import fnmatch
 import json
 
+from jarvis_agent.core.redaction import Scrubber
 from jarvis_agent.events import component
 from jarvis_agent.llm.base import ModelUnavailable
 
@@ -196,6 +197,7 @@ class Judge:
     def __init__(self, client):
         self.client = client
         self.name = client.name
+        self.scrub = Scrubber()  # what any model is sent passes the scrubber, the judge's too
 
     def __call__(self, case, insight):
         """(score in [0, 1], reason) or None when it could not grade; and what it cost."""
@@ -207,7 +209,7 @@ class Judge:
             {"role": "user", "content": f"{known}## The analysis\n{describe(insight)}"},
         ]
         try:
-            c = self.client.complete(messages, [GRADE], FORCE_GRADE)
+            c = self.client.complete(self.scrub.messages(messages), [GRADE], FORCE_GRADE)
         except ModelUnavailable:
             return None, 0.0
         for t in c.tool_calls:

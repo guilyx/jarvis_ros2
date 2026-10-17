@@ -1,0 +1,24 @@
+schema: jarvis.eval/v1
+description: >-
+  The scan relay hangs and /scan goes quiet; rule lidar-stale-restart restarts the relay and scans
+  flow again 0.2 s later.
+events: ../../recordings/demo_tour.jsonl
+plans: ../../recordings/demo_tour.plans.json
+drop: ["demo.tour.*"]  # the tour narrates what happens: it would give the answers away
+at: 2026-10-17T14:15:51.700Z
+trigger: {type: INCIDENT_OPENED, incident: 01a14a37-c61f-7a08-8b2a-47584f28d7cd}
+root_cause:
+  code: sensor.scan.stale
+  component: lidar
+  text: >-
+    The scan relay (/demo/scan_relay) hung: it stopped forwarding /scan while the lidar kept
+    publishing. Restarting the relay (restart-lifecycle-node) fixed it within a fraction of a
+    second, so the relay itself was the problem.
+  mentions: [[relay], [restart]]
+must_cite:
+  - [01a14a37-c61f-7c43-9bfc-3b6c6f550f7c]
+  - [01a14a37-c6f6-7153-9906-c85bc84e5c70, 01a14a37-c6f6-7fd3-a81f-86678ddd7d9a, 01a14a37-c6f6-7f10-88d4-12f3bd915cf9]
+expect:
+  assessment: [WARN, ERROR]
+  plans: {acceptable: [restart-lifecycle-node]}
+  escalate: false

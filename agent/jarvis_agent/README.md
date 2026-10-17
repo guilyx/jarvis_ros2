@@ -72,4 +72,16 @@ ros2 run jarvis_agent jarvis-agent run                                      # th
 
 Settings: [`config/agent.yaml`](config/agent.yaml) (`agent_config:=` in the bringup); a gateway token,
 if needed, in `$JARVIS_AGENT_TOKEN`. Tests replay a recording of the demo's guided tour
-(`test/fixtures/`).
+(`evals/recordings/`).
+
+## Evals
+
+`jarvis-agent eval` scores the analyst on labelled incidents ([`evals/`](evals/README.md)): root
+cause (rules, or an LLM judge), evidence validity, must-cite recall, plans, escalation and severity,
+under a cost cap. A prompt or model change merges only if the score holds (`evals/results.tsv`);
+the heuristic analyst's scores are a test, and a nightly job runs a model when one is configured.
+
+```bash
+jarvis-agent --heuristic eval                                        # the baseline
+jarvis-agent --model <model> eval --judge <model> --results evals/results.tsv --note "..."
+```

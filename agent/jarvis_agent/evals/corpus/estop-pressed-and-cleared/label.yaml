@@ -1,0 +1,22 @@
+schema: jarvis.eval/v1
+description: >-
+  Someone presses the e-stop on the base for 2 s. The fault latches on release; an operator clears
+  it 12 s later after an inspection.
+events: ../../recordings/demo_tour.jsonl
+plans: ../../recordings/demo_tour.plans.json
+drop: ["demo.tour.*"]  # the tour narrates what happens: it would give the answers away
+at: 2026-10-17T14:15:32.100Z  # 20 s after it opened: when the live agent analyzes (settle_s)
+trigger: {type: INCIDENT_OPENED, incident: 01a14a37-799f-736a-bc73-0e1d50e89590}
+root_cause:
+  code: safety.estop.engaged
+  component: base
+  text: >-
+    Someone pressed the emergency stop on the base. The e-stop fault latched when the button was
+    released, as safety faults do, and an operator cleared it after an inspection. Nothing failed in
+    software.
+  mentions: [[e-stop, estop, emergency stop]]
+must_cite:
+  - [01a14a37-799f-79a2-b87d-577d41510423, 01a14a37-799f-7d99-a1c4-b0705056cfd4, 01a14a37-817e-7ce8-87dc-a120e4542f4d]
+expect:
+  assessment: [ERROR, CRITICAL]
+  plans: {forbidden: [restart-lifecycle-node]}

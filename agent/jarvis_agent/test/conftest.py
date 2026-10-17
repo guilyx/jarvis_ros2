@@ -13,7 +13,8 @@ for package in ("agent/jarvis_agent", "gateway/jarvis_gateway", "lake/jarvis_lak
 
 from jarvis_agent.adapters.replay import ReplayQuery, load_jsonl  # noqa: E402
 
-FIXTURES = pathlib.Path(__file__).parent / "fixtures"
+# The recordings the eval corpus is built on (evals/corpus) serve the tests too.
+FIXTURES = pathlib.Path(__file__).resolve().parents[1] / "evals" / "recordings"
 
 # The demo's guided tour, recorded through the gateway (ros2 launch jarvis_demo demo.launch.py, then
 # inject tour): the lidar relay wedges and a restart fixes it; the lidar stalls, the restart does not
@@ -30,7 +31,7 @@ def events():
 
 @pytest.fixture
 def plans():
-    return json.loads((FIXTURES / "plans.json").read_text())
+    return json.loads((FIXTURES / "demo_tour.plans.json").read_text())
 
 
 @pytest.fixture

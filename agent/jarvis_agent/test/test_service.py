@@ -134,7 +134,7 @@ def test_the_gateway_adapter_reads_the_same_history(tmp_path):
 
 def test_cli_analyze_a_replay(capsys, tmp_path):
     plans = tmp_path / "plans.yaml"
-    plans.write_text(json.dumps({"plans": json.loads((FIXTURES / "plans.json").read_text())}))
+    plans.write_text(json.dumps({"plans": json.loads((FIXTURES / "demo_tour.plans.json").read_text())}))
     replay = str(FIXTURES / "demo_tour.jsonl")
     assert cli.main(["analyze", WEDGE, "--replay", replay, "--plans", str(plans)]) == 0
     text = capsys.readouterr().out

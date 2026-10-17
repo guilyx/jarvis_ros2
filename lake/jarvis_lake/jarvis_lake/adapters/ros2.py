@@ -5,6 +5,7 @@
 This is the only module of jarvis_lake that imports rclpy, and only when the service runs with ROS.
 """
 
+import contextlib
 import threading
 
 import rclpy
@@ -89,5 +90,8 @@ def run(service, args=None):
         stop.set()
         executor.shutdown()
         node.destroy_node()
-        rclpy.try_shutdown()
+        # rclpy's SIGINT handler shuts the context down from C, between try_shutdown's check and
+        # its own shutdown: that RCLError must not abort the process.
+        with contextlib.suppress(Exception):
+            rclpy.try_shutdown()
         thread.join(timeout=5.0)

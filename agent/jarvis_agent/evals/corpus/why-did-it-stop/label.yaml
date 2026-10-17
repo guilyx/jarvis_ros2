@@ -1,0 +1,22 @@
+schema: jarvis.eval/v1
+description: >-
+  An operator asks why the robot stopped, ten seconds after the tour's e-stop latched; the lidar,
+  motor and log faults of the minutes before are over or unrelated.
+events: ../../recordings/demo_tour.jsonl
+plans: ../../recordings/demo_tour.plans.json
+drop: ["demo.tour.*"]  # the tour narrates what happens: it would give the answers away
+at: 2026-10-17T14:26:40.000Z
+trigger: {type: ON_DEMAND, question: "Why did the robot stop?"}
+root_cause:
+  code: safety.estop.engaged
+  component: base
+  text: >-
+    The emergency stop on the base was pressed: safety.estop.engaged is LATCHED and stays until an
+    operator clears it. The other faults of the last minutes (the lidar, the motor driver, the
+    costmap errors) are over or unrelated.
+  mentions: [[e-stop, estop, emergency stop], [latch]]
+must_cite:
+  - [01a14a41-d01a-76e6-94d4-6e6c1f0e3791, 01a14a41-d01a-7d46-af53-469cdf6d43a1, 01a14a41-d809-751d-a642-2f845e239c38]
+expect:
+  assessment: [ERROR, CRITICAL]
+  plans: {forbidden: [restart-lifecycle-node]}

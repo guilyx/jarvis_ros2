@@ -1,0 +1,28 @@
+schema: jarvis.eval/v1
+description: >-
+  An operator asks about the lidar after the tour: it went quiet twice in the last minutes, for
+  two different reasons.
+events: ../../recordings/demo_tour.jsonl
+plans: ../../recordings/demo_tour.plans.json
+drop: ["demo.tour.*"]  # the tour narrates what happens: it would give the answers away
+at: 2026-10-17T14:26:40.000Z
+trigger: {type: ON_DEMAND, question: "What went wrong with the lidar, and is it fixed?"}
+root_cause:
+  code: sensor.scan.stale
+  component: lidar
+  text: >-
+    /scan went quiet twice. First the scan relay hung, and restarting it fixed it at once. Then the
+    lidar itself stopped for about 20 s: restarting the relay could not help, the plan's check
+    failed and Jarvis escalated to the operators; scans came back on their own when the lidar
+    resumed. It works now (both incidents resolved), but why the lidar stopped is unexplained.
+  mentions:
+    - [relay]
+    - [restart]
+    - [escalat, operator, human]
+    - [resolved, cleared, came back, works now, recovered, fixed]
+must_cite:
+  - [01a14a41-27c0-7892-b854-e5393c563854, 01a14a41-25cb-71c4-aad8-35aa31f7df70]
+  - [01a14a41-3bf2-7236-93f2-a3de1c82e354, 01a14a41-39fe-7c49-8490-b163f75b3b76]
+  - [01a14a41-76a6-7550-b8ba-deafac95d328, 01a14a41-76a6-7921-8765-e90daf855394, 01a14a41-76a6-774d-ac82-e20c9fca0366]
+expect:
+  assessment: [INFO, WARN, ERROR]

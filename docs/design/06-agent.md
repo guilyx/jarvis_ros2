@@ -56,7 +56,7 @@ agent/jarvis_agent/
 │   ├── adapters/      ros2.py (lazy rclpy) · gateway.py · replay.py
 │   ├── app.py         wiring + config (pydantic-settings)
 │   └── node.py        ROS 2 entry point (lifecycle node, Analyze action server)
-├── evals/             corpus/ (recorded incidents + labels) · graders.py · run_evals.py
+├── evals/             corpus/ (labelled incidents) · recordings/ · results.tsv (code: jarvis_agent/evals/)
 └── tests/
 ```
 
@@ -122,6 +122,24 @@ server-sent events (`progress`, then `insight` or `error`); a missing agent is a
 stream starts. The fake gateway answers with a stand-in. The dashboard's Agent view has the Ask box
 (progress as it streams, the answer as an insight card), and an incident's "Ask agent" opens it
 about that incident.
+
+### As built (4.5)
+
+`jarvis-agent eval` (`jarvis_agent/evals/`): nine cases seeded from the demo's recorded tour, each a
+directory with `label.yaml` (`jarvis.eval/v1`: trigger, `at`, root cause with its code, component,
+text and `mentions`, `must_cite` groups, the expected severity, plans and escalation). The recording
+is cut at `at` (when the live agent would analyze, so neither the window nor the tools see the
+future) and the tour's narration is dropped (it states the answers). The loader refuses a label
+that names an event, incident or plan the recording lacks. Each case runs through `Agent` as it
+ships (replay adapter, configured analyst and autonomy, no recovery client: proposals are graded as
+advice); evidence validity is graded on the analyst's own answer, before the harness checks drop
+what it was never shown. Graders and weights: root cause 0.35, must-cite 0.2, plans 0.2, evidence
+0.15, escalation 0.05, severity 0.05 (weights of graders a case does not ask for are spread). The
+judge is any LiteLLM model with a three-level rubric and a forced `grade` tool. One budget spans
+the run; past the cap the remaining cases are skipped and the command exits 3. The heuristic
+analyst's per-case scores are a test (0.86 overall: it explains the incidents, not the questions);
+`.github/workflows/evals.yml` runs nightly and on demand, with a model when `JARVIS_EVAL_MODEL` is
+set, and uploads the report, the `results.tsv` rows and the traces.
 
 ## 2. Triggers
 
@@ -243,8 +261,8 @@ Used when there's no connectivity, the budget is exhausted, or triage was conclu
 
 | Piece | Design |
 |-------|--------|
-| Corpus | `evals/corpus/<case>/events.jsonl` + `label.yaml` (root cause, acceptable plans, must-cite events). Seeded from `jarvis_demo` scenarios, then grown from real incidents. |
-| Graders | Exact: plan id ∈ acceptable. Evidence validity and recall on must-cite ids. LLM-judge for root-cause text vs. label (rubric). |
+| Corpus | `evals/corpus/<case>/label.yaml` (root cause, acceptable and forbidden plans, must-cite events, expected escalation and severity) + its events (`events.jsonl`, or a shared recording in `evals/recordings/`). Seeded from `jarvis_demo` scenarios, then grown from real incidents. |
+| Graders | Exact: no forbidden plan, an acceptable one when required. Evidence validity and recall on must-cite ids. Root cause: the top hypothesis cites the labelled fault, plus an LLM judge for its text vs. the label (rubric), or keyword rules without one. |
 | Runs | Replay adapter, so no ROS is needed. Unit tests use `FakeLLM` (deterministic). The eval suite runs nightly or on demand with a cost cap. It does not run on every PR. |
 | Gate | A prompt or model change merges only if the eval score holds or improves (tracked in `evals/results.tsv`). |
 

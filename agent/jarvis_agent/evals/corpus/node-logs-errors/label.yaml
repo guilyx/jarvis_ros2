@@ -1,0 +1,22 @@
+schema: jarvis.eval/v1
+description: >-
+  A node logs "costmap update failed" errors in a loop; the sustained /rosout errors become
+  ros.log.error.
+events: ../../recordings/demo_tour.jsonl
+plans: ../../recordings/demo_tour.plans.json
+drop: ["demo.tour.*"]  # the tour narrates what happens: it would give the answers away
+at: 2026-10-17T14:26:46.000Z
+trigger: {type: INCIDENT_OPENED, incident: 01a14a41-c21d-707c-aeec-41f2c33ab114}
+root_cause:
+  code: ros.log.error
+  component: demo.fault_injector
+  text: >-
+    One node (/demo/fault_injector) logged "costmap update failed" errors in a loop on /rosout, and
+    the sustained errors raised ros.log.error. It is that node's own error, not hardware: its
+    costmap update is what to look at. The fault heals after a quiet minute.
+  mentions: [[costmap], [fault_injector, fault injector]]
+must_cite:
+  - [01a14a41-c21d-7a52-85d0-5ce963d1bb00, 01a14a41-ba2f-74a1-b098-2c3432296ba8, 01a14a41-ba2e-785d-94f2-759126f53778, 01a14a41-be21-7dee-9ccb-f5a52e186f53, 01a14a41-c21d-7134-bdfc-5cb50eae9904, 01a14a41-c613-7dec-98a6-ee706b9850eb]
+expect:
+  assessment: [WARN, ERROR]
+  plans: {forbidden: [restart-lifecycle-node]}  # not a managed node

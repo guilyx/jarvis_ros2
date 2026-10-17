@@ -299,6 +299,7 @@ class RosPort(JarvisPort):
         self._goals[key] = handle
         result = self._bridge(handle.get_result_async())
         deadline = self._loop.time() + timeout_s
+        last = ""  # the last stage heard
         try:
             while True:
                 nxt = asyncio.ensure_future(feedback.get())
@@ -308,6 +309,7 @@ class RosPort(JarvisPort):
                     return_when="FIRST_COMPLETED",
                 )
                 if nxt in done:
+                    last = nxt.result()[1]["stage"]
                     yield nxt.result()
                     continue
                 nxt.cancel()
@@ -315,10 +317,17 @@ class RosPort(JarvisPort):
                     yield "error", {"message": f"no answer from the agent within {timeout_s:g} s"}
                     return
                 while not feedback.empty():  # what came in just before the result
-                    yield feedback.get_nowait()
+                    stage = feedback.get_nowait()
+                    last = stage[1]["stage"]
+                    yield stage
                 r = result.result().result
                 if r.success:
-                    yield "insight", json.loads(r.insight_json)
+                    insight = json.loads(r.insight_json)
+                    # Feedback (a topic) and the result (a service) are not ordered: the agent's
+                    # last feedback may come after its result. The result says it is done.
+                    if last != "done":
+                        yield "progress", {"stage": "done", "detail": insight.get("title", "")}
+                    yield "insight", insight
                 else:
                     yield "error", {"message": r.message or "the agent could not answer"}
                 return

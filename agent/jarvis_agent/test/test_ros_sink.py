@@ -1,13 +1,17 @@
 # Copyright 2026 Erwin L.
 # SPDX-License-Identifier: Apache-2.0
-"""Insights on the ROS graph: an INSIGHT event on /jarvis/ingest (skipped without rclpy)."""
+"""The agent on the ROS graph: INSIGHT events on /jarvis/ingest, proposals as ExecuteRecovery goals
+(skipped without rclpy)."""
 
 import json
+import threading
 import time
 
 import pytest
 from conftest import STALL
 from jarvis_agent.core.agent import Agent
+
+DOMAIN = 73  # apart from the launch tests (61-68) and a local demo (71)
 
 
 def test_the_insight_is_published_as_an_event(query):
@@ -17,9 +21,9 @@ def test_the_insight_is_published_as_an_event(query):
     from jarvis_interfaces.msg import Event
     from rclpy.qos import QoSProfile, ReliabilityPolicy
 
-    sink = RosInsightSink(node_name="agent_test")
+    sink = RosInsightSink(node_name="agent_test", domain_id=DOMAIN)
     context = rclpy.Context()
-    rclpy.init(context=context)
+    rclpy.init(context=context, domain_id=DOMAIN)
     node = rclpy.create_node("ingest_listener", context=context)
     received = []
     reliable = QoSProfile(depth=100, reliability=ReliabilityPolicy.RELIABLE)
@@ -48,3 +52,71 @@ def test_the_insight_is_published_as_an_event(query):
         node.destroy_node()
         context.try_shutdown()
         sink.close()
+
+
+def test_proposals_go_to_the_one_gate_as_the_agent():
+    rclpy = pytest.importorskip("rclpy")
+    pytest.importorskip("jarvis_interfaces")
+    from jarvis_agent.adapters.ros2 import RosAgent
+    from jarvis_interfaces.action import ExecuteRecovery
+    from rclpy.action import ActionServer
+
+    context = rclpy.Context()
+    rclpy.init(context=context, domain_id=DOMAIN + 1)
+    node = rclpy.create_node("orchestrator_stub", context=context)
+    goals = []
+
+    def execute(handle):  # what the orchestrator does with a supervised agent proposal
+        goals.append(handle.request)
+        feedback = ExecuteRecovery.Feedback(
+            execution_id="x-1", state=ExecuteRecovery.Feedback.STATE_PENDING_APPROVAL, message="waiting"
+        )
+        handle.publish_feedback(feedback)
+        time.sleep(0.5)
+        handle.succeed()
+        return ExecuteRecovery.Result(
+            execution_id="x-1", outcome=ExecuteRecovery.Result.OUTCOME_REJECTED, reason="rejected by bob"
+        )
+
+    ActionServer(node, ExecuteRecovery, "/jarvis/recovery/execute", execute)
+    executor = rclpy.executors.MultiThreadedExecutor(context=context)
+    executor.add_node(node)
+    spinner = threading.Thread(target=executor.spin, daemon=True)
+    spinner.start()
+    agent = RosAgent(node_name="agent_test", domain_id=DOMAIN + 1)
+    try:
+        got = agent.submit(
+            "restart-lifecycle-node",
+            {"node": "/demo/scan_relay", "component": "lidar"},
+            rationale="the relay hangs (insight i-1)",
+            confidence=0.8,
+            correlation_id="inc-1",
+            causation_id="e-1",
+        )
+        assert (got.execution_id, got.state, got.reason) == ("x-1", "PENDING_APPROVAL", "waiting")
+        (goal,) = goals
+        assert goal.requester_type == ExecuteRecovery.Goal.REQUESTER_AGENT
+        assert goal.requester_id == "/jarvis/agent_test"
+        assert (goal.plan_id, goal.rationale, goal.correlation_id, goal.causation_id) == (
+            "restart-lifecycle-node",
+            "the relay hangs (insight i-1)",
+            "inc-1",
+            "e-1",
+        )
+        assert goal.confidence == pytest.approx(0.8) and not goal.dry_run
+        assert {a.key: a.string_value for a in goal.args} == {
+            "node": "/demo/scan_relay",
+            "component": "lidar",
+        }
+    finally:
+        agent.close()
+        executor.shutdown()
+        node.destroy_node()
+        context.try_shutdown()
+
+    lonely = RosAgent(node_name="agent_alone", domain_id=DOMAIN + 2)
+    try:
+        got = lonely.submit("p", {}, rationale="r", confidence=0.9, timeout_s=0.5)
+        assert (got.execution_id, got.state) == ("", "UNAVAILABLE")
+    finally:
+        lonely.close()

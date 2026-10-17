@@ -475,3 +475,17 @@ export function insightOf(e: JarvisEvent): Insight | null {
 export function insightConfidence(i: Insight): number {
   return Math.max(0, ...i.hypotheses.map((h) => h.confidence));
 }
+
+/** Who answered, and what the model cost: "openrouter/x/y · 12.4k tokens · $0.0042". */
+export function analystLabel(i: Insight): string {
+  if (i.analyst === "heuristic") {
+    return i.model ? `heuristic analyst (${i.model.name} could not answer)` : "heuristic analyst (no model)";
+  }
+  if (!i.model) return "model";
+  const tokens = (i.model.input_tokens + i.model.output_tokens) / 1000;
+  const parts = [i.model.name, `${tokens.toFixed(1)}k tokens`];
+  if (i.model.cost_usd > 0) {
+    parts.push(`$${i.model.cost_usd.toFixed(i.model.cost_usd < 0.01 ? 4 : 2)}`);
+  }
+  return parts.join(" · ");
+}

@@ -84,6 +84,41 @@ const INSIGHT_EVENT = {
   },
 };
 
+// What a model-backed agent at autonomy supervised publishes: a proposal waiting for an operator.
+const PROPOSING_INSIGHT = {
+  ...INSIGHT_EVENT,
+  id: "ins-2",
+  payload: {
+    ...INSIGHT_EVENT.payload,
+    insight_id: "y",
+    title: "The relay hangs; a restart should clear it",
+    recommendations: [],
+    proposals: ["x-9"],
+    degraded: false,
+    analyst: "llm",
+    model: {
+      provider: "openrouter",
+      name: "openrouter/a/b",
+      input_tokens: 9000,
+      output_tokens: 600,
+      cost_usd: 0.02,
+    },
+  },
+};
+const PROPOSED = {
+  execution_id: "x-9",
+  plan_id: "restart-lifecycle-node",
+  args: { node: "/demo/scan_relay", component: "lidar" },
+  requester: { type: "AGENT", id: "/jarvis/agent" },
+  rationale: "The relay hangs again (insight y)",
+  confidence: 0.8,
+  dry_run: false,
+  state: "PENDING_APPROVAL",
+  gates: [],
+  steps: [],
+  created: "2026-10-17T09:02:00Z",
+};
+
 function api(role: "viewer" | "operator") {
   const calls: { method: string; path: string; body: unknown }[] = [];
   fetchMock.mockImplementation(async (input: Request) => {
@@ -108,7 +143,13 @@ function api(role: "viewer" | "operator") {
       case "/api/v1/incidents":
         return json({ incidents: [] });
       case "/api/v1/insights":
-        return json({ insights: url.searchParams.get("limit") === "50" ? [INSIGHT_EVENT] : [] });
+        return json({
+          insights: url.searchParams.get("limit") === "50" ? [PROPOSING_INSIGHT, INSIGHT_EVENT] : [],
+        });
+      case "/api/v1/recoveries/x-9":
+        return json({ execution: PROPOSED, history: null });
+      case "/api/v1/recoveries/x-9:reject":
+        return json({ success: true, message: "rejected", data: {} });
       case "/api/v1/plans":
         return json({ mode: "ENABLED", plans: [] });
       case "/api/v1/faults/f-estop:ack":
@@ -186,12 +227,27 @@ describe("dashboard", () => {
   it("shows the agent's insights, with a way to act on its advice", async () => {
     api("operator");
     renderApp("/agent");
-    const card = await screen.findByTestId("insight-card");
-    expect(within(card).getByText(/did not fix it/)).toBeInTheDocument();
+    const card = (await screen.findAllByTestId("insight-card")).find((c) =>
+      within(c).queryByText(/did not fix it/),
+    )!;
     expect(within(card).getByText("The lidar itself stopped")).toBeInTheDocument();
     expect(within(card).getByText("0.55")).toBeInTheDocument();
     expect(within(card).getByRole("button", { name: "Run restart-lifecycle-node" })).toBeInTheDocument();
     expect(within(card).getByText(/heuristic analyst/)).toBeInTheDocument();
+  });
+
+  it("shows the agent's proposals, and lets an operator decide", async () => {
+    const calls = api("operator");
+    renderApp("/agent");
+    const proposal = await screen.findByTestId("insight-proposal");
+    const card = proposal.closest("[data-testid=insight-card]") as HTMLElement;
+    expect(within(card).getByText(/openrouter\/a\/b · 9.6k tokens · \$0.02/)).toBeInTheDocument();
+    expect(await within(proposal).findByText("restart-lifecycle-node")).toBeInTheDocument();
+    await within(proposal).findByText(/pending approval/);
+    const user = userEvent.setup();
+    await user.click(within(proposal).getByRole("button", { name: "Reject" }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Reject" }));
+    await waitFor(() => expect(calls.some((c) => c.path === "/api/v1/recoveries/x-9:reject")).toBe(true));
   });
 
   it("hides commands from viewers", async () => {

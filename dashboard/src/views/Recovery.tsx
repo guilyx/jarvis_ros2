@@ -1,8 +1,9 @@
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { Check, CircleDashed, Loader2, X } from "lucide-react";
-import { useCancel, useDecide, useRecoveries, useRecovery } from "@/api/queries";
+import { useCancel, useRecoveries, useRecovery } from "@/api/queries";
 import type { Execution, Step } from "@/api/types";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { DecideButtons } from "@/components/DecideButtons";
 import {
   Empty,
   ErrorNote,
@@ -71,7 +72,6 @@ function requester(x: Execution) {
 }
 
 function PendingCard({ x }: { x: Execution }) {
-  const decide = useDecide();
   const can = useCan();
   return (
     <Card className="ring-amber-500/30" data-testid="pending-execution">
@@ -93,30 +93,14 @@ function PendingCard({ x }: { x: Execution }) {
             </span>
           </div>
           {can("operator") ? (
-            <div className="flex gap-2">
-              <ConfirmDialog
-                trigger={<Button size="sm">Reject</Button>}
-                title={`Reject ${x.plan_id}`}
-                confirm="Reject"
-                onConfirm={(note) => decide.mutateAsync({ id: x.execution_id, approve: false, note })}
-              />
-              <ConfirmDialog
-                trigger={
-                  <Button size="sm" variant="default">
-                    Approve
-                  </Button>
-                }
-                title={`Approve ${x.plan_id}`}
-                description={`It runs right away, with these arguments: ${
-                  Object.entries(x.args)
-                    .map(([k, v]) => `${k}=${v}`)
-                    .join(", ") || "none"
-                }.`}
-                confirm="Approve"
-                requireNote
-                onConfirm={(note) => decide.mutateAsync({ id: x.execution_id, approve: true, note })}
-              />
-            </div>
+            <DecideButtons
+              x={x}
+              description={`It runs right away, with these arguments: ${
+                Object.entries(x.args)
+                  .map(([k, v]) => `${k}=${v}`)
+                  .join(", ") || "none"
+              }.`}
+            />
           ) : null}
         </div>
         {x.rationale ? <p className="text-sm">Rationale: {x.rationale}</p> : null}

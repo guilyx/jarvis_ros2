@@ -180,3 +180,55 @@ def test_stamps():
     assert ns("2026-10-17T09:14:03.120456789Z") % 1_000_000_000 == 120456789
     assert ns("2026-10-17T09:14:03Z") == ns("2026-10-17T09:14:03.000000000+00:00")
     assert ns("not a stamp") is None
+
+
+def test_the_stream_catches_up_then_resumes():
+    """No seq yet: catch_up says where to start (and is retried while the gateway is not up);
+    after a disconnect, the stream resumes from the last seq it gave."""
+    httpx = pytest.importorskip("httpx")
+    pytest.importorskip("websockets")
+    from jarvis_agent.adapters.gateway import stream
+
+    sent, answers = [], iter([httpx.ConnectError("not up"), "41"])
+
+    def catch_up():
+        a = next(answers)
+        if isinstance(a, Exception):
+            raise a
+        return a
+
+    sessions = iter(
+        [
+            [{"type": "event", "data": {"seq": "42"}}, {"type": "backfill_done", "seq": "42"}],
+            [{"type": "event", "data": {"seq": "43"}}],
+        ]
+    )
+
+    class Socket:
+        def __init__(self, messages):
+            self.messages = messages
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def send(self, text):
+            sent.append(json.loads(text))
+
+        def __aiter__(self):
+            async def gen():
+                for m in self.messages:
+                    yield json.dumps(m)
+
+            return gen()
+
+    async def take(n):
+        events = stream(
+            "http://gw", connect=lambda url: Socket(next(sessions)), backoff_s=(0,), catch_up=catch_up
+        )
+        return [(await anext(events))["seq"] for _ in range(n)]
+
+    assert asyncio.run(take(2)) == ["42", "43"]
+    assert sent == [{"op": "subscribe", "since_seq": "41"}, {"op": "subscribe", "since_seq": "42"}]

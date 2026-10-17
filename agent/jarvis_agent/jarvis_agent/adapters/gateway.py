@@ -28,17 +28,33 @@ class GatewayQuery:
     def incident(self, incident_id):
         return self._get(f"/incidents/{incident_id}")
 
-    def events(self, since=None, until=None, min_severity=None, component="", kinds=(), limit=1000):
+    def events(
+        self,
+        since=None,
+        until=None,
+        min_severity=None,
+        component="",
+        kinds=(),
+        limit=1000,
+        codes=(),
+        correlation_id="",
+    ):
         page = self._get(
             "/events",
             **{"from": since, "to": until},
             min_severity=min_severity,
             component=component,
             kind=list(kinds),
+            code=list(codes),
+            correlation_id=correlation_id,
             limit=min(limit, 1000),
             order="asc",
         )
         return (page or {}).get("events", [])
+
+    def event(self, event_id):
+        found = self._get(f"/events/{event_id}")
+        return (found or {}).get("event") if found else None
 
     def active_faults(self):
         return (self._get("/faults") or {}).get("faults", [])
@@ -52,10 +68,23 @@ class GatewayQuery:
     def plans(self):
         return (self._get("/plans") or {}).get("plans", [])
 
+    def rule(self, rule_id):
+        return self._get(f"/rules/{rule_id}")
 
-async def stream(base_url, token="", since=None, connect=None, backoff_s=(1, 2, 5, 10)):
-    """Live events, in seq order, forever: reconnects and resumes from the last seq seen."""
+    def seq_before(self, since):
+        """The since_seq that resumes the stream at the first event from `since` (ISO 8601) on, or
+        None when nothing happened since then."""
+        found = self.events(since=since, limit=1)
+        return str(int(found[0]["seq"]) - 1) if found else None
+
+
+async def stream(base_url, token="", since=None, connect=None, backoff_s=(1, 2, 5, 10), catch_up=None):
+    """Live events, in seq order, forever: reconnects and resumes from the last seq seen.
+
+    Without a seq yet, `catch_up()` (called until the first connection) says where to start: what
+    happened while the agent was starting, or the gateway was not up yet, is not missed."""
     import websockets
+    from websockets.exceptions import WebSocketException
 
     url = base_url.rstrip("/").replace("http://", "ws://").replace("https://", "wss://") + "/api/v1/stream"
     if token:
@@ -64,6 +93,8 @@ async def stream(base_url, token="", since=None, connect=None, backoff_s=(1, 2, 
     failures = 0
     while True:
         try:
+            if since is None and catch_up is not None:
+                since = await asyncio.to_thread(catch_up)
             async with connect(url) as ws:
                 await ws.send(json.dumps({"op": "subscribe", **({"since_seq": since} if since else {})}))
                 failures = 0
@@ -74,7 +105,7 @@ async def stream(base_url, token="", since=None, connect=None, backoff_s=(1, 2, 
                         yield message["data"]
                     elif message.get("type") == "backfill_done" and since is None:
                         since = message["seq"]
-        except (OSError, TimeoutError, websockets.ConnectionClosed, websockets.InvalidStatus):
-            pass
+        except (OSError, TimeoutError, WebSocketException, httpx.HTTPError):
+            pass  # not up yet, or gone: try again
         await asyncio.sleep(backoff_s[min(failures, len(backoff_s) - 1)])
         failures += 1

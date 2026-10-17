@@ -40,6 +40,8 @@ RUN source "/opt/ros/${ROS_DISTRO}/setup.bash" \
 
 FROM ros:${ROS_DISTRO}-ros-core AS runtime
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# The agent's model client (LiteLLM, hash-locked): JARVIS_LLM=0 leaves it out (heuristic analyst only).
+ARG JARVIS_LLM=1
 COPY --from=build /ws/src/jarvis_ros2/core/jarvis_core/package.xml /tmp/manifests/core/package.xml
 COPY --from=build /ws/src/jarvis_ros2/ros /tmp/manifests/ros
 COPY --from=build /ws/src/jarvis_ros2/lake /tmp/manifests/lake
@@ -54,6 +56,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3-rosdep 
          -r /tmp/manifests/lake/jarvis_lake/requirements.txt \
          -r /tmp/manifests/gateway/jarvis_gateway/requirements.txt \
          -r /tmp/manifests/agent/jarvis_agent/requirements.txt \
+    && if [ "${JARVIS_LLM}" = 1 ]; then \
+         pip3 install --no-cache-dir --break-system-packages --ignore-installed --require-hashes \
+           -r /tmp/manifests/agent/jarvis_agent/requirements-llm.txt; fi \
     && rm -rf /var/lib/apt/lists/* /tmp/manifests
 COPY --from=build /ws/install /opt/jarvis
 # The gateway serves it from there (no Node.js on the robot).

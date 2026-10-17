@@ -15,8 +15,10 @@ The core is ROS-agnostic; ROS 2 is the communication layer.
 manages faults, restarts what hangs on its own, escalates to a human when that doesn't work, and
 replays recordings to check rule changes. **M3 (history, analytics and the dashboard) is in**: a web
 console over the gateway's API and live stream, with Parquet history behind it. **M4 (the agent) has
-started**: it explains incidents and failed recoveries from the event stream, offline, with the
-evidence behind each claim; a model comes next ([roadmap](docs/design/09-roadmap.md)). The design
+started**: it explains incidents and failed recoveries from the event stream, with the evidence
+behind each claim, offline or with any model through LiteLLM, and can propose recoveries that go
+through the same gates as everyone's (an operator approves them by default); asking it questions
+comes next ([roadmap](docs/design/09-roadmap.md)). The design
 package starts at
 [`docs/design/README.md`](docs/design/README.md).
 
@@ -191,14 +193,21 @@ ERROR  sensor.scan.stale on lidar: restart-lifecycle-node did not fix it
 ```
 
 Insights show up in the dashboard (Agent, the incident's timeline), with a **Run** button on recovery
-advice: the agent advises, a human runs it. For now the analyst is deterministic (no model, nothing
+advice: the agent advises, a human runs it. Without a model the analyst is deterministic (nothing
 leaves the robot): it reasons from the event stream (root cause vs. muted symptoms, what preceded
 it, how recoveries went, which plan fixed this code before) and every claim cites real event ids.
-A model-backed analyst (LiteLLM, any provider or a local model) comes next, behind the same checks.
+
+With a model (any LiteLLM model string: OpenRouter, a direct provider, or Ollama / vLLM on the LAN),
+the agent investigates with read-only tools and must submit a schema-checked insight; evidence it
+was never shown is dropped, budgets cap the spend, and the heuristic analyst answers whenever the
+model cannot. At autonomy `supervised` (`agent.yaml`), the model may also propose a recovery: it goes
+to the orchestrator as an AGENT request and waits for an operator's approval on the insight's card.
+In Docker: `JARVIS_AGENT_MODEL=openrouter/<vendor>/<model> OPENROUTER_API_KEY=... ./demo`.
 
 ```bash
 ros2 run jarvis_agent jarvis-agent analyze <incident-id>        # explain one incident, now
 ros2 run jarvis_agent jarvis-agent analyze <id> --replay events.jsonl   # from a recording, no robot
+ros2 run jarvis_agent jarvis-agent --model ollama/<model> analyze <id>  # with a model
 ```
 
 ## API and live stream
@@ -239,7 +248,7 @@ it). Tokens give names and roles (viewer, operator, admin) in
 | [`lake/jarvis_lake`](lake/jarvis_lake) | Recordings as Parquet + DuckDB: history, KPIs, analytics, retention (runs without ROS) |
 | [`gateway/jarvis_gateway`](gateway/jarvis_gateway) | REST API, gap-free WebSocket stream, attributed commands, webhooks, Prometheus metrics |
 | [`dashboard`](dashboard) | The web console (React + TypeScript), served by the gateway |
-| [`agent/jarvis_agent`](agent/jarvis_agent) | Explains incidents and failed recoveries: triage, evidence-backed insights, recovery advice |
+| [`agent/jarvis_agent`](agent/jarvis_agent) | Explains incidents and failed recoveries: triage, a model's tool loop (LiteLLM) or a heuristic analyst, evidence-checked insights, recovery advice |
 | [`schemas`](schemas) | JSON Schema contracts (canonical) |
 
 ## Design

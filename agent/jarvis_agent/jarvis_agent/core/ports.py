@@ -6,13 +6,16 @@ recorded events (adapters/replay.py, for tests and evals). Everything is the sch
     incident(id)          {incident_id, title, state, component, opened_at, ..., timeline: [Event],
                            executions: [{execution_id, plan, outcome, ...}], faults: [episode]}
     events(...)           [Event], oldest first
+    event(id)             Event | None
     active_faults()       [Fault]
     fault_history(code)   [episode]: {fault_id, code, component, first_seen, confirmed_at, cleared_at,
                            incident_id, last_state, muted}
     recoveries()          [{execution_id, plan, requester, outcome, incident_id, ...}], newest first
     plans()               [Plan]: {id, description, params, allowed_requesters, agent_policy, ...}
+    rule(id)              {rule, fires, ...} | None
 """
 
+import dataclasses
 from typing import Protocol
 
 
@@ -27,7 +30,11 @@ class EventQuery(Protocol):
         component: str = "",
         kinds: tuple = (),
         limit: int = 1000,
+        codes: tuple = (),
+        correlation_id: str = "",
     ) -> list[dict]: ...
+
+    def event(self, event_id: str) -> dict | None: ...
 
     def active_faults(self) -> list[dict]: ...
 
@@ -37,6 +44,32 @@ class EventQuery(Protocol):
 
     def plans(self) -> list[dict]: ...
 
+    def rule(self, rule_id: str) -> dict | None: ...
+
 
 class InsightSink(Protocol):
     def publish(self, insight, correlation_id: str = "", causation_id: str = "") -> None: ...
+
+
+@dataclasses.dataclass
+class Submitted:
+    """What the orchestrator said when it took a proposal (it may run long after)."""
+
+    execution_id: str
+    state: str  # PENDING_APPROVAL, QUEUED, RUNNING, or an outcome: SUCCEEDED, REJECTED, ...
+    reason: str = ""
+
+
+class RecoveryClient(Protocol):
+    """The one gate to recovery (ExecuteRecovery), as requester AGENT: the orchestrator applies the
+    deployment's agent autonomy, the plan's agent_policy, the confidence threshold and every gate."""
+
+    def submit(
+        self,
+        plan_id: str,
+        args: dict,
+        rationale: str,
+        confidence: float,
+        correlation_id: str = "",
+        causation_id: str = "",
+    ) -> Submitted: ...

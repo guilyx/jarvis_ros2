@@ -18,6 +18,17 @@ MINUTE = 60 * 1_000_000_000
 
 
 @dataclasses.dataclass
+class Proposal:
+    """A plan the analyst wants run (propose_recovery): the agent routes it, the gates decide."""
+
+    plan_id: str
+    args: dict
+    rationale: str
+    confidence: float
+    evidence: list
+
+
+@dataclasses.dataclass
 class Window:
     trigger: Trigger
     events: list  # oldest first, deduplicated by id
@@ -30,10 +41,13 @@ class Window:
     recoveries: list = dataclasses.field(default_factory=list)  # every past recovery (for success rates)
     plans: list = dataclasses.field(default_factory=list)
     question: str = ""
+    seen: set = dataclasses.field(default_factory=set)  # event ids the analyst's tools showed it
+    proposals: list = dataclasses.field(default_factory=list)  # [Proposal] the analyst made
 
     @property
     def ids(self):
-        return {e["id"] for e in self.events}
+        """What an analyst may cite: the window's events and what its tools showed it."""
+        return {e["id"] for e in self.events} | self.seen
 
     @property
     def correlation_id(self):

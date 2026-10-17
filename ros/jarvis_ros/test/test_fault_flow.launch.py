@@ -9,6 +9,7 @@ operator services, rejection notices, recent-event queries and state persistence
 import json
 import pathlib
 import tempfile
+import threading
 import time
 import unittest
 
@@ -47,7 +48,12 @@ def generate_test_description():
                 package="jarvis_ros",
                 plugin="jarvis_ros::FaultManagerNode",
                 parameters=[
-                    {**common, "catalog_path": str(HERE / "data" / "faults.yaml"), "blackbox_wait_s": 1.0}
+                    {
+                        **common,
+                        "catalog_path": str(HERE / "data" / "faults.yaml"),
+                        "blackbox_wait_s": 1.0,
+                        "blackbox_timeout_s": 2.0,
+                    }
                 ],
                 extra_arguments=[{"use_intra_process_comms": True}],
             ),
@@ -244,10 +250,56 @@ class TestFaultFlow(unittest.TestCase):
         )
         self.assertEqual(self.wait_for(outcome(first), what="capture"), "jarvis.blackbox.captured")
 
-        # Without a recorder, the capture gives up after blackbox_wait_s and says so.
+        # Without a recorder, the capture gives up and says so: after blackbox_wait_s, or, when the
+        # graph still lists the destroyed service, after blackbox_timeout_s without an answer.
         self.node.destroy_service(service)
         second = raise_and_get_id("no_recorder")
         self.assertEqual(self.wait_for(outcome(second), what="give up"), "jarvis.blackbox.unavailable")
+
+    def test_7_black_box_capture_gives_up_on_a_recorder_that_never_answers(self):
+        """The recorder is there but hangs: the capture is not left pending forever, it gives up
+        after blackbox_timeout_s (2 s here) and says so."""
+        release = threading.Event()
+        mute = rclpy.create_node("mute_recorder")
+        mute.create_service(Snapshot, "/jarvis/blackbox/snapshot", lambda req, res: release.wait(30) and res)
+        executor = rclpy.executors.SingleThreadedExecutor()
+        executor.add_node(mute)
+        spinner = threading.Thread(target=executor.spin, daemon=True)
+        spinner.start()
+        try:
+            client = self.node.create_client(Snapshot, "/jarvis/blackbox/snapshot")
+            self.assertTrue(client.wait_for_service(timeout_sec=5.0))
+            self.send(Event.KIND_FAULT_RAISE, "demo.capture.me", component="mute_recorder")
+            fault_id = self.wait_for(
+                lambda: next(
+                    (
+                        f.fault_id
+                        for f in (self.faults.faults if self.faults else [])
+                        if f.source.component == "mute_recorder"
+                    ),
+                    None,
+                ),
+                what="fault on mute_recorder",
+            )
+
+            def gave_up():
+                return next(
+                    (
+                        e
+                        for e in self.events
+                        if e.code.startswith("jarvis.blackbox.")
+                        and any(a.key == "fault_id" and a.string_value == fault_id for a in e.attrs)
+                    ),
+                    None,
+                )
+
+            e = self.wait_for(gave_up, what="the capture to give up on the mute recorder")
+            self.assertEqual(e.code, "jarvis.blackbox.unavailable")
+            self.assertTrue(e.message.startswith("No answer from the black-box recorder"), e.message)
+        finally:
+            release.set()
+            executor.shutdown()
+            mute.destroy_node()
 
 
 @launch_testing.post_shutdown_test()

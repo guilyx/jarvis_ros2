@@ -1,15 +1,23 @@
 # Copyright 2026 Erwin L.
 # SPDX-License-Identifier: Apache-2.0
-"""One analysis: window → triage → analyst → harness checks → (proposals) → sink."""
+"""One analysis: window → triage → analyst → harness checks → proposals → sink.
+
+A proposal (the model's propose_recovery) goes to the recovery gates when the autonomy policy says
+supervised or autonomous and a recovery client is there (the ROS node); the orchestrator then
+applies its own agent autonomy, the plan's agent_policy and the confidence threshold, and every
+other gate. Otherwise it stays advice: a RECOVER recommendation an operator can run.
+"""
 
 import time
 
-from jarvis_agent.core.checks import check
+from jarvis_agent.core.checks import check, validate_args
 from jarvis_agent.core.policy import AutonomyPolicy
 from jarvis_agent.core.triage import triage
 from jarvis_agent.core.windows import WindowManager
 from jarvis_agent.llm.heuristic import HeuristicAnalyst
-from jarvis_agent.model import Trigger, TriggerType
+from jarvis_agent.model import Recommendation, Trigger, TriggerType
+
+MAX_PROPOSALS = 3
 
 
 class Agent:
@@ -22,6 +30,7 @@ class Agent:
         redact=(),
         windows=None,
         clock=time.time_ns,
+        recovery=None,
     ):
         self.query = query
         self.sink = sink
@@ -30,6 +39,7 @@ class Agent:
         self.redact = tuple(redact)
         self.windows = windows or WindowManager(query)
         self.clock = clock
+        self.recovery = recovery  # RecoveryClient, or None: proposals stay advice
 
     def window(self, trigger, question=""):
         if trigger.type in (
@@ -49,17 +59,54 @@ class Agent:
             return None
         result = triage(window, self.redact)
         insight = check(self.analyst.analyze(window, result), window.ids, window.plans)
-        plans = {p["id"]: p for p in window.plans}
-        for r in insight.recommendations:
-            if r.kind == "RECOVER":
-                mode = self.policy.decide(plans.get(r.plan_id), r.confidence or 0.0, insight.analyst)
-                if mode != "advise" and mode != "observe":
-                    insight.flags.append(
-                        f"{r.plan_id}: {mode} proposals arrive with milestone 4.3; advised only"
-                    )
+        self._route(window, insight, causation_id)
         if self.sink is not None:
             self.sink.publish(insight, correlation_id=window.correlation_id, causation_id=causation_id)
         return insight
+
+    def _route(self, window, insight, causation_id):
+        plans = {p["id"]: p for p in window.plans}
+        flags = []
+        for p in sorted(window.proposals, key=lambda p: p.confidence, reverse=True)[:MAX_PROPOSALS]:
+            plan = plans.get(p.plan_id)
+            if plan is None or validate_args(plan, p.args):
+                flags.append(f"dropped the proposal of {p.plan_id}: unknown plan or bad arguments")
+                continue
+            if not [i for i in p.evidence if i in window.ids]:
+                flags.append(f"dropped the proposal of {p.plan_id}: no evidence")
+                continue
+            mode = self.policy.decide(plan, p.confidence, insight.analyst)
+            if mode in ("supervised", "autonomous") and self.recovery is not None:
+                got = self.recovery.submit(
+                    p.plan_id,
+                    p.args,
+                    rationale=f"{p.rationale} (insight {insight.insight_id})".strip(),
+                    confidence=p.confidence,
+                    correlation_id=window.correlation_id,
+                    causation_id=causation_id,
+                )
+                if got.execution_id:
+                    insight.proposals.append(got.execution_id)
+                reason = f": {got.reason}" if got.reason else ""
+                flags.append(f"proposed {p.plan_id} ({mode}): {got.state}{reason}")
+                continue
+            if mode == "observe":
+                flags.append(f"dropped the proposal of {p.plan_id}: autonomy observe")
+                continue
+            advice = [r for r in insight.recommendations if r.kind == "RECOVER" and r.plan_id == p.plan_id]
+            if not advice and len(insight.recommendations) < 10:
+                insight.recommendations.append(
+                    Recommendation(
+                        kind="RECOVER",
+                        text=p.rationale or f"Run {p.plan_id}",
+                        plan_id=p.plan_id,
+                        args=p.args,
+                        confidence=p.confidence,
+                    )
+                )
+            why = f"autonomy {mode}" if mode == "advise" else "no recovery client here"
+            flags.append(f"advised {p.plan_id}, not proposed ({why})")
+        insight.flags = list(dict.fromkeys(insight.flags + flags))
 
     def explain(self, incident_id):
         return self.analyze(Trigger(type=TriggerType.ON_DEMAND, ref=incident_id))

@@ -89,6 +89,41 @@ jobs:
             -r lake/jarvis_lake/requirements.txt -r gateway/jarvis_gateway/requirements.txt
       - run: PYTHONPATH=lake/jarvis_lake:gateway/jarvis_gateway pytest -q gateway/jarvis_gateway/test
 
+  dashboard:
+    name: Dashboard (lint, unit, e2e on the fake)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          pip install numpy==1.26.4 pyyaml \
+            -r ../lake/jarvis_lake/requirements.txt -r ../gateway/jarvis_gateway/requirements.txt
+      - run: npm ci
+      - run: npm run lint
+      - name: The typed client matches the gateway's API
+        run: npm run gen:api && git diff --exit-code src/api/schema.d.ts
+      - run: npm run build
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+        env:
+          CI: "1"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: dashboard-e2e-fake
+          path: dashboard/playwright-report
+
   ros:
     name: ROS 2 Jazzy (build + test)
     runs-on: ubuntu-24.04
@@ -140,6 +175,27 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Smoke test (the commands from the README)
         run: docker/demo/smoke_test.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - name: Dashboard e2e against a fresh demo (e-stop latched)
+        run: |
+          docker compose down && sudo rm -rf demo-data
+          docker compose up -d --no-build && ./demo wait
+          ./demo inject estop
+          cd dashboard && npm ci && npx playwright install --with-deps chromium
+          E2E_BASE_URL=http://localhost:8080 E2E_VIDEO=1 npm run e2e
+        env:
+          CI: "1"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dashboard-e2e-demo
+          path: |
+            dashboard/playwright-report
+            dashboard/test-results
       - name: Stop the demo
         if: always()
         run: docker compose down

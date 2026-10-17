@@ -105,10 +105,10 @@ Gap-free resume protocol: see [04-data-flow §7](04-data-flow.md#7-dashboard-liv
 | Data | TanStack Query (server state), typed client generated from OpenAPI (`openapi-typescript`) |
 | Tables | TanStack Table + virtualization (100 k rows) |
 | Routing | TanStack Router (typed routes, URL = filter state, so views are shareable) |
-| UI | Tailwind CSS + shadcn/ui (Radix primitives, accessible) |
-| Charts | Apache ECharts (sparklines, histograms, timeline/Gantt) |
+| UI | Tailwind CSS + shadcn-style components on Radix primitives (accessible) |
+| Charts | Apache ECharts (sparklines, histograms, timeline/Gantt, heatmap), tree-shaken |
 | Live | Single WS connection, resume backed by the event hub and the lake |
-| Tests | Vitest + Testing Library; Playwright e2e against `jarvis_demo` |
+| Tests | Vitest + Testing Library; Playwright e2e against the gateway's fake and the Docker demo (CI) |
 | Delivery | Static bundle served by the gateway; dark mode default (ops console), light mode supported |
 
 ### Navigation
@@ -218,6 +218,12 @@ Running
 └───────────────────────────────┴─────────┴─────────┴────────────┴──────────────┴────────────────┘
 Detail: YAML (read-only v1, editor v2) · match history · backtest results
 ```
+
+### Analytics (medkit-style health)
+
+Window 1 h / 6 h / 24 h / 7 d: health per component (worst severity, faults, open, MTTR, MTBF, last
+fault), Pareto of fault codes (episodes and cumulative share), a heatmap of faults per component and
+time, flapping faults (3+ confirm-clear cycles), recovery effectiveness per plan and rule fires.
 
 ### View 7 — Agent
 

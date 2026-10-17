@@ -76,6 +76,7 @@ class Gateway:
                     events, next_seq, _ = await self.port.query_events(after_seq=after, limit=1000)
                     for e in events:
                         self.state.recent.add(e)
+                        self.state.robot = self.state.robot or (e.get("source") or {}).get("robot", "")
                     if not next_seq:
                         break
                     after = next_seq
@@ -167,6 +168,7 @@ def create_app(settings, port, notifier=None):
             faults_snapshot=gw.state.faults is not None,
             executions_snapshot=gw.state.executions is not None,
             last_event_age_s=age,
+            robot=gw.state.robot,
             lake=gw.lake_status(),
         )
 
@@ -187,6 +189,7 @@ def create_app(settings, port, notifier=None):
             }
         return {
             "version": __version__,
+            "robot": gw.state.robot,
             "uptime_s": round(time.time() - gw.started_at, 1),
             "connected": gw.port.connected,
             "events_received": gw.state.events_received,

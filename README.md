@@ -13,9 +13,9 @@ The core is ROS-agnostic; ROS 2 is the communication layer.
 
 **M1 (record & manage faults) and M2 (rules & automated recovery) are in**: Jarvis records and
 manages faults, restarts what hangs on its own, escalates to a human when that doesn't work, and
-replays recordings to check rule changes. **M3 is under way**: history and analytics (`jarvis_lake`)
-and the gateway's API and live stream (`jarvis_gateway`) are in; the dashboard is next
-([roadmap](docs/design/09-roadmap.md)). The design package starts at
+replays recordings to check rule changes. **M3 (history, analytics and the dashboard) is in**: a web
+console over the gateway's API and live stream, with Parquet history behind it. Next is M4, the
+agent ([roadmap](docs/design/09-roadmap.md)). The design package starts at
 [`docs/design/README.md`](docs/design/README.md).
 
 ## Try it in Docker
@@ -36,7 +36,9 @@ minute):
 3. A motor driver overheats, a node errors in a loop, the e-stop is pressed: Jarvis debounces,
    correlates, latches and records each one.
 
-Ctrl-C leaves the view; Jarvis keeps running.
+Ctrl-C leaves the view; Jarvis keeps running. **The dashboard is at http://localhost:8080**: live
+events, faults to acknowledge and clear, incident timelines, recoveries to run and approve, the
+kill switch, rules and analytics.
 
 | Command | What it does |
 |---------|--------------|
@@ -147,6 +149,28 @@ A split the recorder never closed (a crash, a power cut) is recovered up to its 
 chunk when Jarvis restarts. Retention deletes recordings only after they are converted (7 days or
 10 GiB of bags, 180 days or 5 GiB of Parquet, 2 GiB of black-box snapshots by default).
 
+## Dashboard
+
+![Overview](docs/media/dashboard-overview.png)
+![An incident's timeline](docs/media/dashboard-incident.png)
+
+A web console for operators, served by the gateway (no Node.js on the robot):
+
+- **Overview**: active faults, open incidents, auto-recovery rate, MTTR, event rate, and what needs a
+  human (approvals, latched faults, escalations) with the buttons to act.
+- **Events**: the live stream, filterable and pausable, with each event's attributes, payload and
+  causal chain.
+- **Faults** and **Incidents**: acknowledge and clear (with a note, in your name); every incident as
+  a timeline of its faults, rule matches, recoveries, operator actions and insights.
+- **Recovery**: run a plan (a form from its parameters), approve or reject, cancel, follow its steps
+  and gates; the kill switch is in the header.
+- **Rules**, **Analytics** (health per component, Pareto of fault codes, when things break, flapping
+  faults, plan effectiveness) and **System** (lifecycle states, lake, webhooks, recordings to
+  download, the audit trail).
+
+Who you are comes from a token (top right): viewers read, operators act on faults and recoveries,
+admins change modes and rules. See [`dashboard/`](dashboard) to develop it.
+
 ## API and live stream
 
 The gateway (`jarvis_gateway`) serves Jarvis over HTTP for the dashboard and your tools: events,
@@ -184,6 +208,7 @@ it). Tokens give names and roles (viewer, operator, admin) in
 | [`ros/jarvis_demo`](ros/jarvis_demo) | Lidar relay, fault injector, demo launch files |
 | [`lake/jarvis_lake`](lake/jarvis_lake) | Recordings as Parquet + DuckDB: history, KPIs, analytics, retention (runs without ROS) |
 | [`gateway/jarvis_gateway`](gateway/jarvis_gateway) | REST API, gap-free WebSocket stream, attributed commands, webhooks, Prometheus metrics |
+| [`dashboard`](dashboard) | The web console (React + TypeScript), served by the gateway |
 | [`schemas`](schemas) | JSON Schema contracts (canonical) |
 
 ## Design

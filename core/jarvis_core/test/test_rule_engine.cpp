@@ -217,6 +217,25 @@ TEST_F(EngineTest, EmitIncidentAndAgentActionsProduceTheirEvents)
     << "nothing to escalate without an incident";
 }
 
+TEST_F(EngineTest, OpeningAnIncidentSaysWhatWasMatched)
+{
+  load(R"(  - id: opener
+    when: { event: { kind: FAULT_STATE, code: drive.motor.hot } }
+    then: [ { incident: { open: true } } ]
+)");
+  Event e = event(Kind::FaultState, "drive.motor.hot", kT0, "left");
+  e.severity = Severity::Warn;
+  e.attrs["fault_id"] = std::string("fault-7");
+  const auto ev = emitted(feed(e));
+  ASSERT_EQ(ev.size(), 2u);
+  EXPECT_EQ(ev[1].code, "jarvis.incident.open");
+  EXPECT_EQ(ev[1].severity, Severity::Warn);
+  EXPECT_EQ(ev[1].source.component, "left");
+  EXPECT_EQ(*attr_string(ev[1].attrs, "matched_code"), "drive.motor.hot");
+  EXPECT_EQ(*attr_string(ev[1].attrs, "fault_id"), "fault-7");
+  EXPECT_EQ(*attr_string(ev[1].attrs, "rule"), "opener");
+}
+
 // -- guards ---------------------------------------------------------------------------------------
 
 TEST_F(EngineTest, GuardsReadActiveFaultsAndLatestStates)

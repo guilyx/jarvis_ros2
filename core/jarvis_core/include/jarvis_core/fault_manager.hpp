@@ -133,8 +133,9 @@ class FaultManager
 public:
   FaultManager(FaultCatalog catalog, FaultManagerConfig config, std::uint64_t id_seed = 0);
 
-  /// Feed every event from the canonical stream. FAULT_RAISE, FAULT_CLEAR, STATE, RECOVERY and
-  /// `jarvis.incident.escalate` matter; everything else is ignored.
+  /// Feed every event from the canonical stream. FAULT_RAISE, FAULT_CLEAR, STATE, RECOVERY, the
+  /// rules' `jarvis.incident.open` and `jarvis.incident.escalate`, and `jarvis.blackbox.captured`
+  /// matter; everything else is ignored.
   Effects on_event(const Event & event, Timestamp now);
 
   /// Processes every deadline <= now, in time order.
@@ -147,8 +148,10 @@ public:
   OperatorResult clear(
     const std::string & fault_id, const std::string & user, const std::string & reason,
     bool skip_symptoms, Timestamp now);
+  /// A RESOLVED incident, or a live one without faults (a rule opened it on a pattern).
   OperatorResult close_incident(
-    const std::string & incident_id, const std::string & user, Timestamp now);
+    const std::string & incident_id, const std::string & user, const std::string & note,
+    Timestamp now);
 
   void set_catalog(FaultCatalog catalog) { catalog_ = std::move(catalog); }
   const FaultCatalog & catalog() const { return catalog_; }
@@ -168,6 +171,8 @@ private:
 
   Effects on_raise(const Event & e, Timestamp now);
   Effects on_clear(const Event & e, Timestamp now);
+  Effects on_open_request(const Event & e, Timestamp now);
+  Effects on_blackbox_captured(const Event & e);
   Effects on_recovery(const Event & e, Timestamp now);
   void record_state(const Event & e);
 
@@ -182,7 +187,8 @@ private:
     const FaultEpisode & ep, std::optional<FaultState> prev, Timestamp at,
     const std::string & causation, Attrs extra, Effects & fx);
 
-  void open_or_join_incident(FaultEpisode & ep, Timestamp at, Effects & fx);
+  /// `forced`: a rule asked for it, whatever the catalog's incident policy says.
+  void open_or_join_incident(FaultEpisode & ep, Timestamp at, Effects & fx, bool forced = false);
   void transition_incident(
     Incident & inc, IncidentState next, Timestamp at, const std::string & causation,
     const std::string & reason, Effects & fx);

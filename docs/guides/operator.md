@@ -61,8 +61,8 @@ symptoms clear with it.
 
 Open a fault for its detail: when it started and was confirmed, how often it was reported, its
 **freeze frame** (what the reporter attached, and the robot's state when it confirmed), its
-**runbook** (what to check and do, from your team's catalog), its transitions, and the recoveries
-that ran for it.
+**runbook** (what to check and do, from your team's catalog), whether its **black box** was saved
+(the file is under System → Recordings), its transitions, and the recoveries that ran for it.
 
 - **Acknowledge** = "I'm on it". The fault stays open; the bell stops counting it; your name and
   note are recorded.
@@ -84,9 +84,13 @@ their symptoms, the recoveries, the agent's analysis and what people did.
 | `RESOLVED` | All its faults are cleared |
 | `CLOSED` | Done: closed by an operator once resolved, or by itself 24 h later |
 
+A rule can also open an incident on a pattern no single fault shows (twenty warnings in a minute,
+say): it has no fault to resolve it, so an operator closes it, any time, with a note.
+
 The incident page is a timeline: faults and recoveries as bars, then what rules, the agent,
 operators and notifications did, on one time axis (scroll to zoom; click anything for its
-detail). **Ask agent** asks about this incident; **Close** is there once it's resolved.
+detail). **Ask agent** asks about this incident; **Close** is there once it's resolved, with a
+note that goes into the audit trail.
 
 ## 5. Recoveries and approvals
 

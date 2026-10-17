@@ -106,11 +106,16 @@ rules:
     when:
       count: { event: { kind: LOG, code: ros.log.warn }, threshold: 20, within: 1m }
     then:
+      - incident: { open: true }
       - ask_agent: { focus: "Why does {{ partition.source.component }} keep warning?" }
     policy: { cooldown: 15m }
 ```
 
-`ask_agent` starts an analysis (`jarvis.agent.request`); the insight shows up in the dashboard.
+`incident: { open: true }` makes it an incident people see and track, though no single warning is
+a fault: the incident opens on the component (faults that follow on it join it), and an operator
+closes it. Matched on a fault below the incident threshold, it opens that fault's incident
+instead; inside an incident already, it changes nothing. `ask_agent` starts an analysis
+(`jarvis.agent.request`); the insight shows up in the dashboard and on the incident.
 Errors don't need this: the rosout bridge turns sustained `ERROR` logs into `ros.log.error`
 faults on its own (debounced in the catalog: 3 within 10 s).
 

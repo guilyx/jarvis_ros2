@@ -429,7 +429,8 @@ TEST_F(FaultManagerTest, IncidentFollowsRecoveryAndClosesAfterResolution)
   EXPECT_EQ(codes(fx), V{"jarvis.incident.escalated"});
   EXPECT_GE(emitted(fx).front().severity, Severity::Error);
 
-  EXPECT_FALSE(fm_.close_incident(incident, "alice", kT0 + 4).success) << "still has an open fault";
+  EXPECT_FALSE(fm_.close_incident(incident, "alice", "", kT0 + 4).success)
+    << "still has an open fault";
   clear("something.broke", kT0 + 5);
   EXPECT_EQ(fm_.find_incident(incident)->state, IncidentState::Resolved);
 
@@ -469,9 +470,108 @@ TEST_F(FaultManagerTest, OperatorCanCloseAResolvedIncident)
   raise("something.broke", kT0);
   const std::string incident = fm_.faults().front().incident_id;
   clear("something.broke", kT0 + 1);
-  const auto r = fm_.close_incident(incident, "alice", kT0 + 2);
+  const auto r = fm_.close_incident(incident, "alice", "all good", kT0 + 2);
   ASSERT_TRUE(r.success) << r.message;
   EXPECT_EQ(codes(r.effects), (V{"incident.close", "jarvis.incident.closed"}));
+}
+
+TEST_F(FaultManagerTest, TheCloseNoteIsRecorded)
+{
+  raise("something.broke", kT0);
+  const std::string incident = fm_.faults().front().incident_id;
+  clear("something.broke", kT0 + 1);
+  const auto r = fm_.close_incident(incident, "alice", "replaced the cable", kT0 + 2);
+  ASSERT_TRUE(r.success) << r.message;
+  EXPECT_EQ(*attr_string(emitted(r.effects).front().attrs, "note"), "replaced the cable");
+}
+
+static Event open_request(
+  const std::string & component, const std::string & matched, Attributes attrs = {},
+  Severity severity = Severity::Warn)
+{
+  Event e;
+  e.id = "open-" + component + "-" + matched;
+  e.kind = Kind::System;
+  e.code = "jarvis.incident.open";
+  e.severity = severity;
+  e.source.component = component;
+  e.attrs = std::move(attrs);
+  e.attrs["rule"] = std::string("opener");
+  e.attrs["matched_code"] = matched;
+  return e;
+}
+
+TEST_F(FaultManagerTest, ARuleOpensAnIncidentForAFaultBelowTheThreshold)
+{
+  raise("drive.motor.hot", kT0, "left", Severity::Warn);  // uncataloged, WARN: no incident
+  const FaultEpisode warn = only_open();
+  ASSERT_TRUE(warn.incident_id.empty());
+
+  const auto fx =
+    fm_.on_event(open_request("left", "drive.motor.hot", {{"fault_id", warn.fault_id}}), kT0 + 1);
+  EXPECT_EQ(codes(fx), V{"jarvis.incident.opened"});
+  const std::string incident = only_open().incident_id;
+  ASSERT_FALSE(incident.empty()) << "the fault is in it";
+  EXPECT_EQ(fm_.find_incident(incident)->root_fault_id, warn.fault_id);
+
+  EXPECT_TRUE(
+    codes(
+      fm_.on_event(open_request("left", "drive.motor.hot", {{"fault_id", warn.fault_id}}), kT0 + 2))
+      .empty())
+    << "it has one now";
+  clear("drive.motor.hot", kT0 + 3, "left");
+  EXPECT_EQ(fm_.find_incident(incident)->state, IncidentState::Resolved)
+    << "it ends with its fault";
+}
+
+TEST_F(FaultManagerTest, ARuleOpensAnIncidentWithoutAFaultThatAnOperatorCloses)
+{
+  const auto fx = fm_.on_event(open_request("dock", "power.dock"), kT0);
+  EXPECT_EQ(codes(fx), V{"jarvis.incident.opened"});
+  const auto incidents = fm_.incidents();
+  ASSERT_EQ(incidents.size(), 1u);
+  const Incident inc = incidents.front();
+  EXPECT_EQ(inc.title, "power.dock on dock (rule opener)");
+  EXPECT_EQ(inc.state, IncidentState::Open);
+  EXPECT_EQ(emitted(fx).front().correlation_id, inc.incident_id);
+
+  EXPECT_TRUE(codes(fm_.on_event(open_request("dock", "power.dock"), kT0 + 10 * kSecond)).empty())
+    << "one open incident per component, as for faults";
+  raise("power.charger.fault", kT0 + 20 * kSecond, "dock");
+  EXPECT_EQ(only_open().incident_id, inc.incident_id) << "faults that follow join it";
+  clear("power.charger.fault", kT0 + 30 * kSecond, "dock");
+  EXPECT_EQ(fm_.find_incident(inc.incident_id)->state, IncidentState::Resolved);
+
+  const auto other = fm_.on_event(open_request("arm", "arm.stuck"), kT0 + 40 * kSecond);
+  const std::string arm = *attr_string(emitted(other).front().attrs, "incident_id");
+  const auto closed = fm_.close_incident(arm, "bob", "freed it", kT0 + 50 * kSecond);
+  ASSERT_TRUE(closed.success) << "no fault will resolve it: an operator closes it";
+  EXPECT_EQ(codes(closed.effects), (V{"incident.close", "jarvis.incident.closed"}));
+}
+
+TEST_F(FaultManagerTest, AnOpenRequestInsideAnIncidentChangesNothing)
+{
+  raise("something.broke", kT0);
+  const std::string incident = fm_.faults().front().incident_id;
+  Event e = open_request("lidar", "something.broke");
+  e.correlation_id = incident;
+  EXPECT_TRUE(codes(fm_.on_event(e, kT0 + 1)).empty());
+  EXPECT_EQ(fm_.incidents().size(), 1u);
+}
+
+TEST_F(FaultManagerTest, AFaultLinksToItsBlackBoxRecording)
+{
+  raise("ros.topic.stale", kT0);
+  fm_.advance_to(kT0 + 2 * kSecond);  // persists 1 s: confirmed, capture asked
+  const std::string fault_id = only_open().fault_id;
+  Event saved;
+  saved.id = "bb-1";
+  saved.kind = Kind::System;
+  saved.code = "jarvis.blackbox.captured";
+  saved.attrs = {{"fault_id", fault_id}, {"fault_code", std::string("ros.topic.stale")}};
+  const auto fx = fm_.on_event(saved, kT0 + 3 * kSecond);
+  EXPECT_TRUE(has<FaultsChanged>(fx));
+  EXPECT_EQ(only_open().snapshot_ref, "bb-1");
 }
 
 TEST_F(FaultManagerTest, FreezeFrameIncludesLatestStateValues)

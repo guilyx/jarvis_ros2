@@ -94,7 +94,7 @@ guard:
 |--------|---------|--------|
 | `recover` | `{ recover: { plan: restart-lifecycle-node, args: { node: "{{ event.attrs.node }}" } } }` | `ExecuteRecovery` goal (requester `RULE`) |
 | `emit` | `{ emit: { kind: FAULT_RAISE, code: drive.motor.overcurrent_burst, severity: ERROR, message: "…" } }` | Derived event, e.g. a composite fault |
-| `incident` | `{ incident: { open: true } }` / `{ incident: { escalate: true } }` | Open or escalate the incident |
+| `incident` | `{ incident: { open: true } }` / `{ incident: { escalate: true } }` | Open or escalate the incident. `open` inside a live incident changes nothing; on a matched fault below the incident threshold it opens that fault's incident; otherwise it opens one on the event's component that later faults join and an operator closes. `escalate` needs the match to be in an incident |
 | `notify` | `{ notify: { channel: ops, message: "…" } }` | `jarvis.notify` event, delivered by the gateway |
 | `ask_agent` | `{ ask_agent: { focus: "Mechanical binding or tuning?" } }` | `jarvis.agent.request` event |
 

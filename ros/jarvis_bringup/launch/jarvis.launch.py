@@ -249,6 +249,10 @@ def _setup(context):
                     arg["gateway_host"],
                     "--port",
                     arg["gateway_port"],
+                    "--catalog",  # what each fault code means, and its runbook
+                    arg["catalog"],
+                    "--runbooks",  # the runbooks of the codes Jarvis' bridges raise
+                    str(SHARE / "config" / "runbooks"),
                 ],
                 output="screen",
             )

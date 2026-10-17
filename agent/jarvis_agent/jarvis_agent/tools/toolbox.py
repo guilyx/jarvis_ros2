@@ -23,6 +23,7 @@ from jarvis_agent.events import component
 from jarvis_agent.model import SEVERITIES
 
 MAX_RESULT_CHARS = 12_000
+MAX_RUNBOOK_CHARS = 8_000
 MAX_ROWS = 100
 KINDS = [
     "LOG",
@@ -105,6 +106,13 @@ SPECS = [
         {"plan_id": _STR, "limit": _LIMIT},
     ),
     _fn("get_rule", "A rule's definition and its recent matches.", {"rule_id": _STR}, ["rule_id"]),
+    _fn(
+        "get_runbook",
+        "The runbook of a fault code, if its catalog entry has one: what the fault means, what to "
+        "check and what fixes it, as the robot's team wrote it.",
+        {"code": _STR},
+        ["code"],
+    ),
 ]
 NAMES = {s["function"]["name"] for s in SPECS}
 MAX_PROPOSALS = 3
@@ -306,6 +314,15 @@ class Toolbox:
             out["yaml"] = out["yaml"][:4000]
         matches = found.get("matches") or []
         out["matches"] = self._rows(matches[-20:]) if matches and "kind" in matches[0] else matches[-20:]
+        return out
+
+    def _get_runbook(self, a):
+        found = self.query.runbook(_id(a["code"], "a fault code"))
+        if not found:
+            return {"error": f"no runbook for '{a['code']}' in the fault catalog"}
+        out = {"code": a["code"], "runbook": found[:MAX_RUNBOOK_CHARS]}
+        if len(found) > MAX_RUNBOOK_CHARS:
+            out["cut"] = f"the first {MAX_RUNBOOK_CHARS} characters of {len(found)}"
         return out
 
 

@@ -100,6 +100,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/catalog": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Catalog
+     * @description The fault catalog: what each code means, and which have a runbook.
+     */
+    get: operations["catalog_api_v1_catalog_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/events": {
     parameters: {
       query?: never;
@@ -556,6 +576,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/runbooks/{code}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Runbook
+     * @description What to check and do about a fault code (Markdown), from its catalog entry.
+     */
+    get: operations["runbook_api_v1_runbooks__code__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/stats": {
     parameters: {
       query?: never;
@@ -620,6 +660,38 @@ export interface components {
        * @default
        */
       reason: string;
+    };
+    /** Catalog */
+    Catalog: {
+      /** Faults */
+      faults: components["schemas"]["CatalogEntry"][];
+    } & {
+      [key: string]: unknown;
+    };
+    /** CatalogEntry */
+    CatalogEntry: {
+      /** Code */
+      code: string;
+      /**
+       * Description
+       * @default
+       */
+      description: string;
+      /**
+       * Latch
+       * @default false
+       */
+      latch: boolean;
+      /**
+       * Runbook
+       * @description it has a runbook: GET /runbooks/{code}
+       * @default false
+       */
+      runbook: boolean;
+      /** Severity */
+      severity: string;
+    } & {
+      [key: string]: unknown;
     };
     /** Clear */
     Clear: {
@@ -976,6 +1048,15 @@ export interface components {
     } & {
       [key: string]: unknown;
     };
+    /** Runbook */
+    Runbook: {
+      /** Code */
+      code: string;
+      /** Markdown */
+      markdown: string;
+    } & {
+      [key: string]: unknown;
+    };
     /** Source */
     Source: {
       /**
@@ -1221,6 +1302,39 @@ export interface operations {
         };
         content: {
           "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  catalog_api_v1_catalog_get: {
+    parameters: {
+      query?: {
+        token?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Catalog"];
         };
       };
       /** @description Validation Error */
@@ -2233,6 +2347,41 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Outcome"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  runbook_api_v1_runbooks__code__get: {
+    parameters: {
+      query?: {
+        token?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        code: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Runbook"];
         };
       };
       /** @description Validation Error */

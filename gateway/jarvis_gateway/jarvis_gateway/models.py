@@ -96,6 +96,23 @@ class FaultDetail(Open):
     executions: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class CatalogEntry(Open):
+    code: str
+    description: str = ""
+    severity: str
+    latch: bool = False
+    runbook: bool = Field(False, description="it has a runbook: GET /runbooks/{code}")
+
+
+class Catalog(Open):
+    faults: list[CatalogEntry]
+
+
+class Runbook(Open):
+    code: str
+    markdown: str
+
+
 class Incidents(Open):
     incidents: list[dict[str, Any]]
 

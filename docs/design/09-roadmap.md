@@ -75,7 +75,7 @@ flowchart LR
 | 5.2 | Batched event stream (group commit): one message per batch on `/jarvis/events`, for NFR-1's 10 000 events/s and NFR-5's footprint |
 | 5.3 ✔ | Crash durability and disk pressure: unchunked recording, a SIGKILL test (faults, `seq` and recordings survive), a free-disk floor in the lake and `jarvis.storage.low`. Measured in [01-requirements §5](01-requirements.md#measured-53) |
 | 5.4 ✔ | Security: an SROS2 profile (one enclave per process, tested enforced), gateway TLS and single sign-on through an authenticating proxy, a redaction audit of the agent (redaction where it reads, secrets scrubbed from every message). [Security guide](../guides/security.md) |
-| 5.5 | Docs: integration guide, rule cookbook, runbook templates, operator guide |
+| 5.5 ✔ | Docs: [integration guide](../guides/integration.md), [rules cookbook](../guides/rules-cookbook.md) (every recipe linted in CI), [operator guide](../guides/operator.md), runbooks: a template and one per shipped fault code, served from the catalog to the dashboard and the agent (`get_runbook`) |
 | 5.6 | Release: versioned Docker images, bloom-ready packages, CHANGELOGs, quality declaration |
 
 ### Later (v2+)

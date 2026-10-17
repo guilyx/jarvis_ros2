@@ -180,5 +180,5 @@ def test_the_gateway_adapter_keeps_an_id_in_its_segment():
         return httpx.Response(404)
 
     q = GatewayQuery("http://gw", client=httpx.Client(transport=httpx.MockTransport(handler)))
-    assert q.incident("../faults") is None and q.rule("a/b?c") is None
-    assert seen == ["/api/v1/incidents/..%2Ffaults", "/api/v1/rules/a%2Fb%3Fc"]
+    assert q.incident("../faults") is None and q.rule("a/b?c") is None and q.runbook("x/y") is None
+    assert seen == ["/api/v1/incidents/..%2Ffaults", "/api/v1/rules/a%2Fb%3Fc", "/api/v1/runbooks/x%2Fy"]

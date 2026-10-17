@@ -26,7 +26,7 @@ rules:
     policy: { cooldown: 30s, max_fires: { count: 3, per: 1h } }
 ```
 
-Files are loaded from `config/rules/*.yaml`, validated against `schemas/rule.schema.json`, and hot-reloaded atomically through `~/reload`.
+Files are loaded from `config/rules/*.yaml`, parsed strictly by the core (unknown keys are errors; `schemas/rules.schema.json` describes the format for editors), and hot-reloaded atomically through `~/reload`. Recipes: the [rules cookbook](../guides/rules-cookbook.md).
 
 ## 2. Matchers
 
@@ -49,7 +49,7 @@ event:
 | `in` | `{ in: [ACTIVE, LATCHED] }` | One of |
 | `not` | `{ not: MANUAL }` | Not equal (or `not: { in: [...] }`) |
 | `glob` | `{ glob: "/sensors/*/scan" }` | Explicit glob |
-| `regex` | `{ regex: "^lidar_(front\|rear)$" }` | RE2-compatible regex |
+| `regex` | `{ regex: "^lidar_(front\|rear)$" }` | ECMAScript regex, searched anywhere in the value: anchor it with `^…$` |
 | `gt` `gte` `lt` `lte` | `{ lt: 0.2 }` | Numeric comparison |
 | `exists` | `{ exists: true }` | Attribute present |
 | severity string | `">=WARN"`, `"<ERROR"` | Severity order |
@@ -164,7 +164,7 @@ rules:
   - id: nav2-server-error
     partition_by: [source.component]
     when:
-      event: { kind: FAULT_STATE, code: ros.lifecycle.error, attrs.state: ACTIVE,
+      event: { kind: FAULT_STATE, code: ros.lifecycle.failed, attrs.state: ACTIVE,
                source.component: { in: [controller_server, planner_server, bt_navigator, behavior_server] } }
     then:
       - recover: { plan: nav2-reset }
@@ -254,7 +254,7 @@ plans:
 |-------|---------|---------|
 | `id` | required | Unique within the plan |
 | `action` | required | Registered action name (validated at load) |
-| `with` | `{}` | Action arguments (validated against the action's JSON schema) |
+| `with` | `{}` | Action arguments, checked by the actuator when the recovery node loads the plans (`jarvis lint` doesn't see them) |
 | `timeout` | `10s` | Per attempt |
 | `retry` | none | `{ attempts, backoff, multiplier }` |
 | `when` | none | Guard. If false, the step is **skipped** (recorded) |

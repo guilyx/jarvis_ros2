@@ -173,6 +173,11 @@ Row click → drawer: all fields · attrs table · payload JSON · causal chain 
 Detail: state timeline · freeze frame · occurrences histogram · runbook · black-box snapshot link · recoveries
 ```
 
+As built: the fault detail shows the fault, its freeze frame, its **runbook** (5.5: Markdown from the
+fault catalog, `GET /api/v1/runbooks/{code}`, rendered as text, never as HTML), its transitions and the
+recoveries of its incident. The occurrences histogram is not built; black-box files are under System →
+Recordings, with the incidents each covers.
+
 ### View 4 — Incident timeline (the core view)
 
 ```text

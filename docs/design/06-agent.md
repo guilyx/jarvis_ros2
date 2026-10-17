@@ -74,8 +74,8 @@ future. Recommendations may leave arguments to the operator (a proposal may not,
 
 `core/analyst.py` is the tool loop: system prompt and plan catalog first (marked cacheable for
 providers that take `cache_control`), the triaged window last; read-only tools from
-`tools/toolbox.py` (the table in §5 minus `get_runbook`, which waits for the gateway to serve the
-fault catalog, and `propose_recovery`, 4.3), each result redacted and bounded to 12 k characters;
+`tools/toolbox.py` (the table in §5; `propose_recovery` came in 4.3, `get_runbook` in 5.5 once the
+gateway served the catalog's runbooks), each result redacted and bounded to 12 k characters;
 `submit_insight`'s schema is written flat (no `$ref`) for the common denominator, and parsed
 leniently where it is safe (extra keys ignored, numeric arguments as text). Event ids a tool result
 showed join the window's citable ids. When the tool-call limit or the per-analysis token cap is

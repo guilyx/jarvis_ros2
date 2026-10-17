@@ -13,6 +13,7 @@ recorded events (adapters/replay.py, for tests and evals). Everything is the sch
     recoveries()          [{execution_id, plan, requester, outcome, incident_id, ...}], newest first
     plans()               [Plan]: {id, description, params, allowed_requesters, agent_policy, ...}
     rule(id)              {rule, fires, ...} | None
+    runbook(code)         Markdown: what to check and do about a fault code (the catalog's) | None
 """
 
 import dataclasses
@@ -45,6 +46,8 @@ class EventQuery(Protocol):
     def plans(self) -> list[dict]: ...
 
     def rule(self, rule_id: str) -> dict | None: ...
+
+    def runbook(self, code: str) -> str | None: ...
 
 
 class InsightSink(Protocol):

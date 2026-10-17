@@ -77,6 +77,10 @@ class GatewayQuery:
     def rule(self, rule_id):
         return self._get(f"/rules/{_seg(rule_id)}")
 
+    def runbook(self, code):
+        found = self._get(f"/runbooks/{_seg(code)}")
+        return found["markdown"] if found else None
+
     def seq_before(self, since):
         """The since_seq that resumes the stream at the first event from `since` (ISO 8601) on, or
         None when nothing happened since then."""

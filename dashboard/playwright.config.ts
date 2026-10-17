@@ -30,6 +30,7 @@ export default defineConfig({
     : {
         command: [
           "python3 -m jarvis_gateway.cli --fake --scenario --anonymous-role admin --dashboard dist",
+          "--catalog ../ros/jarvis_demo/config/demo_faults.yaml --runbooks ../ros/jarvis_bringup/config/runbooks",
           `--port ${port} --data-dir ${mkdtempSync(join(tmpdir(), "jarvis-e2e-"))}`,
         ].join(" "),
         env: { PYTHONPATH: "../gateway/jarvis_gateway:../lake/jarvis_lake" },

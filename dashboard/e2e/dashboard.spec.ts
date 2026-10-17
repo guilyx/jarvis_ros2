@@ -18,6 +18,15 @@ test("the overview is live", async ({ page }) => {
   await expect(page.getByTestId("attention-fault").filter({ hasText: "safety.estop.engaged" })).toBeVisible();
 });
 
+test("a fault shows its runbook from the catalog", async ({ page }) => {
+  await page.goto("/faults");
+  const row = page.getByTestId("fault-row").filter({ hasText: "safety.estop.engaged" });
+  await row.getByRole("link", { name: "safety.estop.engaged" }).click();
+  const runbook = page.getByTestId("runbook");
+  await expect(runbook.getByRole("heading", { level: 1 })).toContainText("safety.estop.engaged");
+  await expect(runbook.getByRole("heading", { level: 2 }).first()).toBeVisible();
+});
+
 test("an operator acknowledges, then clears the latched e-stop", async ({ page }) => {
   await page.goto("/faults");
   const row = page.getByTestId("fault-row").filter({ hasText: "safety.estop.engaged" });

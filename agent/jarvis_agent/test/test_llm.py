@@ -7,6 +7,7 @@ import json
 
 import pytest
 from conftest import ESTOP, ROOT, STALL, WEDGE
+from jarvis_agent.adapters.replay import ReplayQuery
 from jarvis_agent.core.agent import Agent
 from jarvis_agent.core.analyst import FORCE_SUBMIT, SUBMIT, SYSTEM, Budget, LLMAnalyst, parse_draft
 from jarvis_agent.llm.base import ModelUnavailable
@@ -346,3 +347,17 @@ def test_model_settings(tmp_path, monkeypatch):
     path.write_text("schema: jarvis.agent/v1\nmodel: { per_trigger: { SOMETIMES: x } }\n")
     with pytest.raises(ValueError, match="unknown trigger"):
         AgentConfig.load(path)
+
+
+def test_the_model_reads_the_runbook_of_a_fault(events, plans):
+    query = ReplayQuery(
+        events, plans, runbooks={"sensor.scan.stale": "# sensor.scan.stale\n\nCheck the cable."}
+    )
+    script = [
+        turn(call("get_runbook", code="sensor.scan.stale"), call("get_runbook", code="ros.node.missing")),
+        turn(call("submit_insight", **body(query))),
+    ]
+    _, llm = analyze(query, script)
+    results = [json.loads(m["content"]) for m in llm.calls[1]["messages"] if m["role"] == "tool"]
+    assert results[0] == {"code": "sensor.scan.stale", "runbook": "# sensor.scan.stale\n\nCheck the cable."}
+    assert results[1] == {"error": "no runbook for 'ros.node.missing' in the fault catalog"}

@@ -40,6 +40,7 @@ def generate_launch_description():
             "rules": str(DEMO / "config" / "rules"),
             "recovery_mode": arg("recovery_mode"),
             "blackbox_topics": "/scan /jarvis/events",
+            "split_duration_s": "60",  # history (jarvis_lake) shows up within a minute
         }.items(),
     )
     return LaunchDescription(

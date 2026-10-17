@@ -127,6 +127,24 @@ ros2 jarvis backtest ~/.local/share/jarvis/bags/jarvis_<stamp> --rules rules/ --
 
 The backtest runs the same engine the robot runs and lists every decision that would change.
 
+## History and analytics
+
+Every recording the recorder closes becomes Parquet (`jarvis_lake`, one file per split and day),
+and DuckDB queries it in place: no database server on the robot. The views rebuild the story from
+the event stream: `events`, `fault_episodes`, `incidents`, `executions`, `rule_matches`,
+`operator_actions` (the audit trail).
+
+```bash
+ros2 run jarvis_lake jarvis-lake kpis --hours 24     # MTTR, auto-recovery rate, top fault codes,
+                                                    # health per component, flapping faults, plans
+ros2 run jarvis_lake jarvis-lake sql "SELECT code, count(*) FROM fault_episodes GROUP BY code"
+./demo lake kpis                                    # the same in the Docker demo
+```
+
+A split the recorder never closed (a crash, a power cut) is recovered up to its last complete
+chunk when Jarvis restarts. Retention deletes recordings only after they are converted (7 days or
+10 GiB of bags, 180 days or 5 GiB of Parquet, 2 GiB of black-box snapshots by default).
+
 ## Packages
 
 | Package | What it does |
@@ -140,6 +158,7 @@ The backtest runs the same engine the robot runs and lists every decision that w
 | [`ros/jarvis_bridges`](ros/jarvis_bridges) | Diagnostics, rosout, action status and lifecycle bridges; topic and node watchdogs |
 | [`ros/jarvis_bringup`](ros/jarvis_bringup) | Launch, parameters, default fault catalog, rules and plans, recorder and black box |
 | [`ros/jarvis_demo`](ros/jarvis_demo) | Lidar relay, fault injector, demo launch files |
+| [`lake/jarvis_lake`](lake/jarvis_lake) | Recordings as Parquet + DuckDB: history, KPIs, analytics, retention (runs without ROS) |
 | [`schemas`](schemas) | JSON Schema contracts (canonical) |
 
 ## Design

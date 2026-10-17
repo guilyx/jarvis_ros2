@@ -8,6 +8,7 @@
 #   ./demo inject X     one scenario: scan-wedge, scan-stall, scan-slow, rosout-error, diag-error, estop
 #   ./demo clear        an operator clears the latched faults
 #   ./demo jarvis V     ros2 jarvis V: executions, rules, recover, mode, faults, ... (./demo jarvis -h)
+#   ./demo lake V       history: kpis, sql "SELECT * FROM incidents", status (./demo lake -h)
 #   ./demo shell        a shell with ROS 2 ready (ros2 topic echo /jarvis/faults, ...)
 #   ./demo logs         follow the container logs
 #   ./demo down         stop; recordings stay in ./demo-data
@@ -60,6 +61,7 @@ Jarvis is running. Next:
   ./demo inject scan-wedge  hang the lidar relay: Jarvis restarts it (3 times in 10 min, then a human)
   ./demo inject scan-stall  stop the lidar (also: scan-slow, rosout-error, diag-error, estop)
   ./demo jarvis executions  what Jarvis ran (also: rules, recover, mode DRY_RUN, faults)
+  ./demo lake kpis          history and analytics (recordings close every minute)
   ./demo down               stop
 Foxglove: ws://localhost:8765 · Recordings: ./demo-data/bags/
 EOF
@@ -81,6 +83,7 @@ case "${1:-play}" in
   inject) shift && in_demo inject "$@" ;;
   clear) shift && in_demo inject clear "$@" ;;
   jarvis) shift && in_demo ros2-jarvis "$@" ;;
+  lake) shift && in_demo lake "$@" ;;
   shell) in_demo bash ;;
   logs) compose logs -f demo ;;
   down) compose down ;;

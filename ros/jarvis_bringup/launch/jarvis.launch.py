@@ -8,6 +8,8 @@ Data lands in `data_dir` (default $JARVIS_DATA, else ~/.local/share/jarvis):
   bags/jarvis_<stamp>/       continuous MCAP of /jarvis/** (+ record_extra_topics), split every 5 min;
                              closed splits are announced on /jarvis/recorder/events/write_split
   blackbox/blackbox_<stamp>/ snapshot-mode ring buffer of blackbox_topics, dumped when a fault asks
+  lake/                      closed splits as Parquet (jarvis_lake), for history and analytics:
+                             `ros2 run jarvis_lake jarvis-lake sql "SELECT * FROM incidents"`
   state/                     open faults, rule fire history, waiting executions, hub boot counter
 
 Rules and plans are directories of YAML files (`rules`, `plans`); the defaults ship generic ones.
@@ -21,7 +23,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import ComposableNodeContainer
+from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 
 SHARE = Path(get_package_share_directory("jarvis_bringup"))
@@ -44,6 +46,7 @@ ARGUMENTS = {
     "blackbox": ("true", "Run the snapshot-mode black-box recorder"),
     "blackbox_topics": ("/tf /tf_static /odom /scan /cmd_vel /jarvis/events", "Black-box topics"),
     "blackbox_cache_mb": ("256", "Memory of the black-box ring buffer"),
+    "lake": ("true", "Convert closed splits to Parquet and enforce retention (jarvis_lake)"),
     "log_level": ("info", "Log level of the container"),
 }
 
@@ -175,7 +178,22 @@ def _setup(context):
             )
         )
 
+    processes = []
+    if _flag(arg["lake"]):
+        # Its own process: disk-heavy, third-party libraries, and nothing else waits on it.
+        processes.append(
+            Node(
+                package="jarvis_lake",
+                executable="jarvis-lake",
+                name="lake",
+                namespace="jarvis",
+                arguments=["--data-dir", str(data_dir), "run"],
+                output="screen",
+            )
+        )
+
     return [
+        *processes,
         ComposableNodeContainer(
             name="container",
             namespace="jarvis",
@@ -184,7 +202,7 @@ def _setup(context):
             composable_node_descriptions=nodes,
             arguments=["--ros-args", "--log-level", arg["log_level"]],
             output="screen",
-        )
+        ),
     ]
 
 

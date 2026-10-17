@@ -13,11 +13,13 @@ WORKDIR /ws/src/jarvis_ros2
 # Resolve dependencies from the package manifests only, so source edits don't bust this layer.
 COPY core/jarvis_core/package.xml core/jarvis_core/package.xml
 COPY ros/ ros-manifests/
-RUN find ros-manifests -mindepth 1 -not -name package.xml -not -type d -delete \
+COPY lake/ lake-manifests/
+RUN find ros-manifests lake-manifests -mindepth 1 -not -name package.xml -not -type d -delete \
     && apt-get update \
     && rosdep update --rosdistro "${ROS_DISTRO}" \
-    && rosdep install --from-paths core ros-manifests --ignore-src -y --rosdistro "${ROS_DISTRO}" \
-    && rm -rf /var/lib/apt/lists/* ros-manifests
+    && rosdep install --from-paths core ros-manifests lake-manifests --ignore-src -y \
+         --rosdistro "${ROS_DISTRO}" \
+    && rm -rf /var/lib/apt/lists/* ros-manifests lake-manifests
 
 FROM dev AS build
 COPY . .
@@ -29,9 +31,13 @@ FROM ros:${ROS_DISTRO}-ros-core AS runtime
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 COPY --from=build /ws/src/jarvis_ros2/core/jarvis_core/package.xml /tmp/manifests/core/package.xml
 COPY --from=build /ws/src/jarvis_ros2/ros /tmp/manifests/ros
-RUN apt-get update && apt-get install -y --no-install-recommends python3-rosdep \
+COPY --from=build /ws/src/jarvis_ros2/lake /tmp/manifests/lake
+# jarvis_lake's Python libraries (DuckDB, Arrow, MCAP) are not in apt: pinned in its requirements.txt.
+RUN apt-get update && apt-get install -y --no-install-recommends python3-rosdep python3-pip \
     && (rosdep init || true) && rosdep update --rosdistro "${ROS_DISTRO}" \
     && rosdep install --from-paths /tmp/manifests --ignore-src -y -t exec --rosdistro "${ROS_DISTRO}" \
+    && pip3 install --no-cache-dir --break-system-packages \
+         -r /tmp/manifests/lake/jarvis_lake/requirements.txt \
     && rm -rf /var/lib/apt/lists/* /tmp/manifests
 COPY --from=build /ws/install /opt/jarvis
 RUN sed -i "s|^exec \"\$@\"|source /opt/jarvis/setup.bash\nexec \"\$@\"|" /ros_entrypoint.sh

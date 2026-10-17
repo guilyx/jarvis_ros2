@@ -1,0 +1,7 @@
+#!/bin/bash
+# `jarvis-lake` on the demo's data: `docker compose exec demo lake kpis`, `lake sql "SELECT ..."`.
+# shellcheck source=/dev/null # both exist only inside the image
+source "/opt/ros/${ROS_DISTRO}/setup.bash" --
+# shellcheck source=/dev/null
+source /opt/jarvis/setup.bash --
+exec ros2 run jarvis_lake jarvis-lake --data-dir "${JARVIS_DATA:-/var/lib/jarvis}" "$@"

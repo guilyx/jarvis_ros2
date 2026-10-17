@@ -140,6 +140,7 @@ class Health(Open):
     faults_snapshot: bool
     executions_snapshot: bool
     last_event_age_s: float | None = None
+    robot: str = ""
     lake: dict[str, Any] | None = None
 
 

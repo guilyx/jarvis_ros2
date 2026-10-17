@@ -5,7 +5,8 @@
 It keeps the shapes and the audit trail of the real components (events, fault and execution
 snapshots, OPERATOR events for every command), with simplified behavior: a recovery runs its steps
 on a timer and succeeds, unless its plan is named `fail-*`. With `scenario`, things happen on their
-own: a lidar goes quiet and a rule restarts its relay, a camera drops off the graph and comes back.
+own: the e-stop is latched, a lidar goes quiet and a rule restarts its relay, a camera drops off the
+graph and comes back.
 """
 
 import asyncio
@@ -459,6 +460,8 @@ class FakeJarvis(JarvisPort):
 
     async def _scenario(self, period_s=2.0):
         self.emit("SYSTEM", "jarvis.started", "INFO", "", "fake Jarvis started")
+        # Someone pressed the e-stop: it stays latched until an operator clears it.
+        self.raise_fault("safety.estop.engaged", "base", "CRITICAL", latch=True, message="e-stop pressed")
         lidar = camera = None
         tick = 0
         while True:

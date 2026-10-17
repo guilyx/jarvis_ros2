@@ -10,6 +10,8 @@ flags. The API is documented at /docs once it runs.
 """
 
 import argparse
+import os
+import pathlib
 import sys
 
 from jarvis_gateway import __version__
@@ -35,7 +37,9 @@ def parser():
     p.add_argument("--host", help="address to bind (default 127.0.0.1: this machine only)")
     p.add_argument("--port", type=int, help="port (default 8080)")
     p.add_argument("--data-dir", help="Jarvis data directory (default $JARVIS_DATA)")
-    p.add_argument("--dashboard", dest="dashboard_dir", help="the dashboard's built files")
+    p.add_argument(
+        "--dashboard", dest="dashboard_dir", help="the dashboard's built files (default: the installed ones)"
+    )
     p.add_argument("--namespace", default="/jarvis", help="Jarvis' ROS namespace")
     p.add_argument("--fake", action="store_true", help="an in-memory Jarvis instead of ROS")
     p.add_argument("--scenario", action="store_true", help="with --fake: make things happen")
@@ -49,10 +53,26 @@ def parser():
     return p
 
 
+def installed_dashboard():
+    """The dashboard bundle: $JARVIS_DASHBOARD, else share/jarvis_gateway/dashboard (the Docker image
+    puts the built dashboard there), else none (the gateway then serves the API only)."""
+    found = os.environ.get("JARVIS_DASHBOARD")
+    if found:
+        return found
+    try:
+        from ament_index_python.packages import get_package_share_directory
+
+        share = pathlib.Path(get_package_share_directory("jarvis_gateway")) / "dashboard"
+    except (ImportError, LookupError, ValueError):
+        return ""
+    return str(share) if (share / "index.html").is_file() else ""
+
+
 def settings_from(args):
     s = Settings.load(
         args.config, host=args.host, port=args.port, data_dir=args.data_dir, dashboard_dir=args.dashboard_dir
     )
+    s.dashboard_dir = s.dashboard_dir or installed_dashboard()
     if args.anonymous_role:
         s.anonymous = None if args.anonymous_role == "none" else Principal("anonymous", args.anonymous_role)
     return s

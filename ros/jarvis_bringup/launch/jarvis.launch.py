@@ -13,7 +13,7 @@ Data lands in `data_dir` (default $JARVIS_DATA, else ~/.local/share/jarvis):
   state/                     open faults, rule fire history, waiting executions, hub boot counter
 
 The gateway (jarvis_gateway) serves the API, live stream and dashboard on gateway_host:gateway_port
-(default 127.0.0.1:8080, this machine only): http://localhost:8080/docs.
+(default 127.0.0.1:8080, this machine only): http://localhost:8080 (the API at /docs).
 
 Rules and plans are directories of YAML files (`rules`, `plans`); the defaults ship generic ones.
 """
@@ -54,6 +54,7 @@ ARGUMENTS = {
     "gateway_host": ("127.0.0.1", "Address the gateway binds (a LAN address to reach it from others)"),
     "gateway_port": ("8080", "Port of the gateway"),
     "gateway_config": ("", "Gateway settings (jarvis.gateway/v1): tokens, webhooks, ..."),
+    "gateway_dashboard": ("", "Built dashboard to serve (default: the installed one, if any)"),
     "log_level": ("info", "Log level of the container"),
 }
 
@@ -200,6 +201,8 @@ def _setup(context):
         )
     if _flag(arg["gateway"]):
         config = ["--config", arg["gateway_config"]] if arg["gateway_config"] else []
+        if arg["gateway_dashboard"]:
+            config += ["--dashboard", arg["gateway_dashboard"]]
         processes.append(
             Node(
                 package="jarvis_gateway",

@@ -1,6 +1,7 @@
 # The gateway's Python dependencies, pinned (pip). rclpy, jarvis_cli and jarvis_lake come from the
 # workspace; PyYAML from the system (python3-yaml).
 fastapi==0.143.3
+pydantic==2.14.1  # it writes the OpenAPI document the dashboard's client is generated from
 uvicorn==0.54.0
 websockets==17.2  # WebSocket support for uvicorn
 httpx==0.28.1  # webhooks (and FastAPI's TestClient)

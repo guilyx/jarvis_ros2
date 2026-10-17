@@ -78,6 +78,7 @@ class LiveState(Sink):
         self.executions = None  # {"mode", "executions", "recent"}, None until it arrives
         self.last_event_monotonic = None
         self.events_received = 0
+        self.robot = ""  # from the events' source
         self._listeners = []
 
     def listen(self, callback):
@@ -92,6 +93,7 @@ class LiveState(Sink):
     # -- the Sink a port delivers to ---------------------------------------------------------------
 
     def on_event(self, event):
+        self.robot = (event.get("source") or {}).get("robot") or self.robot
         if self.recent.add(event):
             self.events_received += 1
             self.last_event_monotonic = time.monotonic()

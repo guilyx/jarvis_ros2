@@ -160,7 +160,8 @@ def _setup(context):
                         "use_sim_time": use_sim_time,
                         "storage.uri": str(data_dir / "bags" / f"jarvis_{stamp}"),
                         "storage.storage_id": "mcap",
-                        "storage.storage_preset_profile": "zstd_fast",
+                        # Small chunks: what a crash loses (config/mcap_writer.yaml, NFR-6).
+                        "storage.storage_config_uri": str(SHARE / "config" / "mcap_writer.yaml"),
                         "storage.max_bagfile_duration": int(arg["split_duration_s"]),
                         "record.regex": "^/jarvis/.*",
                         # The ingest side is pre-validation; /jarvis/events is the canonical stream.

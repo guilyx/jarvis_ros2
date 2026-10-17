@@ -1,0 +1,8 @@
+# rosbag2's MCAP writer for the Jarvis recorder (storage.storage_config_uri). The writer keeps a
+# chunk in memory until it is full, so its size bounds what a hard crash loses (NFR-6): 16 KiB of
+# records is 0.2-0.5 s at 200 events/s (test/test_durability.py); a quieter stream loses more
+# seconds, never more data. Chunks this small still compress about 4x.
+compression: Zstd
+compressionLevel: Fastest
+chunkSize: 16384
+noChunkCRC: true

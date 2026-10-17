@@ -18,6 +18,8 @@ class RulesVerb(VerbExtension):
         parser.add_argument("ids", nargs="*", help="rule ids (globs for list)")
         parser.add_argument("--off", action="store_true", help="dry-run: leave shadow mode")
         parser.add_argument("--check", action="store_true", help="reload: validate only, change nothing")
+        parser.add_argument("--operator", default="", help="your name (default: $JARVIS_OPERATOR, $USER)")
+        parser.add_argument("--reason", default="", help="why, for the audit trail")
 
     @api.run
     def main(self, *, args):
@@ -36,9 +38,10 @@ class RulesVerb(VerbExtension):
                     print("no rules")
                 return 0
             if args.action == "reload":
-                reply = api.call(
-                    n, ReloadConfig, f"{SERVICE}/reload", ReloadConfig.Request(validate_only=args.check)
+                request = ReloadConfig.Request(
+                    validate_only=args.check, operator_name=api.operator_name(args.operator)
                 )
+                reply = api.call(n, ReloadConfig, f"{SERVICE}/reload", request)
                 return _report(reply)
             if not args.ids:
                 raise ValueError(f"{args.action} needs at least one rule id")
@@ -48,7 +51,13 @@ class RulesVerb(VerbExtension):
             ]
             failed = 0
             for rule_id in args.ids:
-                req = SetRuleState.Request(rule_id=rule_id, enabled=enabled, dry_run=dry)
+                req = SetRuleState.Request(
+                    rule_id=rule_id,
+                    enabled=enabled,
+                    dry_run=dry,
+                    operator_name=api.operator_name(args.operator),
+                    reason=args.reason,
+                )
                 reply = api.call(n, SetRuleState, f"{SERVICE}/set_rule_state", req)
                 print(f"{rule_id}: {reply.message}")
                 failed += 0 if reply.success else 1

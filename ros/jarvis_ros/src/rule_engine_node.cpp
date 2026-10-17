@@ -111,12 +111,15 @@ public:
           }
           return std::nullopt;
         };
-        res->success =
-          engine_->set_rule_state(req->rule_id, pick(req->enabled), pick(req->dry_run));
+        auto change = engine_->set_rule_state(
+          req->rule_id, pick(req->enabled), pick(req->dry_run), req->operator_name, req->reason,
+          now_ns(*this));
+        res->success = change.found;
         res->message = res->success ? "updated" : "unknown rule '" + req->rule_id + "'";
         if (res->success) {
           RCLCPP_INFO(
             get_logger(), "rule %s: %s", req->rule_id.c_str(), state_text(req->rule_id).c_str());
+          apply(std::move(change.effects));
         }
       });
     list_srv_ = create_service<ListRules>(
@@ -268,7 +271,7 @@ private:
       return;
     }
     res.message = "loaded " + std::to_string(count) + " rules";
-    apply(engine_->reload(std::move(rules), now_ns(*this)));
+    apply(engine_->reload(std::move(rules), now_ns(*this), req.operator_name));
   }
 
   void apply(jarvis_core::Effects effects)

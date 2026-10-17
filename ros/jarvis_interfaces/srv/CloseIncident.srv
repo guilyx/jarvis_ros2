@@ -1,0 +1,7 @@
+# Closes a resolved incident (fault manager). Recorded as an OPERATOR event.
+string incident_id
+string operator_name
+string note
+---
+bool success
+string message

@@ -452,11 +452,24 @@ TEST_F(EngineTest, ShadowModeRecordsMatchesButRunsNothing)
   EXPECT_TRUE(recoveries(fx).empty());
   EXPECT_EQ(stats("shadow").dry_fires, 1u);
 
-  ASSERT_TRUE(engine_->set_rule_state("shadow", std::nullopt, false));
+  const auto live = engine_->set_rule_state("shadow", std::nullopt, false, "alice", "tested", kT0);
+  ASSERT_TRUE(live);
   EXPECT_EQ(recoveries(feed(event(Kind::FaultRaise, "x.fault", kT0 + 1))).size(), 1u);
   ASSERT_TRUE(engine_->set_rule_state("shadow", false, std::nullopt));
   EXPECT_TRUE(feed(event(Kind::FaultRaise, "x.fault", kT0 + 2)).empty()) << "disabled";
   EXPECT_FALSE(engine_->set_rule_state("nope", true, std::nullopt));
+
+  // Who changed what is on the stream (the audit trail), and the change is saved.
+  const auto audit = emitted(live.effects);
+  ASSERT_EQ(audit.size(), 1u);
+  EXPECT_EQ(audit[0].kind, Kind::Operator);
+  EXPECT_EQ(audit[0].code, "rule.state");
+  EXPECT_EQ(*attr_string(audit[0].attrs, "operator"), "alice");
+  EXPECT_EQ(std::get<bool>(audit[0].attrs.at("dry_run")), false);
+  EXPECT_EQ(audit[0].message, "alice set rule shadow: enabled (tested)");
+  EXPECT_TRUE(std::any_of(live.effects.begin(), live.effects.end(), [](const auto & f) {
+    return std::holds_alternative<PersistState>(f);
+  }));
 }
 
 TEST_F(EngineTest, HigherPriorityRulesActFirst)

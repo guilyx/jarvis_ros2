@@ -442,7 +442,7 @@ void RuleEngine::build()
     });
 }
 
-Effects RuleEngine::reload(RuleSet rules, Timestamp now)
+Effects RuleEngine::reload(RuleSet rules, Timestamp now, const std::string & operator_name)
 {
   // Keep each surviving rule's fire history, keyed by rule id then partition key.
   std::map<
@@ -476,6 +476,9 @@ Effects RuleEngine::reload(RuleSet rules, Timestamp now)
     Kind::System, "jarvis.rules.reloaded", Severity::Info,
     "Loaded " + std::to_string(rules_.rules().size()) + " rules", Event{}, "", now);
   e.attrs["rules"] = static_cast<std::int64_t>(rules_.rules().size());
+  if (!operator_name.empty()) {
+    e.attrs["operator"] = operator_name;
+  }
   return {EmitEvent{std::move(e)}, PersistState{}};
 }
 
@@ -854,9 +857,11 @@ Event RuleEngine::make_event(
   return e;
 }
 
-bool RuleEngine::set_rule_state(
-  const std::string & id, std::optional<bool> enabled, std::optional<bool> dry_run)
+RuleEngine::RuleStateChange RuleEngine::set_rule_state(
+  const std::string & id, std::optional<bool> enabled, std::optional<bool> dry_run,
+  const std::string & operator_name, const std::string & reason, Timestamp now)
 {
+  RuleStateChange out;
   for (auto & rr : runtimes_) {
     if (rr.rule->id != id) {
       continue;
@@ -870,9 +875,26 @@ bool RuleEngine::set_rule_state(
     if (dry_run) {
       rr.dry_run = *dry_run;
     }
-    return true;
+    out.found = true;
+    const std::string who = operator_name.empty() ? "an operator" : operator_name;
+    std::string what =
+      std::string(rr.enabled ? "enabled" : "disabled") + (rr.dry_run ? ", in dry run" : "");
+    Event e = make_event(
+      Kind::Operator, "rule.state", Severity::Info,
+      who + " set rule " + id + ": " + what + (reason.empty() ? "" : " (" + reason + ")"), Event{},
+      "", now);
+    e.attrs["rule"] = id;
+    e.attrs["enabled"] = rr.enabled;
+    e.attrs["dry_run"] = rr.dry_run;
+    e.attrs["operator"] = operator_name;
+    if (!reason.empty()) {
+      e.attrs["reason"] = reason;
+    }
+    out.effects.emplace_back(EmitEvent{std::move(e)});
+    out.effects.emplace_back(PersistState{});
+    return out;
   }
-  return false;
+  return out;
 }
 
 std::vector<RuleStats> RuleEngine::stats() const

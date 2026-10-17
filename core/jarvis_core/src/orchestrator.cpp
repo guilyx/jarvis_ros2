@@ -1479,7 +1479,7 @@ CommandResult Orchestrator::set_mode(
   return r;
 }
 
-Effects Orchestrator::reload(PlanSet plans, Timestamp now)
+Effects Orchestrator::reload(PlanSet plans, Timestamp now, const std::string & operator_name)
 {
   Effects out = advance_to(now);
   plans_ = std::move(plans);
@@ -1503,6 +1503,9 @@ Effects Orchestrator::reload(PlanSet plans, Timestamp now)
     Kind::System, "jarvis.recovery.reloaded", Severity::Info,
     "loaded " + std::to_string(plans_.plans().size()) + " plans", now);
   e.attrs["plans"] = static_cast<std::int64_t>(plans_.plans().size());
+  if (!operator_name.empty()) {
+    e.attrs["operator"] = operator_name;
+  }
   out.emplace_back(EmitEvent{std::move(e)});
   collect();
   merge_effects(out, {});

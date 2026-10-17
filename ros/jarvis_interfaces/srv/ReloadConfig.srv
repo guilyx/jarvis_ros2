@@ -1,5 +1,6 @@
 # Reloads rules or plans from their directory. With validate_only, checks them and changes nothing.
 bool validate_only
+string operator_name                 # who asked, recorded with the reload event
 ---
 bool success
 string revision                      # content hash of what is (or would be) loaded

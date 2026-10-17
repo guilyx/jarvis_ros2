@@ -48,7 +48,7 @@ flowchart LR
 ### M3 — Gateway & dashboard
 | PR | Content |
 |----|---------|
-| 3.0 | `jarvis_lake`: MCAP → Parquet on `write_split`, crash recovery of unfinalized splits, DuckDB views, retention |
+| 3.0 ✔ | `jarvis_lake`: MCAP → Parquet on `write_split`, crash recovery of unfinalized splits, DuckDB views, retention; KPIs and analytics (health per component, Pareto of fault codes, heatmap, flapping faults, plan effectiveness) |
 | 3.1 | Gateway: REST read API (event hub + lake), LAN binding + role tokens, OpenAPI, Prometheus, bag listing |
 | 3.2 | Gateway: WS stream with gap-free resume; command endpoints (ack/clear/recover/approve/mode); webhook notifier |
 | 3.3 | Dashboard shell, Overview, Live events, Faults |

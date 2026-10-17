@@ -18,6 +18,8 @@ expect() { grep -Eq "$1" <<<"$2" || fail "$3"; }
 rm -rf demo-data
 docker compose up -d --no-build
 ./demo wait || fail "Jarvis never became healthy"
+for _ in $(seq 1 20); do [ -f demo-data/lake/status.json ] && break; sleep 1; done
+[ -f demo-data/lake/status.json ] || fail "the lake service is not running"
 expect "none, all good" "$(open_faults)" "faults on a healthy start"
 sleep 3 # a full rate window of the lidar relay, where a startup glitch would show
 if grep -q " RAISE " <<<"$(screen)"; then fail "a fault was raised on a healthy start"; fi
@@ -64,4 +66,16 @@ bag=$(basename "$(dirname "$(compgen -G "demo-data/bags/*/metadata.yaml" | head 
 docker compose run --rm --no-deps -T demo ros2 jarvis backtest "/var/lib/jarvis/bags/$bag" \
   --rules /opt/jarvis/share/jarvis_demo/config/rules --robot demo-bot --expect-same ||
   fail "the backtest does not reproduce the live decisions"
+
+# The recording as history: the lake converts the closed bag, and its views tell the same story.
+lake() { docker compose run --rm --no-deps -T demo ros2 run jarvis_lake jarvis-lake --data-dir /var/lib/jarvis "$@"; }
+lake sync || fail "the lake could not convert the recording"
+history=$(lake sql "SELECT (
+    (SELECT count(*) FILTER (WHERE outcome = 'SUCCEEDED') >= 3
+        AND count(*) FILTER (WHERE outcome = 'FAILED') >= 1 FROM executions)
+    AND (SELECT count(*) FILTER (WHERE escalated) >= 1 FROM incidents)
+    AND (SELECT count(*) >= 1 FROM operator_actions WHERE code = 'fault.clear'))::INTEGER AS ok" \
+  --format csv)
+echo "$history"
+expect "^1$" "$(tail -1 <<<"$history")" "the lake's history does not match the run"
 echo "SMOKE TEST PASSED"

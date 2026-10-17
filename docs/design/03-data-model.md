@@ -457,7 +457,7 @@ flowchart LR
 | **Live** | `/jarvis/events` stream; latched `/jarvis/faults`, `/jarvis/executions` | ROS graph | — |
 | **Recent** | Ring buffer in the event hub, served by `~/query_events` | Memory, ≤ 128 MiB, severity-aware eviction | ~30 min at normal rates |
 | **Recorded** | Continuous MCAP of `/jarvis/**` (+ optional low-rate context topics) | `$JARVIS_DATA/bags/` | 7 days / 10 GiB; a split is deleted only **after** conversion |
-| **History** | Parquet (`events/date=YYYY-MM-DD/*.parquet`) + DuckDB views (`events`, `fault_episodes`, `incidents`, `executions`, `kpis`) | `$JARVIS_DATA/lake/` | 180 days / 5 GiB |
+| **History** | Parquet (`events/date=YYYY-MM-DD/<split>.parquet`) + DuckDB views (`events`, `fault_transitions`, `fault_episodes`, `incidents`, `executions`, `rule_matches`, `operator_actions`); KPIs and analytics in `jarvis_lake.analytics` | `$JARVIS_DATA/lake/` | 180 days / 5 GiB |
 | **State** | Open fault episodes, incidents, acks, latches; running executions; rule cooldowns/counters; hub `boot_count` | `$JARVIS_DATA/state/*.json` (write tmp → fsync → rename) | Current only |
 | **Black box** | High-rate sensor topics in a rosbag2 **snapshot-mode** ring buffer, dumped on fault | `$JARVIS_DATA/blackbox/` | 2 GiB budget |
 
@@ -468,15 +468,18 @@ Notes:
 - **Recorder QoS**: rosbag2 QoS overrides match the publishers (RELIABLE; TRANSIENT_LOCAL for the latched topics), so late starts still capture the current fault state.
 
 ```sql
--- DuckDB (illustrative)
-CREATE VIEW events AS
-  SELECT * FROM read_parquet('lake/events/**/*.parquet', hive_partitioning = true);
+-- DuckDB, as jarvis_lake builds it (lake/jarvis_lake/jarvis_lake/views.py)
+CREATE VIEW events AS                -- the lake, plus the hub's recent events above its newest seq
+  SELECT ... FROM read_parquet('lake/events/date=*/*.parquet', union_by_name = true);
 
 CREATE VIEW fault_transitions AS
-  SELECT recv_stamp, code, source_component AS component,
-         attrs ->> 'fault_id' AS fault_id, attrs ->> 'state' AS state, severity, correlation_id
+  SELECT ts, code, component, json_extract_string(attrs, '$.fault_id') AS fault_id,
+         json_extract_string(attrs, '$.state') AS state, severity, correlation_id AS incident_id
   FROM events WHERE kind = 'FAULT_STATE';
 ```
+
+- **Rows**: one per event, the columns of `event.schema.json` flattened (`robot`, `node`, `component`, `host`), `attrs` as JSON text, `ts` = `recv_stamp` else `stamp`, `split` = the MCAP split it came from. A split converts to one file per UTC day, named after the split, so converting it again replaces the same files.
+- **Which splits**: a closed split (its MCAP footer is there) as soon as the recorder announces it (`events/write_split`) or the next scan finds it; a split that was never closed only once the recorder has moved on (a newer split or bag), read as a stream up to its last complete chunk. A split that cannot be read is recorded as failed and does not hold back the others. `lake/ledger.json` lists what was converted; `lake/status.json` is what the gateway shows.
 
 ## 13. Contracts & code generation
 

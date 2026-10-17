@@ -44,7 +44,7 @@ struct EventHubConfig
   /// a LOG below `shed_below` is dropped, so that faults, states and warnings get through and the
   /// hub catches up. 0 disables it. Counted, and summarized as `jarvis.ingest.shed` every
   /// `suppression_window`.
-  Duration shed_after{2 * kSecond};
+  Duration shed_after{1 * kSecond};
   Severity shed_below{Severity::Warn};
 
   std::size_t dedupe_capacity{8192};

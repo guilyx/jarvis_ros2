@@ -36,7 +36,7 @@ public:
     declare<double>(*this, "rate_limit_burst", 100.0, "Token bucket size per (node, code)", false);
     declare<double>(*this, "suppression_window_s", 10.0, "Period of suppression summaries", false);
     declare<double>(
-      *this, "shed_after_s", 2.0, "Behind by more than this, logs below shed_below are dropped",
+      *this, "shed_after_s", 1.0, "Behind by more than this, logs below shed_below are dropped",
       false);
     declare<std::string>(*this, "shed_below", "WARN", "Logs below this severity can be shed");
     declare<int>(*this, "buffer_capacity_mb", 128, "Memory budget of the recent-events buffer");

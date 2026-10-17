@@ -248,7 +248,7 @@ TEST(EventHub, EvictsLowSeverityFirstAndReportsIncompleteness)
 
 TEST(EventHub, ShedsRoutineLogsWhenItIsBehind)
 {
-  EventHub hub(small_config(), 1);  // shed_after 2 s, below WARN (the defaults)
+  EventHub hub(small_config(), 1);  // shed_after 1 s, below WARN (the defaults)
   const Duration behind = 3 * kSecond;
   EXPECT_EQ(
     hub.ingest(report("app.chatty", Kind::Log, Severity::Info), kT0, behind).reject_reason, "shed");
@@ -258,7 +258,8 @@ TEST(EventHub, ShedsRoutineLogsWhenItIsBehind)
   EXPECT_TRUE(hub.ingest(report("app.retry", Kind::Log, Severity::Warn), kT0, behind).accepted);
   EXPECT_TRUE(hub.ingest(report("app.mode", Kind::State, Severity::Info), kT0, behind).accepted);
   EXPECT_TRUE(hub.ingest(report("app.broke"), kT0, behind).accepted) << "faults are never shed";
-  EXPECT_TRUE(hub.ingest(report("app.chatty", Kind::Log, Severity::Info), kT0, kSecond).accepted)
+  EXPECT_TRUE(
+    hub.ingest(report("app.chatty", Kind::Log, Severity::Info), kT0, kSecond / 2).accepted)
     << "not behind enough";
   EXPECT_TRUE(hub.ingest(report("app.chatty2", Kind::Log, Severity::Info), kT0).accepted)
     << "queued unknown";

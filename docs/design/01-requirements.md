@@ -104,10 +104,10 @@
 
 | Target | Measured | |
 |--------|----------|---|
-| NFR-1 throughput | Core: 110–150 k events/s through the event hub. Stack: 1 000/s plus a 20 000-event burst, nothing lost; 5 000/s loses some, 10 000/s about half | bursts ✔, 10 000/s ✘ (5.2) |
-| NFR-2 latency | p99 12 ms at 500/s, 23 ms at 1 000/s with a burst (publish → `/jarvis/events` → a reader) | ✔ up to ~4 000/s |
+| NFR-1 throughput | Core: 110–150 k events/s through the event hub. Stack: 1 000/s plus a 20 000-event burst, nothing lost (the burst's routine logs shed once the hub is 1 s behind); 5 000/s, nothing lost, a third shed; 10 000/s, most lost | bursts ✔, 10 000/s ✘ (5.2) |
+| NFR-2 latency | p99 12–21 ms at 500/s, 20 ms at 1 000/s with a burst (publish → `/jarvis/events` → a reader); about 1 s when shedding | ✔ below ~4 000/s |
 | NFR-3 rules | p99 37 µs per event with 200 rules (event, count and sequence patterns) | ✔ |
-| NFR-5 footprint | Container: 80–90 MB RSS with nothing buffered, growing to the buffers' budgets (event buffer 128 MB, black box 256 MB by default); 45 % of one core at 500/s with the recorder and the black box | ✘ (5.2) |
+| NFR-5 footprint | Container: 80–90 MB RSS with nothing buffered, growing to the buffers' budgets (event buffer 128 MB, black box 256 MB by default); 45–48 % of one core at 500/s with the recorder and the black box | ✘ (5.2) |
 
 What it took:
 - **Bounded incidents.** A fault that flaps opened a new incident each time, and every resolved one
@@ -118,14 +118,23 @@ What it took:
   of every component's entities, and each event wakes them all. `component_container_isolated`
   gives each component its own thread. At 1 000 events/s that halves the CPU (96 % → 47 %) and the
   p99 (49 → 13 ms), and a slow component can't stall the others.
-- **Burst-deep queues.** `/jarvis/ingest` and `/jarvis/events` queues now hold 20 000 events, as
-  do their readers (the components, the recorder, the gateway). Before, a burst lost all but
-  the first 1 000. Fast DDS also caps any history at 5 000 samples, whatever the depth asked
-  for: the bringup applies `config/fastdds.xml` to its processes to lift that cap.
+- **A burst-deep ingest queue.** `/jarvis/ingest` holds 20 000 events (`ingest_queue_depth`), as do
+  the stream's readers that may lag: the recorder and the gateway. Before, a burst lost all but the
+  first 1 000. Fast DDS also caps any history at 5 000 samples, whatever the depth asked for: the
+  bringup applies `config/fastdds.xml` to its processes to lift that cap. The stream's writer stays
+  1 000 deep: a deep reliable writer slows down for its slowest reader, and at 5 000 events/s that
+  lost half the stream.
+- **Load shedding.** When an event waited more than `shed_after_s` (1 s) in the ingest queue, the
+  hub drops it if it is a LOG below `shed_below` (WARN), and reports the count as a
+  `jarvis.ingest.shed` event every 10 s. Faults, states, warnings and Jarvis's own events are never
+  shed. The wait is the middleware's receive time on the hub's host, so a producer's clock can't
+  trigger it. Without shedding, 5 000 events/s lost a quarter of everything, faults included.
 
 The rest is the cost of one ROS message per event. In the profiles, the executor and Fast DDS
-spend more than Jarvis does: wait-set rebuilds, waking readers, locks. 5.2 batches the stream
-(one message per group of events, the "group commit" of NFR-2) to reach NFR-1 and NFR-5.
+spend more than Jarvis does: wait-set rebuilds, waking readers, locks. Past about twice the hub's
+rate, even taking a message to shed it costs too much: the ingest queue fills and most events are
+lost. 5.2 batches the stream (one message per group of events, the "group commit" of NFR-2) to
+reach NFR-1 and NFR-5.
 
 ## 6. Glossary
 

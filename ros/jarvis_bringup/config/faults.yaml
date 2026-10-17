@@ -55,6 +55,13 @@ faults:
   - code: ros.lifecycle.failed
     description: A managed node's transition failed (error processing).
 
+  # Jarvis itself.
+  - code: jarvis.storage.low
+    description: >-
+      The data disk is short of free space although retention deleted all it may (converted
+      recordings, black-box snapshots, old days of Parquet): new recordings are at risk.
+    heal: { on_clear: true }
+
 correlation:
   # Inner servers abort first; the navigator's abort is the fault worth showing.
   - id: nav-goal-aborted

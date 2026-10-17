@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """The lake service: converts splits as the recorder closes them, enforces retention, reports.
 
+Retention runs every `retention_period`, and at every pass while the disk is low on free space.
+
 It wakes up when poked (the ROS adapter pokes it on `events/write_split`) and every `scan_period`
 anyway, so it also works without ROS and catches splits it was not told about (a bag closed at
 shutdown, splits left by a crash). Each pass writes lake/status.json for the gateway.
@@ -51,12 +53,18 @@ class LakeService:
                 how = "recovered from a torn split" if not result.finalized else "converted"
                 self.log(f"{result.split.name}: {result.rows} events {how}")
             now = self.clock()
-            if self._last_retention is None or now - self._last_retention >= self.retention_period:
+            due = self._last_retention is None or now - self._last_retention >= self.retention_period
+            if due or self.lake.disk_low():
                 self._last_retention = now
                 report = self.lake.enforce_retention()
                 deleted = report.deleted_splits + report.deleted_partitions + report.deleted_blackbox
                 if deleted:
                     self.log(f"retention: deleted {len(deleted)} item(s), {report.freed_bytes} bytes")
+                if report.disk_short_bytes:
+                    self.log(
+                        f"disk low: {report.disk_free_bytes >> 20} MiB free, "
+                        f"{report.disk_short_bytes >> 20} MiB short, and nothing else may go"
+                    )
             self.last_error = "; ".join(failed)
         except Exception as e:  # noqa: BLE001 - the service outlives one bad split
             self.last_error = f"{type(e).__name__}: {e}"

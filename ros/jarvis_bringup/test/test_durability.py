@@ -25,12 +25,12 @@ MAX_LOST_S = 1.5  # NFR-6 is ~1 s; a shared CI machine gets some slack
 FAULTS = ("test.durability.a", "test.durability.b", "test.durability.c")
 
 
-def launch(data_dir, log):
+def launch(data_dir, log, *args):
     """The bringup in its own process group, so the crash takes all of it."""
     return subprocess.Popen(
         [
             "ros2", "launch", "jarvis_bringup", "jarvis.launch.py", f"data_dir:={data_dir}",
-            "robot_id:=durable-bot", "gateway:=false", "agent:=false", "bridges:=false",
+            "robot_id:=durable-bot", "gateway:=false", "agent:=false", "bridges:=false", *args,
         ],
         stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
     )  # fmt: skip
@@ -74,10 +74,10 @@ def recording(node):
     return any(s.node_name == "recorder" for s in subs)
 
 
-def open_faults(node, client):
+def open_faults(node, client, codes=("test.durability.*",)):
     if not client.wait_for_service(timeout_sec=1.0):
         return None
-    future = client.call_async(GetFaults.Request(codes=["test.durability.*"]))
+    future = client.call_async(GetFaults.Request(codes=list(codes)))
     rclpy.spin_until_future_complete(node, future, timeout_sec=5.0)
     return future.result().faults if future.result() else None
 
@@ -163,4 +163,19 @@ def test_a_crash_keeps_faults_sequence_and_recordings(ros, tmp_path):
         assert lost_s <= MAX_LOST_S, f"{len(missing)} events lost: {lost_s:.2f} s before the crash"
     finally:
         stop(second)
+        log.close()
+
+
+def test_a_disk_short_of_space_raises_a_fault(ros, tmp_path):
+    """No disk is ever this big: the lake deletes what it may, then reports the disk low."""
+    log = open(tmp_path / "launch.log", "w")  # noqa: SIM115 - closed below
+    faults = ros.create_client(GetFaults, "/jarvis/fault_manager/get_faults")
+    jarvis = launch(tmp_path, log, "lake_min_free_gib:=1000000000")
+    try:
+        storage = ("jarvis.storage.*",)
+        wait_for(ros, lambda: open_faults(ros, faults, storage), "jarvis.storage.low", 90)
+        (fault,) = open_faults(ros, faults, storage)
+        assert fault.code == "jarvis.storage.low" and "disk low" in fault.message
+    finally:
+        stop(jarvis)
         log.close()

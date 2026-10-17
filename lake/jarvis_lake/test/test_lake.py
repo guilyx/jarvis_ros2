@@ -364,6 +364,64 @@ def test_retention_by_size_and_black_box_budget(data_dir, events):
     assert sorted(p.name for p in box.iterdir()) == ["bb_1_2.mcap"], "oldest snapshots first"
 
 
+def pressure_fixture(data_dir):
+    """Two converted splits, a split not converted yet, three days of Parquet, three snapshots."""
+    e = Events(step=datetime.timedelta(days=1))
+    write_split(split(data_dir, "b1", 0), [e("LOG", "x")])
+    write_split(split(data_dir, "b1", 1), [e("LOG", "x")])
+    write_split(split(data_dir, "b1", 2), [e("LOG", "x")])
+    box = data_dir / "blackbox" / "bb_1"
+    box.mkdir(parents=True)
+    for i in range(3):
+        (box / f"bb_1_{i}.mcap").write_bytes(b"x" * 1000)
+        os.utime(box / f"bb_1_{i}.mcap", (1000 + i, 1000 + i))
+    Lake(data_dir).sync()
+    unconverted = write_split(split(data_dir, "b2", 0), [e("LOG", "x")], finalize=False)
+    return box, unconverted
+
+
+def test_disk_pressure_deletes_the_cheapest_loss_first(data_dir):
+    box, _ = pressure_fixture(data_dir)
+    first = split(data_dir, "b1", 0)
+    floor = 10 * GIB
+    lake = Lake(data_dir, retention=Retention(min_free_bytes=floor), disk_free=lambda: floor - 1)
+    report = lake.enforce_retention()
+    assert report.deleted_splits == [str(first)], "one converted split frees enough"
+    assert not report.deleted_blackbox and not report.deleted_partitions
+    assert report.disk_short_bytes == 0 and report.disk_free_bytes >= floor
+    assert not first.exists() and len(list(box.iterdir())) == 3
+    assert lake.status()["disk_low"], "status measures the disk again (here: still the stub's value)"
+
+
+def test_disk_pressure_stops_at_what_may_not_go(data_dir):
+    box, unconverted = pressure_fixture(data_dir)
+    lake = Lake(data_dir, retention=Retention(min_free_bytes=10 * GIB), disk_free=lambda: 0)
+    dry = lake.enforce_retention(dry_run=True)
+    assert split(data_dir, "b1", 0).exists(), "a dry run deletes nothing"
+    report = lake.enforce_retention()
+    assert report.deleted_splits == dry.deleted_splits and len(report.deleted_splits) == 3
+    assert [pathlib.Path(f).name for f in report.deleted_blackbox] == [f"bb_1_{i}.mcap" for i in range(3)]
+    assert len(report.deleted_partitions) == 2, "every day of Parquet but the newest"
+    assert report.disk_short_bytes > 0, "still short: the rest may not be deleted"
+    assert unconverted.exists(), "never a split before it is converted"
+    assert len(lake.layout.partitions()) == 1 and not list(box.iterdir())
+    assert lake.status()["disk_low"]
+
+
+def test_the_service_runs_retention_at_every_pass_while_the_disk_is_low(data_dir):
+    pressure_fixture(data_dir)
+    free = {"bytes": 10 * GIB}
+    lake = Lake(data_dir, retention=Retention(min_free_bytes=GIB), disk_free=lambda: free["bytes"])
+    logs = []
+    service = LakeService(lake, retention_period=3600.0, log=logs.append)
+    assert not service.run_once()["disk_low"], "the first pass runs retention: nothing to delete"
+    free["bytes"] = 0
+    status = service.run_once()
+    assert status["disk_low"] and status["disk_free_bytes"] == 0
+    assert not split(data_dir, "b1", 0).exists(), "retention ran although it was not due"
+    assert any(line.startswith("disk low:") for line in logs)
+
+
 # -- service and CLI -----------------------------------------------------------------------------
 
 

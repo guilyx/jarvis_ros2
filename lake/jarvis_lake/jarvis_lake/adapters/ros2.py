@@ -1,6 +1,7 @@
 # Copyright 2026 Erwin L.
 # SPDX-License-Identifier: Apache-2.0
-"""The lake on the ROS graph: woken by the recorder's closed splits, reporting on /diagnostics.
+"""The lake on the ROS graph: woken by the recorder's closed splits, reporting on /diagnostics, and
+raising `jarvis.storage.low` while the disk is short of free space after retention.
 
 This is the only module of jarvis_lake that imports rclpy, and only when the service runs with ROS.
 """
@@ -10,12 +11,23 @@ import threading
 
 import rclpy
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
+from jarvis_reporter import Reporter, Severity
 from rclpy.executors import ExternalShutdownException, SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.signals import SignalHandlerOptions
 from rosbag2_interfaces.msg import WriteSplitEvent
 
 SPLIT_TOPIC = "/jarvis/recorder/events/write_split"
+DISK_LOW = "jarvis.storage.low"
+VALUES = (
+    "splits",
+    "splits_converted",
+    "splits_pending",
+    "bags_bytes",
+    "lake_bytes",
+    "rows",
+    "disk_free_bytes",
+)
 
 
 class LakeNode(Node):
@@ -24,6 +36,7 @@ class LakeNode(Node):
         self._service = service
         self.create_subscription(WriteSplitEvent, SPLIT_TOPIC, self._on_split, 10)
         self._diagnostics = self.create_publisher(DiagnosticArray, "/diagnostics", 10)
+        self._jarvis = Reporter(self, "lake")
 
     def _on_split(self, msg):
         self.get_logger().debug(f"split closed: {msg.closed_file}")
@@ -33,16 +46,20 @@ class LakeNode(Node):
         """Jarvis' own health goes out with hardware_id `jarvis` (the diagnostics bridge skips it)."""
         level = DiagnosticStatus.OK
         message = "converting splits as they close"
-        if status.get("last_error"):
+        if status.get("disk_low"):
+            # Retention already deleted what it may: recordings are at risk, someone must act.
+            free, floor = status["disk_free_bytes"] >> 20, status["disk_min_free_bytes"] >> 20
+            level, message = DiagnosticStatus.ERROR, f"disk low: {free} MiB free of {floor} MiB wanted"
+            self._jarvis.fault(DISK_LOW, Severity.ERROR, message, {"free_mib": free, "min_free_mib": floor})
+        elif status.get("last_error"):
             level, message = DiagnosticStatus.ERROR, status["last_error"]
         elif status.get("splits_failed"):
             level, message = DiagnosticStatus.WARN, f"{len(status['splits_failed'])} splits unreadable"
         elif status.get("splits_pending", 0) > 1:
             level, message = DiagnosticStatus.WARN, f"{status['splits_pending']} splits waiting"
-        values = {
-            k: status.get(k)
-            for k in ("splits", "splits_converted", "splits_pending", "bags_bytes", "lake_bytes", "rows")
-        }
+        if not status.get("disk_low"):
+            self._jarvis.clear(DISK_LOW, "free disk is back above the floor")
+        values = {k: status.get(k) for k in VALUES}
         diag = DiagnosticStatus(
             level=level,
             name="jarvis: lake",

@@ -65,8 +65,16 @@ if(JARVIS_WERROR)
   target_compile_options(jarvis PRIVATE -Werror)
 endif()
 
+# `jarvis-bench`: the hot paths against the NFR targets (tools/jarvis_bench.cpp).
+add_executable(jarvis-bench tools/jarvis_bench.cpp)
+target_link_libraries(jarvis-bench PRIVATE jarvis_core)
+target_compile_options(jarvis-bench PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wno-sign-conversion)
+if(JARVIS_WERROR)
+  target_compile_options(jarvis-bench PRIVATE -Werror)
+endif()
+
 include(GNUInstallDirs)
-install(TARGETS jarvis RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS jarvis jarvis-bench RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(TARGETS jarvis_core EXPORT jarvis_coreTargets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}

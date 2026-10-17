@@ -69,11 +69,14 @@ flowchart LR
 **Exit**: on a demo incident the agent posts an insight with valid evidence within 60 s. In `supervised` mode a proposal can be approved from the dashboard.
 
 ### M5 — Hardening & release
-- Load and soak tests against the NFR targets (ingest, latency, memory), with flood/shedding tuning.
-- Retention/eviction under disk pressure; power-cut durability test.
-- SROS2 profile, TLS/OIDC guide, redaction audit.
-- Docs: integration guide, rule cookbook, runbook templates, operator guide.
-- Release: versioned Docker images, bloom-ready packages, CHANGELOGs, quality declaration.
+| PR | Content |
+|----|---------|
+| 5.1 ✔ | Load and soak tests against the NFR targets: `jarvis-bench` (the core, ROS-free) and `jarvis_load` (the stack), a CI smoke test and a nightly soak; the fixes they called for (bounded incidents, the isolated container, burst-deep queues). Measured in [01-requirements §5](01-requirements.md#5-non-functional-requirements) |
+| 5.2 | Batched event stream (group commit): one message per batch on `/jarvis/events`, for NFR-1's 10 000 events/s and NFR-5's footprint |
+| 5.3 | Retention/eviction under disk pressure; power-cut durability test |
+| 5.4 | SROS2 profile, TLS/OIDC guide, redaction audit |
+| 5.5 | Docs: integration guide, rule cookbook, runbook templates, operator guide |
+| 5.6 | Release: versioned Docker images, bloom-ready packages, CHANGELOGs, quality declaration |
 
 ### Later (v2+)
 Fleet (Parquet to object storage) & fleet dashboard · real-robot bring-up (ARM64) · ros2_medkit interop bridge · MCP server exposing Jarvis queries to AI assistants · visual rule editor with live backtest · generic `action.goal` / `service.call` actuators · BehaviorTree.CPP actuator · Foxglove panel · Zenoh/MQTT transports for non-ROS producers.

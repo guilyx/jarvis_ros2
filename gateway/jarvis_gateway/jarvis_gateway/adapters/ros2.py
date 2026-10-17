@@ -37,7 +37,8 @@ from rclpy.signals import SignalHandlerOptions
 
 from jarvis_gateway.port import CommandResult, JarvisPort
 
-STREAM = QoSProfile(depth=1000, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.VOLATILE)
+# Deep as the event hub's: a burst (NFR-1) waits here while the gateway catches up.
+STREAM = QoSProfile(depth=20000, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.VOLATILE)
 LATCHED = QoSProfile(
     depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL
 )

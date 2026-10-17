@@ -113,6 +113,9 @@ struct FaultManagerConfig
   Severity incident_min_severity{Severity::Error};
   Duration incident_merge_window{120 * kSecond};
   Duration incident_auto_close{24 * kHour};
+  /// Resolved incidents kept until they auto-close; beyond this, the oldest close early (a
+  /// flapping fault resolves one incident and opens the next many times an hour).
+  std::size_t max_resolved_incidents{500};
   std::size_t history_capacity{500};
   std::size_t state_values_capacity{256};
 };
@@ -184,6 +187,7 @@ private:
     Incident & inc, IncidentState next, Timestamp at, const std::string & causation,
     const std::string & reason, Effects & fx);
   void check_incident_resolved(const std::string & incident_id, Timestamp at, Effects & fx);
+  void close_oldest_resolved(Timestamp at, Effects & fx);
 
   Event make_event(
     Kind kind, std::string code, Severity severity, std::string message, Attrs attrs,

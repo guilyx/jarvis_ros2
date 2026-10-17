@@ -12,6 +12,7 @@ if(BUILD_TESTING)
   add_launch_test(test/test_lake.launch.py TIMEOUT 180 ENV ROS_DOMAIN_ID=67)
   add_launch_test(test/test_gateway.launch.py TIMEOUT 180 ENV ROS_DOMAIN_ID=68)
   add_launch_test(test/test_cli.launch.py TIMEOUT 180 ENV ROS_DOMAIN_ID=66)
+  add_launch_test(test/test_load.launch.py TIMEOUT 240 ENV ROS_DOMAIN_ID=69)
 endif()
 
 ament_package()

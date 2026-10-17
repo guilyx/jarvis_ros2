@@ -53,6 +53,8 @@ public:
       *this, "incident_min_severity", "ERROR", "Lowest severity that opens an incident");
     declare<double>(*this, "incident_merge_window_s", 120.0, "Same-component faults join within");
     declare<double>(*this, "incident_auto_close_h", 24.0, "Resolved incidents close after");
+    declare<int>(
+      *this, "max_resolved_incidents", 500, "Resolved incidents kept; the oldest close early");
     declare<bool>(*this, "export_diagnostics", true, "Publish active faults on /diagnostics");
     declare<std::string>(
       *this, "blackbox_service", "/jarvis/blackbox/snapshot",
@@ -63,7 +65,7 @@ public:
     declare<double>(
       *this, "blackbox_timeout_s", 10.0,
       "How long a capture waits for the snapshot service's answer once the request is sent");
-    declare<int>(*this, "queue_depth", 1000, "History depth of /jarvis/events and /jarvis/ingest");
+    declare<int>(*this, "queue_depth", 20000, "History depth of /jarvis/events and /jarvis/ingest");
     if (declare<bool>(*this, "autostart", false, "Configure and activate on startup")) {
       autostart_timer_ = create_wall_timer(std::chrono::milliseconds(1), [this]() {
         autostart_timer_->cancel();
@@ -102,6 +104,8 @@ public:
       get_parameter("incident_merge_window_s").as_double() * 1e9);
     config.incident_auto_close = static_cast<jarvis_core::Duration>(
       get_parameter("incident_auto_close_h").as_double() * 3600e9);
+    config.max_resolved_incidents = static_cast<std::size_t>(
+      std::max<int64_t>(1, get_parameter("max_resolved_incidents").as_int()));
     manager_ = std::make_unique<jarvis_core::FaultManager>(std::move(catalog), config);
 
     state_ =
@@ -519,7 +523,7 @@ private:
   rclcpp::TimerBase::SharedPtr autostart_timer_;
   std::unique_ptr<diagnostic_updater::Updater> self_diagnostics_;
 
-  std::size_t depth_{1000};
+  std::size_t depth_{20000};
   jarvis_core::Timestamp armed_for_{0};
   bool active_{false};
   bool dirty_{false};

@@ -13,6 +13,7 @@
     incident_min_severity: ERROR
     incident_merge_window_s: 120.0
     incident_auto_close_h: 24.0
+    max_resolved_incidents: 500   # kept until they auto-close; the oldest close early
     export_diagnostics: true
     blackbox_service: /jarvis/blackbox/snapshot
     blackbox_wait_s: 2.0          # a capture waits this long for the recorder (e.g. at startup)

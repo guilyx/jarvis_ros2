@@ -36,7 +36,9 @@ public:
     declare<double>(*this, "suppression_window_s", 10.0, "Period of suppression summaries", false);
     declare<int>(*this, "buffer_capacity_mb", 128, "Memory budget of the recent-events buffer");
     declare<int>(*this, "max_causal_depth", 16, "Longest allowed chain of caused events");
-    declare<int>(*this, "queue_depth", 1000, "History depth of /jarvis/ingest and /jarvis/events");
+    // 20 000: a burst is buffered on both sides of the hub while it and its readers catch up (NFR-1).
+    declare<int>(*this, "queue_depth", 20000, "History depth of /jarvis/events");
+    declare<int>(*this, "ingest_queue_depth", 20000, "History depth of /jarvis/ingest");
     if (declare<bool>(*this, "autostart", false, "Configure and activate on startup")) {
       autostart_timer_ = create_wall_timer(std::chrono::milliseconds(1), [this]() {
         autostart_timer_->cancel();
@@ -58,6 +60,7 @@ public:
       static_cast<std::size_t>(get_parameter("buffer_capacity_mb").as_int()) << 20;
     config.max_causal_depth = static_cast<int>(get_parameter("max_causal_depth").as_int());
     depth_ = static_cast<std::size_t>(get_parameter("queue_depth").as_int());
+    ingest_depth_ = static_cast<std::size_t>(get_parameter("ingest_queue_depth").as_int());
 
     StateFile state(get_parameter("state_dir").as_string(), "event_hub.json");
     try {
@@ -105,7 +108,8 @@ public:
   CallbackReturn on_activate(const rclcpp_lifecycle::State &) override
   {
     ingest_sub_ = create_subscription<AdaptedEvent>(
-      "ingest", stream_qos(depth_), [this](const jarvis_core::Event & event) { on_ingest(event); });
+      "ingest", stream_qos(ingest_depth_),
+      [this](const jarvis_core::Event & event) { on_ingest(event); });
     tick_timer_ = create_wall_timer(
       std::chrono::seconds(1), [this]() { publish_all(hub_->advance_to(now_ns(*this))); });
     is_active_ = true;
@@ -200,7 +204,8 @@ private:
   rclcpp::TimerBase::SharedPtr tick_timer_;
   rclcpp::TimerBase::SharedPtr autostart_timer_;
   std::unique_ptr<diagnostic_updater::Updater> diagnostics_;
-  std::size_t depth_{1000};
+  std::size_t depth_{20000};
+  std::size_t ingest_depth_{20000};
   uint16_t boot_count_{0};
   bool is_active_{false};
 };

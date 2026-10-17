@@ -59,6 +59,10 @@ ARGUMENTS = {
     "agent": ("true", "Analyze incidents and failed recoveries (jarvis_agent, through the gateway)"),
     "agent_config": ("", "Agent settings (jarvis.agent/v1): autonomy, triggers, redaction"),
     "log_level": ("info", "Log level of the container"),
+    # One thread per component: an event costs half the CPU of the multi-threaded container's
+    # shared executor (docs/design/01-requirements.md §5, measured), and a slow one can't stall
+    # the others.
+    "container": ("component_container_isolated", "rclcpp_components container executable"),
 }
 
 
@@ -244,7 +248,7 @@ def _setup(context):
             name="container",
             namespace="jarvis",
             package="rclcpp_components",
-            executable="component_container_mt",
+            executable=arg["container"],
             composable_node_descriptions=nodes,
             arguments=["--ros-args", "--log-level", arg["log_level"]],
             output="screen",

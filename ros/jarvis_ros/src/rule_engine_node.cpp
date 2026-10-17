@@ -54,7 +54,7 @@ public:
       *this, "recovery_wait_s", 5.0,
       "How long a recover action waits for the recovery server (e.g. at startup) before giving up");
     declare<int>(*this, "max_partitions", 1000, "Partitions kept per rule");
-    declare<int>(*this, "queue_depth", 1000, "History depth of /jarvis/events and /jarvis/ingest");
+    declare<int>(*this, "queue_depth", 20000, "History depth of /jarvis/events and /jarvis/ingest");
     if (declare<bool>(*this, "autostart", false, "Configure and activate on startup")) {
       autostart_timer_ = create_wall_timer(std::chrono::milliseconds(1), [this]() {
         autostart_timer_->cancel();
@@ -443,7 +443,7 @@ private:
   rclcpp::TimerBase::SharedPtr autostart_timer_;
   std::unique_ptr<diagnostic_updater::Updater> self_diagnostics_;
 
-  std::size_t depth_{1000};
+  std::size_t depth_{20000};
   jarvis_core::Timestamp armed_for_{0};
   std::uint64_t requested_{0};
   std::uint64_t unavailable_{0};

@@ -3,7 +3,7 @@
 # rosbag2 wants every field; a zero duration means "unspecified" (the RMW default, infinite).
 /jarvis/events:
   history: keep_last
-  depth: 1000
+  depth: 20000  # a burst (NFR-1), as the event hub publishes it
   reliability: reliable
   durability: volatile
   deadline: { sec: 0, nsec: 0 }

@@ -35,6 +35,7 @@ def generate_test_description():
             "bridges": "false",
             "recovery": "false",
             "blackbox": "false",
+            "gateway": "false",
         }.items(),
     )
     return launch.LaunchDescription([jarvis, launch_testing.actions.ReadyToTest()])

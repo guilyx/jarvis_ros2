@@ -11,6 +11,7 @@
 
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>jarvis_bridges</exec_depend>
+  <exec_depend>jarvis_gateway</exec_depend>
   <exec_depend>jarvis_lake</exec_depend>
   <exec_depend>jarvis_ros</exec_depend>
   <exec_depend>launch</exec_depend>
@@ -21,6 +22,7 @@
 
   <test_depend>action_msgs</test_depend>
   <test_depend>diagnostic_msgs</test_depend>
+  <test_depend>jarvis_cli</test_depend>
   <test_depend>jarvis_interfaces</test_depend>
   <test_depend>launch_testing</test_depend>
   <test_depend>launch_testing_ament_cmake</test_depend>

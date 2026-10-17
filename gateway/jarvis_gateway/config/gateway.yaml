@@ -1,0 +1,13 @@
+# Jarvis gateway settings (jarvis-gateway --config). See jarvis_gateway/config.py.
+schema: jarvis.gateway/v1
+host: 127.0.0.1          # this machine only; bind a LAN address (or 0.0.0.0) to reach it from others
+port: 8080
+
+# Requests without a token. Writes need operator or admin, so give people tokens: their name goes
+# into the audit trail of every command they send.
+anonymous: { name: anonymous, role: viewer }
+tokens: []               # - { token: <secret>, name: alice, role: operator }
+                         # or $JARVIS_GATEWAY_TOKENS="secret:alice:operator,..."
+
+# Where `notify` actions of rules go (events jarvis.notify), by channel.
+webhooks: []             # - { name: ops, url: https://hooks.slack.com/..., channels: [operators], format: slack }

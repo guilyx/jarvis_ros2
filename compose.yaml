@@ -6,6 +6,7 @@
 #   docker compose exec demo inject clear         # operator clears the latched e-stop
 #   docker compose exec demo inject scan-wedge    # the lidar relay hangs: Jarvis restarts it
 #   docker compose exec demo ros2-jarvis executions  # what Jarvis ran (ros2 jarvis <verb>)
+#   curl localhost:8080/api/v1/faults             # the gateway's API (docs: http://localhost:8080/docs)
 #   docker compose down                           # stop; recordings stay in ./demo-data
 name: jarvis
 services:
@@ -21,6 +22,9 @@ services:
     stop_grace_period: 20s
     ports:
       - "8765:8765" # Foxglove: open a connection to ws://localhost:8765
+      # The gateway: API docs at http://localhost:8080/docs. The demo lets anyone in as admin, so
+      # it is published on this machine only.
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./demo-data:/var/lib/jarvis # MCAP recordings, black-box snapshots, fault state
     environment:

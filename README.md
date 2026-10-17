@@ -13,7 +13,8 @@ The core is ROS-agnostic; ROS 2 is the communication layer.
 
 **M1 (record & manage faults) and M2 (rules & automated recovery) are in**: Jarvis records and
 manages faults, restarts what hangs on its own, escalates to a human when that doesn't work, and
-replays recordings to check rule changes. Next is M3, the dashboard and analytics
+replays recordings to check rule changes. **M3 is under way**: history and analytics (`jarvis_lake`)
+and the gateway's API and live stream (`jarvis_gateway`) are in; the dashboard is next
 ([roadmap](docs/design/09-roadmap.md)). The design package starts at
 [`docs/design/README.md`](docs/design/README.md).
 
@@ -43,6 +44,7 @@ Ctrl-C leaves the view; Jarvis keeps running.
 | `./demo inject scan-wedge` | Break one thing: `scan-wedge`, `scan-stall`, `scan-slow`, `rosout-error`, `diag-error`, `estop` |
 | `./demo clear` | Clear the latched e-stop, as an operator would (Jarvis restarts nothing while it is latched) |
 | `./demo jarvis executions` | `ros2 jarvis`: `executions`, `rules`, `recover`, `mode DRY_RUN`, `faults`, ... |
+| `./demo api /faults` | The gateway's API: `/faults`, `/incidents`, `/stats`, ... (all of it: http://localhost:8080/docs) |
 | `./demo shell` | A shell with ROS 2 ready: `ros2 topic echo /jarvis/faults` |
 | `./demo down` | Stop. Recordings stay in `./demo-data/` |
 
@@ -145,6 +147,28 @@ A split the recorder never closed (a crash, a power cut) is recovered up to its 
 chunk when Jarvis restarts. Retention deletes recordings only after they are converted (7 days or
 10 GiB of bags, 180 days or 5 GiB of Parquet, 2 GiB of black-box snapshots by default).
 
+## API and live stream
+
+The gateway (`jarvis_gateway`) serves Jarvis over HTTP for the dashboard and your tools: events,
+faults, incidents with their timeline, recoveries, rules, plans, KPIs and analytics, recordings to
+download, and a WebSocket stream that resumes without gaps from any `seq`. Commands (ack, clear,
+run a plan, approve, the kill switch, rule state) go to the component that owns them, which records
+who asked: every change is in the audit trail. It also delivers the `notify` actions of rules to
+webhooks (Slack or JSON) and exposes Prometheus metrics.
+
+```bash
+curl localhost:8080/api/v1/faults                                    # open faults
+curl -X POST -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/faults/<id>:ack
+curl "localhost:8080/api/v1/events?code=ros.*&min_severity=WARN"     # history: lake + recent
+```
+
+It binds `127.0.0.1:8080` by default (LAN-only by design: `gateway_host:=<lan address>` to open
+it). Tokens give names and roles (viewer, operator, admin) in
+[`gateway.yaml`](gateway/jarvis_gateway/config/gateway.yaml) (`gateway_config:=...`) or
+`$JARVIS_GATEWAY_TOKENS`. The API is documented at `/docs` (OpenAPI);
+[docs/design/07-dashboard.md](docs/design/07-dashboard.md) lists it. `jarvis-gateway --fake
+--scenario` runs it over an in-memory Jarvis, without ROS.
+
 ## Packages
 
 | Package | What it does |
@@ -159,6 +183,7 @@ chunk when Jarvis restarts. Retention deletes recordings only after they are con
 | [`ros/jarvis_bringup`](ros/jarvis_bringup) | Launch, parameters, default fault catalog, rules and plans, recorder and black box |
 | [`ros/jarvis_demo`](ros/jarvis_demo) | Lidar relay, fault injector, demo launch files |
 | [`lake/jarvis_lake`](lake/jarvis_lake) | Recordings as Parquet + DuckDB: history, KPIs, analytics, retention (runs without ROS) |
+| [`gateway/jarvis_gateway`](gateway/jarvis_gateway) | REST API, gap-free WebSocket stream, attributed commands, webhooks, Prometheus metrics |
 | [`schemas`](schemas) | JSON Schema contracts (canonical) |
 
 ## Design

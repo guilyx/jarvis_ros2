@@ -1,0 +1,3 @@
+# Gateway settings of the demo. DEMO ONLY: anyone who reaches the port is an admin.
+schema: jarvis.gateway/v1
+anonymous: { name: demo, role: admin }

@@ -12,6 +12,9 @@ Data lands in `data_dir` (default $JARVIS_DATA, else ~/.local/share/jarvis):
                              `ros2 run jarvis_lake jarvis-lake sql "SELECT * FROM incidents"`
   state/                     open faults, rule fire history, waiting executions, hub boot counter
 
+The gateway (jarvis_gateway) serves the API, live stream and dashboard on gateway_host:gateway_port
+(default 127.0.0.1:8080, this machine only): http://localhost:8080/docs.
+
 Rules and plans are directories of YAML files (`rules`, `plans`); the defaults ship generic ones.
 """
 
@@ -47,6 +50,10 @@ ARGUMENTS = {
     "blackbox_topics": ("/tf /tf_static /odom /scan /cmd_vel /jarvis/events", "Black-box topics"),
     "blackbox_cache_mb": ("256", "Memory of the black-box ring buffer"),
     "lake": ("true", "Convert closed splits to Parquet and enforce retention (jarvis_lake)"),
+    "gateway": ("true", "Serve the API, live stream and dashboard (jarvis_gateway)"),
+    "gateway_host": ("127.0.0.1", "Address the gateway binds (a LAN address to reach it from others)"),
+    "gateway_port": ("8080", "Port of the gateway"),
+    "gateway_config": ("", "Gateway settings (jarvis.gateway/v1): tokens, webhooks, ..."),
     "log_level": ("info", "Log level of the container"),
 }
 
@@ -188,6 +195,26 @@ def _setup(context):
                 name="lake",
                 namespace="jarvis",
                 arguments=["--data-dir", str(data_dir), "run"],
+                output="screen",
+            )
+        )
+    if _flag(arg["gateway"]):
+        config = ["--config", arg["gateway_config"]] if arg["gateway_config"] else []
+        processes.append(
+            Node(
+                package="jarvis_gateway",
+                executable="jarvis-gateway",
+                name="gateway",
+                namespace="jarvis",
+                arguments=[
+                    *config,
+                    "--data-dir",
+                    str(data_dir),
+                    "--host",
+                    arg["gateway_host"],
+                    "--port",
+                    arg["gateway_port"],
+                ],
                 output="screen",
             )
         )

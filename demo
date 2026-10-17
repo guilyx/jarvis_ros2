@@ -9,11 +9,12 @@
 #   ./demo clear        an operator clears the latched faults
 #   ./demo jarvis V     ros2 jarvis V: executions, rules, recover, mode, faults, ... (./demo jarvis -h)
 #   ./demo lake V       history: kpis, sql "SELECT * FROM incidents", status (./demo lake -h)
+#   ./demo api PATH     GET from the gateway's API, e.g. ./demo api /faults (docs: localhost:8080/docs)
 #   ./demo shell        a shell with ROS 2 ready (ros2 topic echo /jarvis/faults, ...)
 #   ./demo logs         follow the container logs
 #   ./demo down         stop; recordings stay in ./demo-data
 #
-# Foxglove: connect to ws://localhost:8765. Recordings (MCAP): ./demo-data/bags/.
+# Foxglove: connect to ws://localhost:8765. API: http://localhost:8080. Recordings: ./demo-data/bags/.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -62,8 +63,9 @@ Jarvis is running. Next:
   ./demo inject scan-stall  stop the lidar (also: scan-slow, rosout-error, diag-error, estop)
   ./demo jarvis executions  what Jarvis ran (also: rules, recover, mode DRY_RUN, faults)
   ./demo lake kpis          history and analytics (recordings close every minute)
+  ./demo api /stats         the gateway's API (all of it: http://localhost:8080/docs)
   ./demo down               stop
-Foxglove: ws://localhost:8765 · Recordings: ./demo-data/bags/
+Foxglove: ws://localhost:8765 · API: http://localhost:8080 · Recordings: ./demo-data/bags/
 EOF
 }
 
@@ -84,6 +86,7 @@ case "${1:-play}" in
   clear) shift && in_demo inject clear "$@" ;;
   jarvis) shift && in_demo ros2-jarvis "$@" ;;
   lake) shift && in_demo lake "$@" ;;
+  api) shift && curl -fsS "http://localhost:8080/api/v1${1:-/health}" && echo ;;
   shell) in_demo bash ;;
   logs) compose logs -f demo ;;
   down) compose down ;;

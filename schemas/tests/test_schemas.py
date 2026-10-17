@@ -35,6 +35,23 @@ def test_event_examples_validate(path):
     _validator("event.schema.json").validate(json.loads(path.read_text()))
 
 
+@pytest.mark.parametrize("path", sorted((SCHEMAS / "examples").glob("insight.*.json")), ids=lambda p: p.name)
+def test_insight_examples_validate(path):
+    _validator("insight.schema.json").validate(json.loads(path.read_text()))
+
+
+def test_insight_schema_caps_what_the_analyst_says():
+    insight = json.loads((SCHEMAS / "examples" / "insight.lidar_stall.json").read_text())
+    hypothesis = insight["hypotheses"][0]
+    for bad in (
+        {"hypotheses": [hypothesis] * 4},
+        {"assessment": "DIRE"},
+        {"recommendations": [{"kind": "RUN_SHELL", "text": "rm -rf /"}]},
+        {"hypotheses": [dict(hypothesis, confidence=1.5)]},
+    ):
+        assert list(_validator("insight.schema.json").iter_errors({**insight, **bad})), bad
+
+
 @pytest.mark.parametrize("path", sorted((SCHEMAS / "examples").glob("fault.*.json")), ids=lambda p: p.name)
 def test_fault_examples_validate(path):
     _validator("fault.schema.json").validate(json.loads(path.read_text()))

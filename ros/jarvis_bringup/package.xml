@@ -10,6 +10,7 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>jarvis_agent</exec_depend>
   <exec_depend>jarvis_bridges</exec_depend>
   <exec_depend>jarvis_gateway</exec_depend>
   <exec_depend>jarvis_lake</exec_depend>

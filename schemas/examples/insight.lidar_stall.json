@@ -1,0 +1,38 @@
+{
+  "insight_id": "01928f71-1111-7aaa-8bbb-cccccccccccc",
+  "trigger": { "type": "RECOVERY_FAILED", "ref": "01928f6e-9999-7999-8999-999999999999" },
+  "window": {
+    "from": "2026-10-13T09:10:00.000000000Z",
+    "to": "2026-10-13T09:15:10.000000000Z",
+    "event_count": 42,
+    "correlation_id": "01928f6e-9999-7999-8999-999999999999"
+  },
+  "title": "The lidar itself stopped: restarting its relay did not bring /scan back",
+  "summary": "sensor.scan.stale on lidar confirmed at 09:14:03; diag.scan_relay.output_rate followed 0.4 s later and was muted as its symptom. restart-lifecycle-node restarted /demo/scan_relay, but the fault never cleared.",
+  "assessment": "ERROR",
+  "hypotheses": [
+    {
+      "cause": "The lidar driver stopped publishing (upstream of the relay)",
+      "confidence": 0.6,
+      "evidence": ["01928f6e-7c1a-7b3e-9a51-3f0c2d4e5a61"],
+      "counter_evidence": []
+    }
+  ],
+  "recommendations": [
+    { "kind": "INVESTIGATE", "text": "Check the lidar driver and its power: the relay restart did not help" },
+    {
+      "kind": "RECOVER",
+      "text": "restart-lifecycle-node fixed sensor.scan.stale 3 of 4 times",
+      "plan_id": "restart-lifecycle-node",
+      "args": { "node": "/demo/scan_relay", "component": "lidar", "fault": "sensor.scan.stale" },
+      "confidence": 0.75
+    }
+  ],
+  "proposals": [],
+  "degraded": true,
+  "analyst": "heuristic",
+  "flags": [],
+  "facts": ["sensor.scan.stale ×12 on lidar (09:14:03 → 09:14:15)"],
+  "model": null,
+  "created": "2026-10-13T09:15:10.000000000Z"
+}

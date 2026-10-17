@@ -14,8 +14,10 @@ The core is ROS-agnostic; ROS 2 is the communication layer.
 **M1 (record & manage faults) and M2 (rules & automated recovery) are in**: Jarvis records and
 manages faults, restarts what hangs on its own, escalates to a human when that doesn't work, and
 replays recordings to check rule changes. **M3 (history, analytics and the dashboard) is in**: a web
-console over the gateway's API and live stream, with Parquet history behind it. Next is M4, the
-agent ([roadmap](docs/design/09-roadmap.md)). The design package starts at
+console over the gateway's API and live stream, with Parquet history behind it. **M4 (the agent) has
+started**: it explains incidents and failed recoveries from the event stream, offline, with the
+evidence behind each claim; a model comes next ([roadmap](docs/design/09-roadmap.md)). The design
+package starts at
 [`docs/design/README.md`](docs/design/README.md).
 
 ## Try it in Docker
@@ -171,6 +173,34 @@ A web console for operators, served by the gateway (no Node.js on the robot):
 Who you are comes from a token (top right): viewers read, operators act on faults and recoveries,
 admins change modes and rules. See [`dashboard/`](dashboard) to develop it.
 
+## The agent
+
+When an incident opens at ERROR or worse, or a recovery fails, the agent (`jarvis_agent`) reads the
+incident through the gateway, with the minutes around it and the history of its faults, and
+publishes an insight: what most likely happened, how confident it is, the events that show it, and
+what to do. On the demo's lidar stall:
+
+```text
+ERROR  sensor.scan.stale on lidar: restart-lifecycle-node did not fix it
+
+1. The cause is beyond what restart-lifecycle-node acts on: sensor.scan.stale stayed after it ran  [0.55, 2 evidence]
+2. sensor.scan.stale keeps coming back on lidar (2 earlier episodes): something lasting causes it  [0.40, 1 evidence]
+
+- investigate: Look at lidar itself: restart-lifecycle-node did not clear sensor.scan.stale
+- escalate: Jarvis gave up and asked for a human: someone should go and look
+```
+
+Insights show up in the dashboard (Agent, the incident's timeline), with a **Run** button on recovery
+advice: the agent advises, a human runs it. For now the analyst is deterministic (no model, nothing
+leaves the robot): it reasons from the event stream (root cause vs. muted symptoms, what preceded
+it, how recoveries went, which plan fixed this code before) and every claim cites real event ids.
+A model-backed analyst (LiteLLM, any provider or a local model) comes next, behind the same checks.
+
+```bash
+ros2 run jarvis_agent jarvis-agent analyze <incident-id>        # explain one incident, now
+ros2 run jarvis_agent jarvis-agent analyze <id> --replay events.jsonl   # from a recording, no robot
+```
+
 ## API and live stream
 
 The gateway (`jarvis_gateway`) serves Jarvis over HTTP for the dashboard and your tools: events,
@@ -209,6 +239,7 @@ it). Tokens give names and roles (viewer, operator, admin) in
 | [`lake/jarvis_lake`](lake/jarvis_lake) | Recordings as Parquet + DuckDB: history, KPIs, analytics, retention (runs without ROS) |
 | [`gateway/jarvis_gateway`](gateway/jarvis_gateway) | REST API, gap-free WebSocket stream, attributed commands, webhooks, Prometheus metrics |
 | [`dashboard`](dashboard) | The web console (React + TypeScript), served by the gateway |
+| [`agent/jarvis_agent`](agent/jarvis_agent) | Explains incidents and failed recoveries: triage, evidence-backed insights, recovery advice |
 | [`schemas`](schemas) | JSON Schema contracts (canonical) |
 
 ## Design

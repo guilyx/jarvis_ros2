@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Clock, Sparkles } from "lucide-react";
 import { useMemo } from "react";
 import { useDecide, useIncidents, useInsights, useStats } from "@/api/queries";
-import { SEVERITIES, type RatePoint, type Severity } from "@/api/types";
+import { SEVERITIES, insightConfidence, insightOf, type RatePoint, type Severity } from "@/api/types";
 import { Chart, chartColors, type ChartOption } from "@/components/Chart";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Empty, ErrorNote, SeverityBadge, StateBadge } from "@/components/domain";
@@ -201,21 +201,21 @@ function LatestInsights() {
       <CardBody className="space-y-3">
         {insights.data?.insights.length ? (
           insights.data.insights.map((e) => {
-            const p = (e.payload ?? {}) as { title?: string; confidence?: number; evidence?: unknown[] };
+            const insight = insightOf(e);
+            if (!insight) return null;
+            const evidence = insight.hypotheses.reduce((n, h) => n + h.evidence.length, 0);
             return (
-              <div key={e.id} className="text-sm">
+              <Link key={e.id} to="/agent" className="block text-sm hover:underline">
                 <Sparkles size={13} className="mr-1.5 inline text-violet-400" />
-                {p.title ?? e.message}
+                {insight.title}
                 <div className="text-xs text-muted-fg">
-                  {p.confidence !== undefined ? `conf ${p.confidence.toFixed(2)} · ` : ""}
-                  {p.evidence ? `${p.evidence.length} evidence · ` : ""}
-                  {ago(e.stamp)}
+                  conf {insightConfidence(insight).toFixed(2)} · {evidence} evidence · {ago(e.stamp)}
                 </div>
-              </div>
+              </Link>
             );
           })
         ) : (
-          <Empty className="py-6">No insights yet: the agent arrives with milestone 4.</Empty>
+          <Empty className="py-6">No insights yet: the agent writes one when something goes wrong.</Empty>
         )}
       </CardBody>
     </Card>

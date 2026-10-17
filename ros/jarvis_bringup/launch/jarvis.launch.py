@@ -13,7 +13,8 @@ Data lands in `data_dir` (default $JARVIS_DATA, else ~/.local/share/jarvis):
   state/                     open faults, rule fire history, waiting executions, hub boot counter
 
 The gateway (jarvis_gateway) serves the API, live stream and dashboard on gateway_host:gateway_port
-(default 127.0.0.1:8080, this machine only): http://localhost:8080 (the API at /docs).
+(default 127.0.0.1:8080, this machine only): http://localhost:8080 (the API at /docs). The agent
+(jarvis_agent) analyzes incidents and failed recoveries through it and publishes insights.
 
 Rules and plans are directories of YAML files (`rules`, `plans`); the defaults ship generic ones.
 """
@@ -55,6 +56,8 @@ ARGUMENTS = {
     "gateway_port": ("8080", "Port of the gateway"),
     "gateway_config": ("", "Gateway settings (jarvis.gateway/v1): tokens, webhooks, ..."),
     "gateway_dashboard": ("", "Built dashboard to serve (default: the installed one, if any)"),
+    "agent": ("true", "Analyze incidents and failed recoveries (jarvis_agent, through the gateway)"),
+    "agent_config": ("", "Agent settings (jarvis.agent/v1): autonomy, triggers, redaction"),
     "log_level": ("info", "Log level of the container"),
 }
 
@@ -218,6 +221,19 @@ def _setup(context):
                     "--port",
                     arg["gateway_port"],
                 ],
+                output="screen",
+            )
+        )
+    if _flag(arg["gateway"]) and _flag(arg["agent"]):
+        # It reads through the gateway (history and the live stream) and publishes INSIGHT events.
+        config = ["--config", arg["agent_config"]] if arg["agent_config"] else []
+        processes.append(
+            Node(
+                package="jarvis_agent",
+                executable="jarvis-agent",
+                name="agent",
+                namespace="jarvis",
+                arguments=[*config, "--gateway", f"http://127.0.0.1:{arg['gateway_port']}", "run"],
                 output="screen",
             )
         )

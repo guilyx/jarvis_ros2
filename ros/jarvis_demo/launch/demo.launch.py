@@ -48,6 +48,7 @@ def generate_launch_description():
             "gateway_host": arg("gateway_host"),
             "gateway_port": arg("gateway_port"),
             "gateway_config": str(DEMO / "config" / "gateway.yaml"),
+            "agent": arg("agent"),
         }.items(),
     )
     return LaunchDescription(
@@ -66,6 +67,7 @@ def generate_launch_description():
             DeclareLaunchArgument("gateway", default_value="true", description="Serve API and dashboard"),
             DeclareLaunchArgument("gateway_host", default_value="127.0.0.1"),
             DeclareLaunchArgument("gateway_port", default_value="8080"),
+            DeclareLaunchArgument("agent", default_value="true", description="Analyze what goes wrong"),
             jarvis,
             Node(
                 package="jarvis_demo",

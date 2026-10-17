@@ -23,13 +23,14 @@ COPY core/jarvis_core/package.xml core/jarvis_core/package.xml
 COPY ros/ ros-manifests/
 COPY lake/ lake-manifests/
 COPY gateway/ gateway-manifests/
-RUN find ros-manifests lake-manifests gateway-manifests -mindepth 1 -not -name package.xml -not -type d \
-         -delete \
+COPY agent/ agent-manifests/
+RUN find ros-manifests lake-manifests gateway-manifests agent-manifests -mindepth 1 -not -name package.xml \
+         -not -type d -delete \
     && apt-get update \
     && rosdep update --rosdistro "${ROS_DISTRO}" \
-    && rosdep install --from-paths core ros-manifests lake-manifests gateway-manifests --ignore-src -y \
-         --rosdistro "${ROS_DISTRO}" \
-    && rm -rf /var/lib/apt/lists/* ros-manifests lake-manifests gateway-manifests
+    && rosdep install --from-paths core ros-manifests lake-manifests gateway-manifests agent-manifests \
+         --ignore-src -y --rosdistro "${ROS_DISTRO}" \
+    && rm -rf /var/lib/apt/lists/* ros-manifests lake-manifests gateway-manifests agent-manifests
 
 FROM dev AS build
 COPY . .
@@ -43,14 +44,16 @@ COPY --from=build /ws/src/jarvis_ros2/core/jarvis_core/package.xml /tmp/manifest
 COPY --from=build /ws/src/jarvis_ros2/ros /tmp/manifests/ros
 COPY --from=build /ws/src/jarvis_ros2/lake /tmp/manifests/lake
 COPY --from=build /ws/src/jarvis_ros2/gateway /tmp/manifests/gateway
-# The Python libraries of jarvis_lake (DuckDB, Arrow, MCAP) and jarvis_gateway (FastAPI, uvicorn)
-# are not in apt: pinned in their requirements.txt.
+COPY --from=build /ws/src/jarvis_ros2/agent /tmp/manifests/agent
+# The Python libraries of jarvis_lake (DuckDB, Arrow, MCAP), jarvis_gateway (FastAPI, uvicorn) and
+# jarvis_agent (pydantic, httpx) are not in apt: pinned in their requirements.txt.
 RUN apt-get update && apt-get install -y --no-install-recommends python3-rosdep python3-pip \
     && (rosdep init || true) && rosdep update --rosdistro "${ROS_DISTRO}" \
     && rosdep install --from-paths /tmp/manifests --ignore-src -y -t exec --rosdistro "${ROS_DISTRO}" \
     && pip3 install --no-cache-dir --break-system-packages \
          -r /tmp/manifests/lake/jarvis_lake/requirements.txt \
          -r /tmp/manifests/gateway/jarvis_gateway/requirements.txt \
+         -r /tmp/manifests/agent/jarvis_agent/requirements.txt \
     && rm -rf /var/lib/apt/lists/* /tmp/manifests
 COPY --from=build /ws/install /opt/jarvis
 # The gateway serves it from there (no Node.js on the robot).

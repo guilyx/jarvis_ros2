@@ -423,3 +423,55 @@ export interface LintFinding {
   level: "error" | "warning";
   message: string;
 }
+
+// -- the agent (schemas/insight.schema.json) --------------------------------------------------------
+
+export interface InsightHypothesis {
+  cause: string;
+  confidence: number;
+  evidence: string[];
+  counter_evidence?: string[];
+  flagged?: boolean;
+}
+
+export interface InsightRecommendation {
+  kind: "RECOVER" | "INVESTIGATE" | "CONFIGURE" | "ESCALATE";
+  text: string;
+  plan_id?: string;
+  args?: Record<string, string>;
+  confidence?: number;
+}
+
+export interface Insight {
+  insight_id: string;
+  trigger: { type: string; ref?: string };
+  window: { from: string; to: string; event_count: number; correlation_id?: string };
+  title: string;
+  summary: string;
+  assessment: Severity;
+  hypotheses: InsightHypothesis[];
+  recommendations: InsightRecommendation[];
+  proposals?: string[];
+  degraded: boolean;
+  analyst: "heuristic" | "llm";
+  flags?: string[];
+  facts?: string[];
+  model?: {
+    provider: string;
+    name: string;
+    input_tokens: number;
+    output_tokens: number;
+    cost_usd: number;
+  } | null;
+  created?: string;
+}
+
+/** The insight an INSIGHT event carries (the gateway decodes the payload), or null. */
+export function insightOf(e: JarvisEvent): Insight | null {
+  const p = e.payload as Partial<Insight> | undefined;
+  return p && typeof p === "object" && typeof p.title === "string" ? (p as Insight) : null;
+}
+
+export function insightConfidence(i: Insight): number {
+  return Math.max(0, ...i.hypotheses.map((h) => h.confidence));
+}

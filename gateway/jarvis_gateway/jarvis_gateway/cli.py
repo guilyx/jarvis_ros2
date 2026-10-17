@@ -48,6 +48,8 @@ def parser():
         choices=["none", "viewer", "operator", "admin"],
         help="what requests without a token may do (default from the config: viewer)",
     )
+    p.add_argument("--tls-cert", help="serve HTTPS with this certificate (PEM); needs --tls-key")
+    p.add_argument("--tls-key", help="the certificate's private key (PEM)")
     p.add_argument("--log-level", default="info")
     p.add_argument("--version", action="version", version=__version__)
     return p
@@ -70,8 +72,16 @@ def installed_dashboard():
 
 def settings_from(args):
     s = Settings.load(
-        args.config, host=args.host, port=args.port, data_dir=args.data_dir, dashboard_dir=args.dashboard_dir
+        args.config,
+        host=args.host,
+        port=args.port,
+        data_dir=args.data_dir,
+        dashboard_dir=args.dashboard_dir,
+        tls_cert=args.tls_cert,
+        tls_key=args.tls_key,
     )
+    if bool(s.tls_cert) != bool(s.tls_key):
+        raise SystemExit("jarvis-gateway: TLS needs both a certificate and its key")
     s.dashboard_dir = s.dashboard_dir or installed_dashboard()
     if args.anonymous_role:
         s.anonymous = None if args.anonymous_role == "none" else Principal("anonymous", args.anonymous_role)
@@ -94,7 +104,8 @@ def main(argv=None):
 
         port = RosPort(namespace=args.namespace)
     app = create_app(settings, port)
-    uvicorn.run(app, host=settings.host, port=settings.port, log_level=args.log_level, loop="asyncio")
+    tls = {"ssl_certfile": settings.tls_cert, "ssl_keyfile": settings.tls_key} if settings.tls_cert else {}
+    uvicorn.run(app, host=settings.host, port=settings.port, log_level=args.log_level, loop="asyncio", **tls)
     return 0
 
 

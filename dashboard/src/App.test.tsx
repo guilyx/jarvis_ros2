@@ -52,6 +52,38 @@ const KPIS = {
   recovery_success_rate: 1,
 };
 
+const INSIGHT_EVENT = {
+  id: "ins-1",
+  seq: "40",
+  stamp: "2026-10-17T09:01:00Z",
+  source: { robot: "bot", node: "/jarvis/agent", component: "", host: "" },
+  kind: "INSIGHT",
+  code: "jarvis.insight",
+  severity: "INFO",
+  correlation_id: "i1",
+  payload: {
+    insight_id: "x",
+    trigger: { type: "RECOVERY_FAILED", ref: "i1" },
+    window: { from: "", to: "", event_count: 12, correlation_id: "i1" },
+    title: "sensor.scan.stale on lidar: restart-lifecycle-node did not fix it",
+    summary: "",
+    assessment: "ERROR",
+    hypotheses: [{ cause: "The lidar itself stopped", confidence: 0.55, evidence: ["e1", "e2"] }],
+    recommendations: [
+      { kind: "INVESTIGATE", text: "Look at the lidar" },
+      {
+        kind: "RECOVER",
+        text: "it fixed it before",
+        plan_id: "restart-lifecycle-node",
+        args: { component: "lidar" },
+      },
+    ],
+    degraded: true,
+    analyst: "heuristic",
+    facts: ["recovery restart-lifecycle-node: FAILED after 15 s"],
+  },
+};
+
 function api(role: "viewer" | "operator") {
   const calls: { method: string; path: string; body: unknown }[] = [];
   fetchMock.mockImplementation(async (input: Request) => {
@@ -76,7 +108,9 @@ function api(role: "viewer" | "operator") {
       case "/api/v1/incidents":
         return json({ incidents: [] });
       case "/api/v1/insights":
-        return json({ insights: [] });
+        return json({ insights: url.searchParams.get("limit") === "50" ? [INSIGHT_EVENT] : [] });
+      case "/api/v1/plans":
+        return json({ mode: "ENABLED", plans: [] });
       case "/api/v1/faults/f-estop:ack":
         return json({ success: true, message: "acknowledged", data: {} });
       default:
@@ -147,6 +181,17 @@ describe("dashboard", () => {
       path: "/api/v1/faults/f-estop:ack",
       body: { note: "on my way" },
     });
+  });
+
+  it("shows the agent's insights, with a way to act on its advice", async () => {
+    api("operator");
+    renderApp("/agent");
+    const card = await screen.findByTestId("insight-card");
+    expect(within(card).getByText(/did not fix it/)).toBeInTheDocument();
+    expect(within(card).getByText("The lidar itself stopped")).toBeInTheDocument();
+    expect(within(card).getByText("0.55")).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Run restart-lifecycle-node" })).toBeInTheDocument();
+    expect(within(card).getByText(/heuristic analyst/)).toBeInTheDocument();
   });
 
   it("hides commands from viewers", async () => {

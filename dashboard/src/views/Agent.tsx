@@ -1,21 +1,16 @@
 import { Sparkles } from "lucide-react";
+import { useState } from "react";
 import { useInsights } from "@/api/queries";
-import { Empty, ErrorNote, IncidentLink, Loading, PageHeader } from "@/components/domain";
+import { Empty, ErrorNote, Loading, PageHeader } from "@/components/domain";
+import { EventSheet } from "@/components/EventSheet";
+import { InsightCard } from "@/components/InsightCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ago } from "@/lib/format";
-
-interface InsightPayload {
-  title?: string;
-  summary?: string;
-  confidence?: number;
-  evidence?: (string | { event_id?: string; seq?: string })[];
-  recommendations?: (string | { text?: string; action?: string })[];
-}
 
 export function Agent() {
   const insights = useInsights(50);
+  const [picked, setPicked] = useState<string | null>(null);
   return (
     <div className="space-y-4">
       <PageHeader title="Agent" />
@@ -25,7 +20,7 @@ export function Agent() {
           <Input
             disabled
             className="min-w-64 flex-1"
-            placeholder="Ask Jarvis why something happened… (arrives with milestone 4)"
+            placeholder="Ask Jarvis why something happened… (arrives with a model, milestone 4.2)"
           />
           <Button disabled>Ask</Button>
         </CardBody>
@@ -36,49 +31,18 @@ export function Agent() {
       ) : !insights.data?.insights.length ? (
         <Card>
           <Empty>
-            No insights yet. The agent (milestone 4) reads windows of events and writes evidence-backed
-            insights and recovery proposals here.
+            No insights yet. The agent analyzes incidents that open at ERROR or worse and recoveries that
+            fail, and writes what it finds here, with the events behind it.
           </Empty>
         </Card>
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {insights.data.insights.map((e) => {
-            const p = (e.payload ?? {}) as InsightPayload;
-            return (
-              <Card key={e.id}>
-                <CardBody className="space-y-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="font-medium">{p.title ?? e.message}</h3>
-                    <span className="shrink-0 text-xs text-muted-fg">{ago(e.stamp)}</span>
-                  </div>
-                  {p.confidence !== undefined ? (
-                    <div className="flex items-center gap-2 text-xs text-muted-fg">
-                      <div className="h-1.5 w-24 rounded bg-muted">
-                        <div
-                          className="h-1.5 rounded bg-violet-400"
-                          style={{ width: `${p.confidence * 100}%` }}
-                        />
-                      </div>
-                      conf {p.confidence.toFixed(2)}
-                    </div>
-                  ) : null}
-                  {p.summary ? <p className="text-sm">{p.summary}</p> : null}
-                  {p.recommendations?.length ? (
-                    <ul className="list-disc pl-5 text-sm text-muted-fg">
-                      {p.recommendations.map((r, i) => (
-                        <li key={i}>{typeof r === "string" ? r : (r.text ?? r.action)}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  <div className="text-xs text-muted-fg">
-                    incident <IncidentLink id={e.correlation_id} /> · {p.evidence?.length ?? 0} evidence
-                  </div>
-                </CardBody>
-              </Card>
-            );
-          })}
+        <div className="grid gap-3 xl:grid-cols-2">
+          {insights.data.insights.map((e) => (
+            <InsightCard key={e.id} event={e} onEvidence={setPicked} />
+          ))}
         </div>
       )}
+      <EventSheet id={picked} onClose={() => setPicked(null)} onPick={setPicked} />
     </div>
   );
 }

@@ -53,6 +53,13 @@ expect "demo acknowledged safety\.estop\.engaged" \
   "$(api /audit | json '"\n".join(e.get("message", "") for e in d["events"])')" "the ack is not audited"
 succeeded=$(api /recoveries | json 'sum(x["outcome"] == "SUCCEEDED" for x in d["history"])')
 [ "$succeeded" -ge 1 ] || fail "the gateway shows no successful recovery"
+# The agent explained the lidar stall: the restart did not help (it analyzes 20 s after a trigger).
+for _ in $(seq 1 30); do
+  insights=$(api /insights | json '"\n".join(e["payload"]["title"] for e in d["insights"])')
+  grep -q "restart-lifecycle-node did not fix it" <<<"$insights" && break
+  sleep 2
+done
+expect "sensor\.scan\.stale on lidar: restart-lifecycle-node did not fix it" "$insights" "no insight on the stall"
 
 expect "cleared safety\.estop\.engaged" "$(./demo clear)" "operator clear failed"
 if grep -q "safety.estop.engaged" <<<"$(open_faults)"; then fail "e-stop still open after the clear"; fi

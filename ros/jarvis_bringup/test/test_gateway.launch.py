@@ -33,6 +33,8 @@ CONFIG.write_text(
     "  - { token: op-secret, name: olga, role: operator }\n"
     "  - { token: admin-secret, name: ada, role: admin }\n"
 )
+AGENT_CONFIG = pathlib.Path(DATA_DIR) / "agent.yaml"
+AGENT_CONFIG.write_text("schema: jarvis.agent/v1\ntriggers: { settle_s: 1 }\n")
 BRINGUP = pathlib.Path(get_package_share_directory("jarvis_bringup")) / "launch" / "jarvis.launch.py"
 
 
@@ -49,6 +51,7 @@ def generate_test_description():
             "lake": "false",
             "gateway_port": str(PORT),
             "gateway_config": str(CONFIG),
+            "agent_config": str(AGENT_CONFIG),
         }.items(),
     )
     return launch.LaunchDescription([jarvis, launch_testing.actions.ReadyToTest()])
@@ -209,6 +212,23 @@ class TestGateway(unittest.TestCase):
                 if m["type"] == "event" and m["data"]["code"] == "test.gateway.live":
                     return
             self.fail("the live event never came")
+
+    def test_the_agent_explains_the_incident(self):
+        """The fault of test_faults opened an incident at ERROR: the agent analyzed it through the
+        gateway and published an insight, which came back through the event hub."""
+
+        def explained():
+            for e in call("GET", "/insights")[1]["insights"]:
+                if "test.gateway.broken" in e["payload"]["title"]:
+                    return e
+            return None
+
+        insight = self.wait(explained, "the agent's insight", timeout=60.0)
+        self.assertEqual(insight["kind"], "INSIGHT")
+        self.assertEqual(insight["payload_schema"], "jarvis.insight/v1")
+        self.assertEqual(insight["payload"]["analyst"], "heuristic")
+        self.assertTrue(insight["payload"]["hypotheses"][0]["evidence"])
+        self.assertEqual(insight["correlation_id"], insight["payload"]["window"]["correlation_id"])
 
     def test_metrics(self):
         with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/metrics", timeout=10) as r:

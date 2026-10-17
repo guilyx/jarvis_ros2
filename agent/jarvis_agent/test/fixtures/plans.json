@@ -1,0 +1,40 @@
+[
+ {
+  "id": "restart-lifecycle-node",
+  "description": "Cycle a managed node back to active, then verify that its faults clear.",
+  "rev": "80cb8cf6a9a02905",
+  "file": "/home/user/jarvis_ros2/install/jarvis_bringup/share/jarvis_bringup/config/plans/core.yaml",
+  "params": {
+   "component": {
+    "description": "the component its faults are about",
+    "required": true,
+    "type": "string"
+   },
+   "fault": {
+    "default": "*",
+    "description": "code glob of the faults that must clear",
+    "required": false,
+    "type": "string"
+   },
+   "node": {
+    "description": "absolute node name",
+    "pattern": "^/",
+    "required": true,
+    "type": "string"
+   }
+  },
+  "allowed_requesters": [
+   "RULE",
+   "OPERATOR",
+   "AGENT",
+   "PLAN"
+  ],
+  "requires_approval": [],
+  "agent_policy": "supervised",
+  "steps": [
+   "restart",
+   "verify"
+  ],
+  "timeout_s": 90.0
+ }
+]

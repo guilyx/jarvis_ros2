@@ -1,0 +1,5 @@
+# The agent's Python dependencies, pinned (pip). rclpy and jarvis_interfaces come from the workspace
+# (only for publishing insights on ROS); PyYAML from the system (python3-yaml).
+pydantic==2.14.1
+httpx==0.28.1
+websockets==17.2

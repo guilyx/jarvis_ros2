@@ -60,7 +60,7 @@ flowchart LR
 ### M4 — Agent
 | PR | Content |
 |----|---------|
-| 4.1 | Agent core: triggers, windows, triage, context builder, heuristic analyst (no LLM) |
+| 4.1 ✔ | Agent core: triggers, windows, triage, context builder, heuristic analyst (no LLM) |
 | 4.2 | LiteLLM adapter: tool loop, `submit_insight` + repair turn, model capability check, budgets/cost, traces, hash-pinned dependency |
 | 4.3 | Harness checks + autonomy policy + proposals through `ExecuteRecovery` |
 | 4.4 | ROS node (`Analyze` action) + gateway `/agent/ask` (SSE) + dashboard Agent view |

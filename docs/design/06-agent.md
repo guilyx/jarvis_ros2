@@ -60,6 +60,16 @@ agent/jarvis_agent/
 └── tests/
 ```
 
+### As built (4.1)
+
+The core, the heuristic analyst and the harness checks run; the agent reads through the **gateway**
+(`adapters/gateway.py`: REST for history, the WebSocket for live events) rather than the event hub
+and the lake directly, so it sees the same single timeline as the dashboard and can run anywhere on
+the LAN. Insights go to `/jarvis/ingest` (`adapters/ros2.py`). `adapters/replay.py` rebuilds what the
+lake's views give (incidents, fault episodes, executions) from recorded events, for tests and evals.
+History an analysis uses is cut at the incident's first report, so a replay never sees its own
+future. Recommendations may leave arguments to the operator (a proposal may not, 4.3).
+
 ## 2. Triggers
 
 | Trigger | Source | Default |

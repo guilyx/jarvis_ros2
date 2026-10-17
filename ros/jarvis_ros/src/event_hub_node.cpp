@@ -162,13 +162,20 @@ public:
 private:
   void on_ingest(const jarvis_core::Event & event, const rclcpp::MessageInfo & info)
   {
-    // How long it waited in the queue, on this host's clock (0 when the middleware doesn't say,
-    // e.g. intra-process): the hub sheds routine logs when it is behind.
-    const auto received = info.get_rmw_message_info().received_timestamp;
-    const auto wall = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                        std::chrono::system_clock::now().time_since_epoch())
-                        .count();
-    const jarvis_core::Duration queued = received > 0 && wall > received ? wall - received : 0;
+    // How long it waited in the queue, on this host's clock: the hub sheds routine logs when it is
+    // behind. Unknown (0) for intra-process deliveries, whose message info carries no timestamps
+    // (Jarvis's own components, in this container), and for an implausible one.
+    const auto & rmw = info.get_rmw_message_info();
+    jarvis_core::Duration queued = 0;
+    if (!rmw.from_intra_process && rmw.received_timestamp > 0) {
+      const auto wall = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                          std::chrono::system_clock::now().time_since_epoch())
+                          .count();
+      const auto waited = wall - rmw.received_timestamp;
+      if (waited > 0 && waited < 3600 * jarvis_core::kSecond) {
+        queued = waited;
+      }
+    }
     auto result = hub_->ingest(event, now_ns(*this), queued);
     if (
       !result.accepted && result.reject_reason != "rate limited" &&

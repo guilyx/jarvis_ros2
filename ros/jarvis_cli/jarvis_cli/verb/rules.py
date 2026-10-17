@@ -15,7 +15,7 @@ class RulesVerb(VerbExtension):
         parser.add_argument(
             "action", nargs="?", default="list", choices=["list", "enable", "disable", "dry-run", "reload"]
         )
-        parser.add_argument("ids", nargs="*", help="rule ids (globs for list)")
+        parser.add_argument("ids", nargs="*", help="rule ids (globs for list), before the options")
         parser.add_argument("--off", action="store_true", help="dry-run: leave shadow mode")
         parser.add_argument("--check", action="store_true", help="reload: validate only, change nothing")
         parser.add_argument("--operator", default="", help="your name (default: $JARVIS_OPERATOR, $USER)")

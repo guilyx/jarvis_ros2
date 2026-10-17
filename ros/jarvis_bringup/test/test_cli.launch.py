@@ -106,7 +106,8 @@ class TestCli(unittest.TestCase):
         out = jarvis("rules", "dry-run", "escalation-notify", "--operator", "carol", "--reason", "test")
         self.assertIn("escalation-notify: updated", out.stdout)
         self.assertIn("dry run", jarvis("rules", "list", "escalation-notify").stdout)
-        jarvis("rules", "dry-run", "--off", "escalation-notify", "--operator", "carol")
+        # Options after the ids: before Python 3.12.7, argparse rejects ids that follow an option.
+        jarvis("rules", "dry-run", "escalation-notify", "--off", "--operator", "carol")
         self.assertIn("unknown or finished execution", jarvis("approve", "nope", check=False).stdout)
         out = jarvis("lint", "--rules", str(CONFIG / "rules"), "--plans", str(CONFIG / "plans"))
         self.assertIn("0 error(s)", out.stdout)

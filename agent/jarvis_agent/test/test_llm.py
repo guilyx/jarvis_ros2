@@ -332,6 +332,8 @@ def test_model_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("JARVIS_AGENT_LLM_KEY_FILE", str(secret))
     assert c.api_key() == "k2"
 
+    monkeypatch.setenv("JARVIS_AGENT_MODEL", "")  # what compose passes when nobody set it
+    assert AgentConfig.load(path).model == "anthropic/x"
     monkeypatch.setenv("JARVIS_AGENT_MODEL", "openrouter/z")
     monkeypatch.setenv("JARVIS_DATA", str(tmp_path))
     c = AgentConfig.load(path)

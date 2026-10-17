@@ -110,8 +110,9 @@ class AgentConfig:
                         setattr(c, field, raw[section][key])
             c.redact = list(raw.get("redact") or [])
             c.traces_dir = raw.get("traces_dir") or ""
-        c.token = os.environ.get("JARVIS_AGENT_TOKEN", c.token)
-        c.model = os.environ.get("JARVIS_AGENT_MODEL", c.model)
+        # Set but empty means unset: compose passes JARVIS_AGENT_MODEL through even when nobody set it.
+        c.token = os.environ.get("JARVIS_AGENT_TOKEN") or c.token
+        c.model = os.environ.get("JARVIS_AGENT_MODEL") or c.model
         for key, value in overrides.items():
             if value is not None:
                 setattr(c, key, value)

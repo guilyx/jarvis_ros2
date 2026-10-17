@@ -65,9 +65,12 @@ expect "sensor\.scan\.stale on lidar: restart-lifecycle-node did not fix it" "$i
 stall=$(api /insights | json 'next(e["correlation_id"] for e in d["insights"] if "did not fix" in e["payload"]["title"])')
 docker compose cp docker/demo/llm_stub.py demo:/tmp/llm_stub.py >/dev/null
 docker compose exec -d demo python3 /tmp/llm_stub.py 18099
+config=$(mktemp) # not in demo-data: the container owns it
 printf '%s\n' 'schema: jarvis.agent/v1' \
-  'model: { name: openai/jarvis-smoke, api_base: "http://127.0.0.1:18099/v1", assume_tools: true }' |
-  docker compose exec -T demo sh -c 'cat >/tmp/agent-smoke.yaml' # demo-data belongs to the container
+  'model: { name: openai/jarvis-smoke, api_base: "http://127.0.0.1:18099/v1", assume_tools: true }' \
+  >"$config"
+docker compose cp "$config" demo:/tmp/agent-smoke.yaml >/dev/null
+rm -f "$config"
 sleep 1
 out=$(docker compose exec -T -e OPENAI_API_KEY=smoke demo bash -c "source /opt/jarvis/setup.bash && \
   ros2 run jarvis_agent jarvis-agent --config /tmp/agent-smoke.yaml analyze $stall") ||

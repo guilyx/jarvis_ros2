@@ -3,6 +3,7 @@
 """The monitor's screen is a pure function of what it saw: test it without any ROS traffic."""
 
 from builtin_interfaces.msg import Time
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
 from jarvis_demo.monitor import Snapshot, render
 from jarvis_interfaces.msg import Attribute, Event, Execution, ExecutionArray, Fault, FaultArray, StepProgress
 
@@ -146,3 +147,17 @@ def test_the_screen_fits_the_terminal_by_leaving_out_the_oldest_events():
     assert not any("code.n1 " in line or line.endswith("code.n1") for line in screen)
     assert screen[-1].startswith("inject:"), "the hints stay"
     assert len(render(snap, color=False).splitlines()) > 30, "without a height, everything"
+
+
+def test_it_says_when_the_event_hub_went_quiet():
+    snap = Snapshot()
+    snap.on_faults(FaultArray(faults=[fault("safety.estop.engaged", Fault.STATE_LATCHED)]))
+    other = DiagnosticStatus(name="lidar: driver", hardware_id="lidar")
+    hub = DiagnosticStatus(name="event_hub: event hub", hardware_id="jarvis")
+    snap.on_diagnostics(DiagnosticArray(status=[other]), now=100.0)
+    assert "DOWN" not in render(snap, color=False, now=200.0), "only the hub's own report counts"
+    snap.on_diagnostics(DiagnosticArray(status=[other, hub]), now=100.0)
+    assert "DOWN" not in render(snap, color=False, now=102.0)
+    screen = render(snap, width=140, color=False, now=112.0)
+    assert "DOWN  no word from the event hub for 12 s" in screen
+    assert "safety.estop.engaged" in screen, "the last state stays on screen"

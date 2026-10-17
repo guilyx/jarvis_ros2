@@ -33,6 +33,7 @@ def _lake(args):
         lake_max_age_days=args.lake_max_days,
         lake_max_bytes=int(args.lake_max_gib * GIB),
         blackbox_max_bytes=int(args.blackbox_max_gib * GIB),
+        min_free_bytes=int(args.min_free_gib * GIB),
     )
     return lake.Lake(args.data_dir, args.lake_dir, retention)
 
@@ -144,6 +145,7 @@ def parser():
     p.add_argument("--lake-max-days", type=float, default=180.0)
     p.add_argument("--lake-max-gib", type=float, default=5.0)
     p.add_argument("--blackbox-max-gib", type=float, default=2.0)
+    p.add_argument("--min-free-gib", type=float, default=1.0, help="free disk to keep (disk pressure)")
     sub = p.add_subparsers(dest="command", required=True)
 
     s = sub.add_parser("run", help="the service")

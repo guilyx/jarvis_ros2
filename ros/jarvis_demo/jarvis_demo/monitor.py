@@ -14,6 +14,7 @@ import sys
 import time
 
 import rclpy
+from diagnostic_msgs.msg import DiagnosticArray
 from jarvis_interfaces.msg import Event, Execution, ExecutionArray, Fault, FaultArray
 from jarvis_interfaces.srv import QueryEvents
 from rclpy.executors import ExternalShutdownException
@@ -80,6 +81,7 @@ HINT = (
     "then: inject clear"
 )
 RECOVERY_ROWS = 4
+HUB_SILENCE_S = 3.0  # the event hub reports on /diagnostics every second
 
 
 def paint(text, key, color):
@@ -110,6 +112,18 @@ class Snapshot:
         self.robot = ""
         self.tour = ""
         self._tour_seq = 0
+        self.hub_seen = None  # when the event hub last reported on /diagnostics (monotonic)
+
+    def on_diagnostics(self, msg, now=None):
+        if any(s.hardware_id == "jarvis" and s.name.endswith("event hub") for s in msg.status):
+            self.hub_seen = time.monotonic() if now is None else now
+
+    def hub_silent_for(self, now=None):
+        """Seconds since the event hub went quiet (crashed, killed), or 0 while it reports."""
+        if self.hub_seen is None:
+            return 0.0
+        silent = (time.monotonic() if now is None else now) - self.hub_seen
+        return silent if silent > HUB_SILENCE_S else 0.0
 
     def on_faults(self, msg):
         self.faults = msg
@@ -155,7 +169,7 @@ def execution_rows(snap):
     return lines
 
 
-def render(snap, width=100, color=True, height=None):
+def render(snap, width=100, color=True, height=None, now=None):
     """The whole screen as one string: header, open faults, recoveries, recent events, hints.
 
     Every line is cut to `width` before it is colored, so escape codes never count as text. With a
@@ -172,6 +186,10 @@ def render(snap, width=100, color=True, height=None):
             "INFO",
         )
     )
+    silent = snap.hub_silent_for(now)
+    if silent:
+        down = f"DOWN  no word from the event hub for {silent:.0f} s: this is the last it said"
+        lines.append((down, "CRIT"))
     if snap.tour:
         lines.append((f"TOUR  {snap.tour}", "WARN"))
     lines += [("", None), ("OPEN FAULTS", "INFO")]
@@ -260,6 +278,7 @@ def main(argv=None):
     node.create_subscription(FaultArray, "/jarvis/faults", snap.on_faults, latched)
     node.create_subscription(ExecutionArray, "/jarvis/executions", snap.on_executions, latched)
     node.create_subscription(Event, "/jarvis/events", snap.on_event, stream)
+    node.create_subscription(DiagnosticArray, "/diagnostics", snap.on_diagnostics, 10)
     tty = sys.stdout.isatty()
     try:
         # A snapshot for a script has time to wait for the hub; the live view starts at once.

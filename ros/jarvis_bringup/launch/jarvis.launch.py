@@ -47,10 +47,15 @@ ARGUMENTS = {
     "record": ("true", "Record /jarvis/** to MCAP"),
     "record_extra_topics": ("/diagnostics /rosout", "Context topics recorded with /jarvis/**"),
     "split_duration_s": ("300", "Length of a recorder split"),
+    "recorder_storage_config": (
+        str(SHARE / "config" / "mcap_writer.yaml"),
+        "MCAP writer settings of the recorder: what a crash loses vs. compression",
+    ),
     "blackbox": ("true", "Run the snapshot-mode black-box recorder"),
     "blackbox_topics": ("/tf /tf_static /odom /scan /cmd_vel /jarvis/events", "Black-box topics"),
     "blackbox_cache_mb": ("256", "Memory of the black-box ring buffer"),
     "lake": ("true", "Convert closed splits to Parquet and enforce retention (jarvis_lake)"),
+    "lake_min_free_gib": ("1", "Free disk the lake keeps by deleting the oldest data (disk pressure)"),
     "gateway": ("true", "Serve the API, live stream and dashboard (jarvis_gateway)"),
     "gateway_host": ("127.0.0.1", "Address the gateway binds (a LAN address to reach it from others)"),
     "gateway_port": ("8080", "Port of the gateway"),
@@ -160,7 +165,8 @@ def _setup(context):
                         "use_sim_time": use_sim_time,
                         "storage.uri": str(data_dir / "bags" / f"jarvis_{stamp}"),
                         "storage.storage_id": "mcap",
-                        "storage.storage_preset_profile": "zstd_fast",
+                        # What a crash loses (NFR-6): config/mcap_writer.yaml.
+                        "storage.storage_config_uri": arg["recorder_storage_config"],
                         "storage.max_bagfile_duration": int(arg["split_duration_s"]),
                         "record.regex": "^/jarvis/.*",
                         # The ingest side is pre-validation; /jarvis/events is the canonical stream.
@@ -205,7 +211,7 @@ def _setup(context):
                 executable="jarvis-lake",
                 name="lake",
                 namespace="jarvis",
-                arguments=["--data-dir", str(data_dir), "run"],
+                arguments=["--data-dir", str(data_dir), "--min-free-gib", arg["lake_min_free_gib"], "run"],
                 output="screen",
             )
         )

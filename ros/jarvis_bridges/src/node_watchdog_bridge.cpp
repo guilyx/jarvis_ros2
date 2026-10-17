@@ -58,8 +58,10 @@ protected:
     timer_ = rclcpp::create_timer(
       this, get_clock(), rclcpp::Duration::from_seconds(get_parameter("period_s").as_double()),
       [this]() {
-        const auto names = get_node_graph_interface()->get_node_names();
-        publish(watchdog_->tick(now_ns(), std::set<std::string>(names.begin(), names.end())));
+        on_graph([this] {
+          const auto names = get_node_graph_interface()->get_node_names();
+          publish(watchdog_->tick(now_ns(), std::set<std::string>(names.begin(), names.end())));
+        });
       });
   }
 

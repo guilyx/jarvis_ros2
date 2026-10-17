@@ -4,7 +4,8 @@
 
 A split that was never closed (the recorder died with it) has no footer and no index. It is read
 as a stream instead, record after record, until the data stops making sense: everything up to the
-last complete chunk is kept, which is what `mcap recover` would keep.
+last complete record (or chunk, if the recorder chunks) is kept, which is what `mcap recover` would
+keep.
 """
 
 import collections
@@ -28,6 +29,7 @@ class SplitResult:
     skipped: int = 0  # messages that did not decode as an Event
     error: str = ""  # why the read stopped early (torn split) or failed
     failed: bool = False  # nothing could be read: the split is recorded as failed
+    transient: bool = False  # failed for the file system's sake (a full disk): tried again later
 
 
 class _Stream:

@@ -44,7 +44,7 @@
 - **FR-R4** Flood control: per-(source, code) rate limiting with summary events, and severity-aware load shedding (never drop ≥ `ERROR`).
 - **FR-R5** Query by time range, sequence cursor, kind, code glob, severity, component and correlation id: recent events from the event hub, history from Parquet via DuckDB.
 - **FR-R6** Black-box capture: on configured faults, trigger a rosbag2 snapshot and link it to the fault.
-- **FR-R7** Retention for bags, Parquet and black-box snapshots by age and size. Bags are deleted only after conversion.
+- **FR-R7** Retention for bags, Parquet and black-box snapshots by age and size, and a free-disk floor. Bags are deleted only after conversion.
 
 ### Faults
 - **FR-F1** Fault catalog (YAML) defines known codes: severity, debounce, heal, latch, capture, runbook.
@@ -86,8 +86,8 @@
 | NFR-3 | Rule evaluation | p99 ≤ 5 ms per event with 200 rules |
 | NFR-4 | Match → first actuation | p99 ≤ 100 ms (excluding approval wait) |
 | NFR-5 | Footprint | Runtime container ≤ 100 MB RSS; ≤ 5 % of one core at 500 events/s |
-| NFR-6 | Durability | Open faults/executions survive crashes and power loss (fsynced snapshots). Recorded events: at most the last unflushed MCAP chunk (≤ ~1 s) lost on a hard crash. |
-| NFR-7 | Storage | Bounded: bags 10 GiB / 7 days, Parquet 5 GiB / 180 days, black box 2 GiB (defaults) |
+| NFR-6 | Durability | Open faults/executions survive crashes and power loss (fsynced snapshots). Recorded events: at most what the recorder had not written yet (≤ ~1 s) lost on a hard crash. |
+| NFR-7 | Storage | Bounded: bags 10 GiB / 7 days, Parquet 5 GiB / 180 days, black box 2 GiB, and ≥ 1 GiB of the disk kept free (defaults) |
 | NFR-8 | Dashboard freshness | Live event visible in UI ≤ 1 s after ingest |
 | NFR-9 | Agent latency | Incident insight p90 ≤ 60 s when online |
 | NFR-10 | Portability | Core builds with plain CMake/pip on Linux x86_64/ARM64 without ROS |
@@ -135,6 +135,41 @@ spend more than Jarvis does: wait-set rebuilds, waking readers, locks. Past abou
 rate, even taking a message to shed it costs too much: the ingest queue fills and most events are
 lost. 5.2 batches the stream (one message per group of events, the "group commit" of NFR-2) to
 reach NFR-1 and NFR-5.
+
+### Measured (5.3)
+
+`ros/jarvis_bringup/test/test_durability.py` (in CI) kills the whole stack with SIGKILL while
+events flow, 200/s (a busy robot) or 10/s (a quiet one), then starts it again on the same data
+directory:
+
+| Target | Measured | |
+|--------|----------|---|
+| NFR-6 durability | The open faults are back, the stream's `seq` carries on above the last one, and the torn split is recovered into the lake up to the last 0.04–0.05 s before the crash at 200/s, 0.5–0.9 s at 10/s, nothing lost at 1/s (nothing lost before that) | ✔ |
+| NFR-7 storage | The budgets, plus a free-disk floor (1 GiB) on each file system the lake writes to: below it the lake deletes more, cheapest loss first, and raises `jarvis.storage.low` when nothing else may go; restarted with room, it clears it (unit tests, and the same test file on the stack) | ✔ |
+
+What it took:
+- **No MCAP chunks.** rosbag2's MCAP writer keeps a chunk in memory until it is full, 768 KiB of
+  records by default: a crash lost everything since the start of a split. Smaller chunks bound
+  the bytes, not the time: 16 KiB lost 0.2–0.5 s at 200 events/s but 7 s at 10/s, and on a quiet
+  robot those are the seconds before the crash. rosbag2 has no time-based flush, so the recorder
+  writes records as they come (`noChunking`, `config/mcap_writer.yaml`): what is lost is its file
+  buffer, 4 KiB of records. On an idle robot Jarvis's own 1 Hz diagnostics keep it moving. Bags
+  then take about 4× the disk; the lake's Parquet stays compressed. `recorder_storage_config`
+  brings compression back, chunked, for robots short of disk.
+- **A free-space floor.** The age and size budgets don't know how big the disk is, nor what else
+  uses it. The lake checks the free space of each file system it writes to at every pass, and
+  makes room before it converts (that needs room too). Below the floor it deletes, on that file
+  system, converted splits (their events are in Parquet), then black-box snapshots, then old days
+  of Parquet. Never deleted: a split that is pending or failed to convert, the black-box file
+  being written, the newest day. A full disk doesn't mark a split failed: it is tried again.
+- **A fault that doesn't flap.** `jarvis.storage.low` is raised when retention found nothing more
+  to delete, and cleared when a fresh look at the disk finds room. File systems that free space
+  lazily land in between, where nothing changes. The fault manager restores open faults after a
+  restart: a lake that starts with room clears the fault it finds there.
+
+A kill keeps what the OS had not written back yet; a power cut also loses that: file data waits
+up to `vm.dirty_expire_centisecs` (30 s by default) before it is written back. The state snapshots
+are fsynced for this; the recorder is not.
 
 ## 6. Glossary
 

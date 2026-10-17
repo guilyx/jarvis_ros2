@@ -10,6 +10,8 @@
   <!-- Python dependencies are pinned in requirements.txt (pip): duckdb, mcap, mcap-ros2-support,
        pyarrow, pytz. The ROS ones below are only for the optional ROS adapter. -->
   <exec_depend>diagnostic_msgs</exec_depend>
+  <exec_depend>jarvis_interfaces</exec_depend>
+  <exec_depend>jarvis_reporter</exec_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>rosbag2_interfaces</exec_depend>
 

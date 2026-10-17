@@ -461,10 +461,12 @@ flowchart LR
 | **State** | Open fault episodes, incidents, acks, latches; running executions; rule cooldowns/counters; hub `boot_count` | `$JARVIS_DATA/state/*.json` (write tmp → fsync → rename) | Current only |
 | **Black box** | High-rate sensor topics in a rosbag2 **snapshot-mode** ring buffer, dumped on fault | `$JARVIS_DATA/blackbox/` | 2 GiB budget |
 
+All of it keeps 1 GiB free on each file system it is on (`lake_min_free_gib`): below that, the lake deletes there splits already in Parquet, then black-box snapshots (not the one being written), then old Parquet days, whatever their age, and raises `jarvis.storage.low` if that is not enough. A split that failed to convert is never deleted: it waits for a human.
+
 Notes:
 - **Why this split**: bags are the ROS-standard record. They open in Foxglove/PlotJuggler next to sensor data, and replay feeds backtesting directly. Parquet + DuckDB gives fast ad-hoc queries and analytics with no server, and it ships to the cloud as plain files later.
 - **Freshness**: the lake converts each split when rosbag2 announces it closed (`events/write_split`), so history lags by ≤ 5 min. The ring buffer covers that gap. The gateway merges both by `seq`.
-- **Durability trade-off (vs. a database)**: the recorder is a subscriber in the same process, so events are recorded unless that process dies. On a hard crash, the last unflushed MCAP chunk (≤ ~1 s) can be lost; unfinalized files are recovered by the lake. **Critical state never depends on bags**: open faults and running executions live in fsynced snapshots.
+- **Durability trade-off (vs. a database)**: the recorder is a subscriber in the same process, so events are recorded unless that process dies. The recorder writes MCAP records as they come, unchunked (`config/mcap_writer.yaml`), so a hard crash loses only its file buffer (≤ ~1 s); unfinalized files are recovered by the lake. **Critical state never depends on bags**: open faults and running executions live in fsynced snapshots.
 - **Recorder QoS**: rosbag2 QoS overrides match the publishers (RELIABLE; TRANSIENT_LOCAL for the latched topics), so late starts still capture the current fault state.
 
 ```sql
@@ -479,7 +481,7 @@ CREATE VIEW fault_transitions AS
 ```
 
 - **Rows**: one per event, the columns of `event.schema.json` flattened (`robot`, `node`, `component`, `host`), `attrs` as JSON text, `ts` = `recv_stamp` else `stamp`, `split` = the MCAP split it came from. A split converts to one file per UTC day, named after the split, so converting it again replaces the same files.
-- **Which splits**: a closed split (its MCAP footer is there) as soon as the recorder announces it (`events/write_split`) or the next scan finds it; a split that was never closed only once the recorder has moved on (a newer split or bag), read as a stream up to its last complete chunk. A split that cannot be read is recorded as failed and does not hold back the others. `lake/ledger.json` lists what was converted; `lake/status.json` is what the gateway shows.
+- **Which splits**: a closed split (its MCAP footer is there) as soon as the recorder announces it (`events/write_split`) or the next scan finds it; a split that was never closed only once the recorder has moved on (a newer split or bag), read as a stream up to its last complete record (or chunk). A split that cannot be read is recorded as failed and does not hold back the others. `lake/ledger.json` lists what was converted; `lake/status.json` is what the gateway shows.
 
 ## 13. Contracts & code generation
 

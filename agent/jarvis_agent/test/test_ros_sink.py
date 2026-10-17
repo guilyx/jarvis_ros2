@@ -149,6 +149,10 @@ def test_questions_are_answered_over_the_analyze_action(query):
         result = sent.result().get_result_async()
         executor.spin_until_future_complete(result, timeout_sec=30)
         assert result.done(), "no result"
+        # Feedback is a topic and the result a service reply: the last feedback can land after it.
+        deadline = time.monotonic() + 5.0
+        while result.result().result.success and stages[-1:] != ["done"] and time.monotonic() < deadline:
+            executor.spin_once(timeout_sec=0.1)
         return result.result().result, stages
 
     try:

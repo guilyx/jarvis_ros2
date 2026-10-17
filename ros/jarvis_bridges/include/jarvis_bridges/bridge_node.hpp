@@ -8,6 +8,7 @@
 
 #include <jarvis_ros/common.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -90,6 +91,21 @@ protected:
   }
 
   jarvis_core::Timestamp now_ns() { return jarvis_ros::now_ns(*this); }
+
+  /// Runs a timer's work that queries the ROS graph. A SIGINT shuts the context down under a timer
+  /// about to fire, and the query then throws: that tick is skipped instead of aborting the
+  /// container. While the context is up, an error is an error: it is rethrown.
+  template <class F>
+  void on_graph(F && work)
+  {
+    try {
+      work();
+    } catch (const std::runtime_error &) {
+      if (rclcpp::ok(get_node_base_interface()->get_context())) {
+        throw;
+      }
+    }
+  }
 
   void publish(jarvis_core::Event && event)
   {

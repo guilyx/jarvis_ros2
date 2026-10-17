@@ -77,10 +77,12 @@ class Reporter:
             self._publish(Event.KIND_FAULT_RAISE, code, severity, message, attrs, now)
             return True
 
-    def clear(self, code, message="", attrs=None):
-        """Reports that a fault condition is gone (FAULT_CLEAR). Only sent if the fault was raised."""
+    def clear(self, code, message="", attrs=None, *, force=False):
+        """Reports that a fault condition is gone (FAULT_CLEAR). Only sent if the fault was raised,
+        or with ``force``: after a restart, the fault manager may still hold a fault this process
+        raised in its previous life (it restores open faults), and only a clear heals it."""
         with self._lock:
-            if self._raised.pop(code, None) is None:
+            if self._raised.pop(code, None) is None and not force:
                 return False
             self._publish(Event.KIND_FAULT_CLEAR, code, Severity.INFO, message, attrs)
             return True

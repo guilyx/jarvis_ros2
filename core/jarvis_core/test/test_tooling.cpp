@@ -346,3 +346,39 @@ TEST(Backtest, ReadsJsonLines)
   }
   EXPECT_EQ(backtest(RuleSet{}, nullptr, {}).compared(), false);
 }
+
+TEST(Lint, EveryCookbookRecipeIsClean)
+{
+  // docs/guides/rules-cookbook.md: each rules or plans block is a file, linted with the shipped
+  // plans next to them. No error and no warning: a recipe is what people copy.
+  std::ifstream in(std::string(JARVIS_DOCS_DIR) + "/guides/rules-cookbook.md");
+  ASSERT_TRUE(in) << "the cookbook is not where it should be";
+  std::stringstream doc;
+  doc << in.rdbuf();
+  const std::string text = doc.str();
+  TempDir t;
+  int rules = 0;
+  int plans = 0;
+  for (std::size_t pos = text.find("```yaml"); pos != std::string::npos;
+       pos = text.find("```yaml", pos + 1)) {
+    const auto start = text.find('\n', pos) + 1;
+    const auto end = text.find("```", start);
+    const std::string block = text.substr(start, end - start);
+    if (block.find("schema: jarvis.rules/v1") != std::string::npos) {
+      t.write("rules/recipe_" + std::to_string(rules++) + ".yaml", block);
+    } else if (block.find("schema: jarvis.plans/v1") != std::string::npos) {
+      t.write("plans/recipe_" + std::to_string(plans++) + ".yaml", block);
+    }
+  }
+  std::ifstream shipped(
+    std::string(JARVIS_REPO_DIR) + "/ros/jarvis_bringup/config/plans/core.yaml");
+  std::stringstream core;
+  core << shipped.rdbuf();
+  t.write("plans/core.yaml", core.str());
+  const auto r = lint({t.dir("rules"), t.dir("plans"), "", default_actuator_actions()});
+  for (const auto & f : r.findings) {
+    ADD_FAILURE() << (f.error ? "error: " : "warning: ") << f.message;
+  }
+  EXPECT_GE(rules, 5);
+  EXPECT_GE(plans, 3);
+}

@@ -92,7 +92,8 @@ jarvis.clear("sensor.lidar.stale");
 
 Or don't report at all: the bridges turn `/diagnostics`, `/rosout` errors, aborted action goals,
 lifecycle transitions, silent or slow topics and missing nodes into
-faults on their own.
+faults on their own. The [integration guide](docs/guides/integration.md) takes it from there: the
+bridges' configuration, your fault catalog and its runbooks, launching Jarvis with your robot.
 
 ## Recover automatically
 
@@ -101,7 +102,7 @@ gates (mode, requester, preconditions, rate limits, locks, approvals), verifies 
 when it does not work. Rules and plans are YAML directories (`rules:=`, `plans:=` launch arguments):
 
 ```yaml
-# rules/lidar.yaml (the demo's: ros/jarvis_demo/config/rules/demo.yaml)
+# rules/lidar.yaml (the demo's, shortened: ros/jarvis_demo/config/rules/demo.yaml)
 schema: jarvis.rules/v1
 rules:
   - id: lidar-stale-restart
@@ -111,7 +112,7 @@ rules:
       - recover:
           plan: restart-lifecycle-node
           args: { node: "{{ event.attrs.node }}", component: lidar, fault: sensor.scan.stale }
-    policy: { cooldown: 2s, max_fires: { count: 3, per: 10m } }
+    policy: { cooldown: 5s, max_fires: { count: 3, per: 10m } }
   - id: lidar-restarts-exhausted   # the 4th time, the rule above is suppressed: call a human
     when: { event: { kind: SYSTEM, code: jarvis.rule.suppressed, attrs.rule: lidar-stale-restart } }
     then: [ { incident: { escalate: true } }, { notify: { channel: operators, message: "Lidar keeps hanging" } } ]
@@ -134,6 +135,8 @@ ros2 jarvis backtest ~/.local/share/jarvis/bags/jarvis_<stamp> --rules rules/ --
 ```
 
 The backtest runs the same engine the robot runs and lists every decision that would change.
+More recipes (silences, bursts, thresholds, ladders, approvals, shadow mode) are in the
+[rules cookbook](docs/guides/rules-cookbook.md).
 
 ## History and analytics
 
@@ -286,6 +289,19 @@ both. A nightly soak runs the stack for 15 minutes at 500 events/s
 | [`dashboard`](dashboard) | The web console (React + TypeScript), served by the gateway |
 | [`agent/jarvis_agent`](agent/jarvis_agent) | Explains incidents and failed recoveries: triage, a model's tool loop (LiteLLM) or a heuristic analyst, evidence-checked insights, recovery advice |
 | [`schemas`](schemas) | JSON Schema contracts (canonical) |
+
+## Guides
+
+| For | Guide |
+|-----|-------|
+| Putting Jarvis on your robot | [docs/guides/integration.md](docs/guides/integration.md) |
+| Rules and recovery plans, ready to copy | [docs/guides/rules-cookbook.md](docs/guides/rules-cookbook.md) |
+| The people on shift | [docs/guides/operator.md](docs/guides/operator.md) |
+| Production security: SROS2, TLS, single sign-on, what a model sees | [docs/guides/security.md](docs/guides/security.md) |
+
+Each fault code the bridges raise has a runbook ([`jarvis_bringup/config/runbooks`](ros/jarvis_bringup/config/runbooks)):
+what it means, what to check, what fixes it. The dashboard shows it on the fault, the agent reads it. Yours
+go next to your catalog, from [`TEMPLATE.md`](ros/jarvis_bringup/config/runbooks/TEMPLATE.md).
 
 ## Design
 

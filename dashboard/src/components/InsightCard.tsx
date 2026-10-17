@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronRight, Play, Sparkles } from "lucide-react";
 import { useState } from "react";
-import { insightConfidence, insightOf, type JarvisEvent } from "@/api/types";
+import { analystLabel, insightConfidence, insightOf, type JarvisEvent } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { useCan } from "@/lib/auth";
@@ -44,9 +44,7 @@ export function InsightCard({
             <div className="mt-1 text-xs text-muted-fg">
               {ago(event.stamp)} · {insight.trigger.type.toLowerCase().replace("_", " ")} · incident{" "}
               <IncidentLink id={event.correlation_id || insight.window.correlation_id} /> ·{" "}
-              {insight.analyst === "heuristic"
-                ? "heuristic analyst (no model)"
-                : (insight.model?.name ?? "model")}
+              {analystLabel(insight)}
             </div>
           </div>
           <ConfidenceBar value={insightConfidence(insight)} />

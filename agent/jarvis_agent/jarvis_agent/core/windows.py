@@ -30,10 +30,12 @@ class Window:
     recoveries: list = dataclasses.field(default_factory=list)  # every past recovery (for success rates)
     plans: list = dataclasses.field(default_factory=list)
     question: str = ""
+    seen: set = dataclasses.field(default_factory=set)  # event ids the analyst's tools showed it
 
     @property
     def ids(self):
-        return {e["id"] for e in self.events}
+        """What an analyst may cite: the window's events and what its tools showed it."""
+        return {e["id"] for e in self.events} | self.seen
 
     @property
     def correlation_id(self):

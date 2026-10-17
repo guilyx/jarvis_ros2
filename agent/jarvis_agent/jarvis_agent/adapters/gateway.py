@@ -28,17 +28,33 @@ class GatewayQuery:
     def incident(self, incident_id):
         return self._get(f"/incidents/{incident_id}")
 
-    def events(self, since=None, until=None, min_severity=None, component="", kinds=(), limit=1000):
+    def events(
+        self,
+        since=None,
+        until=None,
+        min_severity=None,
+        component="",
+        kinds=(),
+        limit=1000,
+        codes=(),
+        correlation_id="",
+    ):
         page = self._get(
             "/events",
             **{"from": since, "to": until},
             min_severity=min_severity,
             component=component,
             kind=list(kinds),
+            code=list(codes),
+            correlation_id=correlation_id,
             limit=min(limit, 1000),
             order="asc",
         )
         return (page or {}).get("events", [])
+
+    def event(self, event_id):
+        found = self._get(f"/events/{event_id}")
+        return (found or {}).get("event") if found else None
 
     def active_faults(self):
         return (self._get("/faults") or {}).get("faults", [])
@@ -51,6 +67,9 @@ class GatewayQuery:
 
     def plans(self):
         return (self._get("/plans") or {}).get("plans", [])
+
+    def rule(self, rule_id):
+        return self._get(f"/rules/{rule_id}")
 
 
 async def stream(base_url, token="", since=None, connect=None, backoff_s=(1, 2, 5, 10)):

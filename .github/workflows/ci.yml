@@ -100,6 +100,7 @@ jobs:
       - run: |
           pip install numpy==1.26.4 pyyaml pytest jsonschema -r agent/jarvis_agent/requirements.txt \
             -r lake/jarvis_lake/requirements.txt -r gateway/jarvis_gateway/requirements.txt
+          pip install --require-hashes -r agent/jarvis_agent/requirements-llm.txt
       - run: PYTHONPATH=agent/jarvis_agent pytest -q agent/jarvis_agent/test
 
   dashboard:

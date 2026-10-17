@@ -30,6 +30,13 @@ services:
     environment:
       JARVIS_DATA: /var/lib/jarvis
       ROS_DOMAIN_ID: "42"
+      # Optional: a model for the agent (any LiteLLM model string) and its provider's key, e.g.
+      # JARVIS_AGENT_MODEL=openrouter/<vendor>/<model> OPENROUTER_API_KEY=... ./demo
+      JARVIS_AGENT_MODEL: ${JARVIS_AGENT_MODEL:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     shm_size: 512m
     healthcheck:
       # Healthy once the fault manager publishes its snapshot.

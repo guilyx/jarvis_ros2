@@ -5,3 +5,11 @@ autonomy: { level: advise, min_confidence: 0.7 }
 triggers: { min_severity: ERROR, settle_s: 20, max_per_hour: 20 }
 windows: { context_s: 300, sliding_s: 600 }
 redact: []                               # e.g. ["attrs.gps.*"]: attributes the analyst never sees
+# A model (milestone 4.2; needs requirements-llm.txt). Without one, the heuristic analyst answers.
+# model:
+#   name: openrouter/<vendor>/<model>    # or $JARVIS_AGENT_MODEL; ollama/<model>; openai/<model> + api_base
+#   api_base: ""                         # a LiteLLM proxy, Ollama or vLLM on the LAN
+#   api_key_env: ""                      # default: the provider's own variable (OPENROUTER_API_KEY, ...)
+#   max_tool_calls: 12
+#   skip_when_conclusive: true           # one fault fixed by a plan: no model call
+# budget: { usd_per_hour: 1.0, usd_per_day: 10.0, tokens_per_analysis: 250000 }

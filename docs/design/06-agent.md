@@ -70,6 +70,25 @@ lake's views give (incidents, fault episodes, executions) from recorded events, 
 History an analysis uses is cut at the incident's first report, so a replay never sees its own
 future. Recommendations may leave arguments to the operator (a proposal may not, 4.3).
 
+### As built (4.2)
+
+`core/analyst.py` is the tool loop: system prompt and plan catalog first (marked cacheable for
+providers that take `cache_control`), the triaged window last; read-only tools from
+`tools/toolbox.py` (the table in §5 minus `get_runbook`, which waits for the gateway to serve the
+fault catalog, and `propose_recovery`, 4.3), each result redacted and bounded to 12 k characters;
+`submit_insight`'s schema is written flat (no `$ref`) for the common denominator, and parsed
+leniently where it is safe (extra keys ignored, numeric arguments as text). Event ids a tool result
+showed join the window's citable ids. When the tool-call limit or the per-analysis token cap is
+reached the next turn offers `submit_insight` only, with `tool_choice` forcing it. An answer without
+it gets one nudge. LiteLLM is imported only by `llm/litellm_client.py`, with its bundled cost map
+(`LITELLM_LOCAL_MODEL_COST_MAP`: nothing fetched at import) and telemetry off; every error it maps
+(all subclasses of `openai.OpenAIError`) is "model unavailable", so the heuristic analyst answers.
+The dependency is `requirements-llm.txt`: hash-locked with `uv pip compile --generate-hashes`,
+releases at least two weeks old; the Docker image installs it (`JARVIS_LLM=0` to leave it out)
+with `--ignore-installed`, since pip cannot replace Debian's own copies of shared dependencies.
+Tests: a scripted `FakeLLM` for the loop, and a local OpenAI-compatible server for LiteLLM over
+HTTP; the Docker smoke test runs the image's model path against a stub of that server.
+
 ## 2. Triggers
 
 | Trigger | Source | Default |

@@ -1,0 +1,3 @@
+# The model client (milestone 4.2): only where the agent calls a model. Locked with hashes into
+# requirements-llm.txt (see the header there); LiteLLM had malicious releases (1.82.7, 1.82.8).
+litellm==1.103.3

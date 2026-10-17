@@ -6,6 +6,7 @@ It rebuilds what the lake's views give the gateway (incidents, fault episodes, e
 the events alone, the same way.
 """
 
+import fnmatch
 import json
 import pathlib
 
@@ -115,7 +116,17 @@ class ReplayQuery:
             "executions": [x for x in executions(timeline) if x["incident_id"] == incident_id],
         }
 
-    def events(self, since=None, until=None, min_severity=None, component="", kinds=(), limit=1000):
+    def events(
+        self,
+        since=None,
+        until=None,
+        min_severity=None,
+        component="",
+        kinds=(),
+        limit=1000,
+        codes=(),
+        correlation_id="",
+    ):
         lo, hi = ns(since), ns(until)
         min_level = SEVERITY_LEVEL.get(min_severity or "", 0)
         out = [
@@ -126,8 +137,13 @@ class ReplayQuery:
             and level(e) >= min_level
             and (not component or e.get("source", {}).get("component") == component)
             and (not kinds or e.get("kind") in kinds)
+            and (not codes or any(fnmatch.fnmatchcase(e["code"], c) for c in codes))
+            and (not correlation_id or incident_of(e) == correlation_id)
         ]
         return out[:limit]
+
+    def event(self, event_id):
+        return next((e for e in self.all if e["id"] == event_id), None)
 
     def active_faults(self):
         return [
@@ -151,6 +167,9 @@ class ReplayQuery:
 
     def plans(self):
         return list(self._plans)
+
+    def rule(self, rule_id):
+        return None  # a recording has the rules' matches, not their definitions
 
     def now_ns(self):
         """The time of the last event: replays run in their own time."""

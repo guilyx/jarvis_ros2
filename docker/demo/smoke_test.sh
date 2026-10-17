@@ -60,6 +60,21 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 expect "sensor\.scan\.stale on lidar: restart-lifecycle-node did not fix it" "$insights" "no insight on the stall"
+# The model path of the image (LiteLLM, hash-locked) on the same stall, with no key or internet: an
+# OpenAI-compatible stub in the container answers.
+stall=$(api /insights | json 'next(e["correlation_id"] for e in d["insights"] if "did not fix" in e["payload"]["title"])')
+docker compose cp docker/demo/llm_stub.py demo:/tmp/llm_stub.py >/dev/null
+docker compose exec -d demo python3 /tmp/llm_stub.py 18099
+printf '%s\n' 'schema: jarvis.agent/v1' \
+  'model: { name: openai/jarvis-smoke, api_base: "http://127.0.0.1:18099/v1", assume_tools: true }' \
+  >demo-data/agent-smoke.yaml
+sleep 1
+out=$(docker compose exec -T -e OPENAI_API_KEY=smoke demo bash -c "source /opt/jarvis/setup.bash && \
+  ros2 run jarvis_agent jarvis-agent --config /var/lib/jarvis/agent-smoke.yaml analyze $stall") ||
+  fail "the agent failed with a model: $out"
+echo "$out"
+expect "The stub model read [1-9][0-9]* event" "$out" "the model's insight was not used"
+expect "llm analyst · openai/jarvis-smoke" "$out" "the agent did not go through the model"
 
 expect "cleared safety\.estop\.engaged" "$(./demo clear)" "operator clear failed"
 if grep -q "safety.estop.engaged" <<<"$(open_faults)"; then fail "e-stop still open after the clear"; fi

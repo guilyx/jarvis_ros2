@@ -14,6 +14,7 @@ catalog, which humans review.
 
 import contextlib
 import json
+import re
 
 from jarvis_agent.core.checks import validate_args
 from jarvis_agent.core.triage import redact
@@ -149,6 +150,17 @@ def _error(text):
     return json.dumps({"error": text})
 
 
+ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}")
+
+
+def _id(value, what):
+    """An id the model passes in a URL path: an id, nothing else (no `/`, no `..`)."""
+    value = str(value)
+    if not ID.fullmatch(value) or ".." in value:
+        raise ValueError(f"'{value[:80]}' is not {what}")
+    return value
+
+
 class Toolbox:
     def __init__(self, query, window, result, redact_patterns=(), proposals=False):
         self.query = query
@@ -200,7 +212,7 @@ class Toolbox:
         return out
 
     def _get_event(self, a):
-        found = self.query.event(a["event_id"])
+        found = self.query.event(_id(a["event_id"], "an event id"))
         if not found:
             return {"error": f"no event '{a['event_id']}'"}
         (e,) = redact([found], self.redact)
@@ -220,7 +232,7 @@ class Toolbox:
         return {"episodes": self.query.fault_history(a["code"], limit=limit)}
 
     def _get_incident(self, a):
-        found = self.query.incident(a["incident_id"])
+        found = self.query.incident(_id(a["incident_id"], "an incident id"))
         if not found:
             return {"error": f"no incident '{a['incident_id']}'"}
         out = {k: v for k, v in found.items() if k not in ("timeline", "faults", "executions")}
@@ -286,7 +298,7 @@ class Toolbox:
         return {"recorded": plan["id"], "next": "Jarvis routes it once you submit your insight"}
 
     def _get_rule(self, a):
-        found = self.query.rule(a["rule_id"])
+        found = self.query.rule(_id(a["rule_id"], "a rule id"))
         if not found:
             return {"error": f"no rule '{a['rule_id']}' (or its definition is not available here)"}
         out = {k: v for k, v in found.items() if k != "matches"}

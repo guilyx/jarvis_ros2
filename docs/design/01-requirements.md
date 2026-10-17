@@ -171,6 +171,14 @@ A kill keeps what the OS had not written back yet; a power cut also loses that: 
 up to `vm.dirty_expire_centisecs` (30 s by default) before it is written back. The state snapshots
 are fsynced for this; the recorder is not.
 
+### Measured (5.4)
+
+| Target | Measured | |
+|--------|----------|---|
+| NFR-13 security | `ros/jarvis_bringup/test/test_security.py` (in CI) runs the stack under SROS2 `Enforce` with one enclave per process ([`security/policy.xml`](../../ros/jarvis_bringup/security/policy.xml)): a robot node reports a fault and an operator reads it; a node outside the keystore cannot join; a producer cannot publish or read `/jarvis/events`. The gateway serves HTTPS and believes an authenticating proxy's identity headers from the proxy only (`test_auth.py`). The agent sends nothing a `redact` pattern hides and no secret, through any tool (`test_redaction.py`); ids from the model stay ids; tokens stay out of URLs and logs | ✔ |
+
+How to set each layer up: [docs/guides/security.md](../guides/security.md).
+
 ## 6. Glossary
 
 | Term | Meaning |

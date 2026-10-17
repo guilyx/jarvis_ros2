@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from jarvis_lake import model, storage
 
-from jarvis_gateway import __version__, bags, models, stream
+from jarvis_gateway import __version__, auth, bags, models, stream
 from jarvis_gateway.history import History
 from jarvis_gateway.metrics import Metrics
 from jarvis_gateway.notifier import Notifier
@@ -131,18 +131,12 @@ def create_app(settings, port, notifier=None):
     # -- auth --------------------------------------------------------------------------------------
 
     def caller(role):
-        def dep(authorization: str | None = Header(None), token: str | None = Query(None)):
-            presented = token
-            if authorization and authorization.lower().startswith("bearer "):
-                presented = authorization[7:].strip()
-            if presented:
-                who = settings.tokens.get(presented)
-                if who is None:
-                    raise HTTPException(401, "unknown token")
-            else:
-                who = settings.anonymous
-                if who is None:
-                    raise HTTPException(401, "a token is required")
+        def dep(request: Request, authorization: str | None = Header(None), token: str | None = Query(None)):
+            client = request.client.host if request.client else None
+            try:
+                who = auth.identify(settings, auth.presented(token, authorization), request.headers, client)
+            except auth.Refused as e:
+                raise HTTPException(e.status, e.detail) from None
             if not who.can(role):
                 raise HTTPException(403, f"needs the {role} role ({who.name} is {who.role})")
             return who
@@ -525,9 +519,12 @@ def create_app(settings, port, notifier=None):
 
     @app.websocket("/api/v1/stream")
     async def live(ws: WebSocket, token: str | None = None):
-        who = settings.tokens.get(token) if token else settings.anonymous
-        if who is None:
-            await ws.close(code=1008, reason="unknown token" if token else "a token is required")
+        # A token in the Authorization header (programs), else ?token= (browsers cannot set headers).
+        presented = auth.presented(token, ws.headers.get("authorization"))
+        try:
+            auth.identify(settings, presented, ws.headers, ws.client.host if ws.client else None)
+        except auth.Refused as e:
+            await ws.close(code=1008, reason=e.detail)
             return
         await ws.accept()
         await stream.serve(ws, gw.state, gw.history, gw.metrics.clients.set, gw.clients)

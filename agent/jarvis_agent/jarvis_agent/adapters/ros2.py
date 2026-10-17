@@ -153,7 +153,8 @@ class RosAgent:
                 handle.abort()
                 return Analyze.Result(success=False, message="the agent is busy: ask again in a moment")
             try:
-                log.info("asked by %s: %s", g.requester or "?", g.incident_id or g.question[:80])
+                # The incident, not the question: what people type is not for the logs.
+                log.info("asked by %s about %s", g.requester or "?", g.incident_id or "the recent history")
 
                 def progress(stage, detail=""):
                     handle.publish_feedback(Analyze.Feedback(stage=stage, detail=str(detail)[:500]))

@@ -226,7 +226,7 @@ def test_the_stream_catches_up_then_resumes():
 
     async def take(n):
         events = stream(
-            "http://gw", connect=lambda url: Socket(next(sessions)), backoff_s=(0,), catch_up=catch_up
+            "http://gw", connect=lambda url, **_: Socket(next(sessions)), backoff_s=(0,), catch_up=catch_up
         )
         return [(await anext(events))["seq"] for _ in range(n)]
 

@@ -7,7 +7,8 @@ gateway: { url: http://127.0.0.1:8080 }   # token: $JARVIS_AGENT_TOKEN (never in
 autonomy: { level: advise, min_confidence: 0.7 }
 triggers: { min_severity: ERROR, settle_s: 20, max_per_hour: 20, catch_up_s: 120 }
 windows: { context_s: 300, sliding_s: 600 }
-redact: ["attrs.gps.*"]                   # attributes the analyst never sees
+redact: ["attrs.gps.*", "@identities"]   # what a model never sees (core/redaction.py)
+scrub_emails: true                        # e-mail addresses too, in any text sent to a model
 model:                                    # none: the heuristic analyst answers
   name: openrouter/<vendor>/<model>       # or $JARVIS_AGENT_MODEL; any LiteLLM model string
   api_base: ""                            # a LiteLLM proxy or a local server (Ollama, vLLM)
@@ -31,6 +32,7 @@ import pathlib
 import yaml
 
 from jarvis_agent.core.policy import LEVELS
+from jarvis_agent.core.redaction import check_patterns
 from jarvis_agent.model import TriggerType
 
 
@@ -47,6 +49,7 @@ class AgentConfig:
     context_s: float = 300.0
     sliding_s: float = 600.0
     redact: list = dataclasses.field(default_factory=list)
+    scrub_emails: bool = True
     model: str = ""
     api_base: str = ""
     api_key_env: str = ""
@@ -108,7 +111,8 @@ class AgentConfig:
                 for key, field in keys.items():
                     if key in (raw.get(section) or {}):
                         setattr(c, field, raw[section][key])
-            c.redact = list(raw.get("redact") or [])
+            c.redact = check_patterns(raw.get("redact") or [])
+            c.scrub_emails = bool(raw.get("scrub_emails", True))
             c.traces_dir = raw.get("traces_dir") or ""
         # Set but empty means unset: compose passes JARVIS_AGENT_MODEL through even when nobody set it.
         c.token = os.environ.get("JARVIS_AGENT_TOKEN") or c.token

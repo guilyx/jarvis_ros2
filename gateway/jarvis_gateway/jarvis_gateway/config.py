@@ -10,9 +10,17 @@
       - { token: change-me, name: alice, role: operator }
     webhooks:                       # where `notify` actions of rules go
       - { name: ops, url: https://hooks.example/..., channels: [operators], format: slack }
+    tls: { cert: /etc/jarvis/tls.crt, key: /etc/jarvis/tls.key }   # HTTPS (and wss://)
+    proxy_auth:                     # single sign-on through an authenticating proxy (oauth2-proxy)
+      trusted: [127.0.0.1]          # the proxy's addresses: its headers are believed from there only
+      user_header: X-Forwarded-Email
+      groups_header: X-Forwarded-Groups
+      roles: { jarvis-admins: admin, jarvis-operators: operator }   # group -> role, highest wins
+      default_role: viewer          # signed in, in no listed group (null: refused)
     lint: { plans_dir: ..., catalog: ... }        # what POST /rules:validate checks rules against
 
 Tokens can also come from $JARVIS_GATEWAY_TOKENS ("token:name:role,..."), to keep them out of files.
+docs/guides/security.md puts TLS and single sign-on together.
 """
 
 import dataclasses
@@ -56,6 +64,9 @@ class Settings:
     jarvis_bin: str = os.environ.get("JARVIS_BIN", "jarvis")
     lint_plans_dir: str = ""
     lint_catalog: str = ""
+    tls_cert: str = ""
+    tls_key: str = ""
+    proxy_auth: object = None  # jarvis_gateway.auth.ProxyAuth
 
     @classmethod
     def load(cls, path=None, **overrides):
@@ -77,6 +88,14 @@ class Settings:
             lint = raw.get("lint") or {}
             s.lint_plans_dir = lint.get("plans_dir", "")
             s.lint_catalog = lint.get("catalog", "")
+            tls = raw.get("tls") or {}
+            s.tls_cert, s.tls_key = str(tls.get("cert", "")), str(tls.get("key", ""))
+            if bool(s.tls_cert) != bool(s.tls_key):
+                raise ValueError(f"{path}: tls needs both cert and key")
+            if raw.get("proxy_auth"):
+                from jarvis_gateway.auth import ProxyAuth
+
+                s.proxy_auth = ProxyAuth(**raw["proxy_auth"])
         for item in filter(None, os.environ.get("JARVIS_GATEWAY_TOKENS", "").split(",")):
             token, name, role = item.split(":")
             s.tokens[token] = _principal(name, role)

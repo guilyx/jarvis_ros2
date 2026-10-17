@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SROS2 policy for Jarvis (milestone 5.4, NFR-13): one enclave per Jarvis process, so DDS security
+  authenticates every participant, encrypts the traffic and enforces who may do what:
+
+  - only the Jarvis core (/jarvis/container) publishes the stream and its state (/jarvis/events,
+    /jarvis/faults, /jarvis/executions) and serves Jarvis' services and actions;
+  - producers (robot nodes reporting through jarvis_reporter) and Jarvis itself publish /jarvis/ingest;
+  - only operators, the gateway and the agent ask for recoveries, acknowledge or clear faults.
+
+  The core records, bridges and watches what the robot publishes, and recoveries act on robot nodes,
+  so it subscribes to any topic and calls any service or action. Anything not allowed is denied.
+
+  The enclaves:
+  - /jarvis/launch     ros2 launch itself: launch_ros loads the components into the container;
+  - /jarvis/container  the core: event hub, fault manager, rules, recovery, bridges, recorder, black box;
+  - /jarvis/lake       woken by closed splits, reports its health and jarvis.storage.low;
+  - /jarvis/gateway    the live stream for the dashboard, and the operators' commands;
+  - /jarvis/agent      reads through the gateway, publishes insights, may propose recoveries;
+  - /jarvis/operator   people: ros2 jarvis, ros2 run jarvis_demo monitor, ros2 topic/node/service;
+  - /jarvis/producer   a robot node that reports to Jarvis (jarvis_reporter): it may publish
+                       /jarvis/ingest. Copy its profile into the robot's own policy, under each
+                       node's enclave.
+
+  Keystore: ros2 run jarvis_bringup jarvis_keystore KEYSTORE [your_policy.xml ...]
+  (no comments inside <enclaves>: sros2 would read them as enclaves)
+-->
+<policy version="0.2.0">
+  <enclaves>
+    <enclave path="/jarvis/launch">
+      <profiles>
+        <profile ns="/" node="launch_ros">
+          <topics publish="ALLOW">
+            <topic>/rosout</topic>
+            <topic>/parameter_events</topic>
+          </topics>
+          <topics subscribe="ALLOW">
+            <topic>/parameter_events</topic>
+          </topics>
+          <services request="ALLOW">
+            <service>/jarvis/container/_container/*</service>
+          </services>
+          <services reply="ALLOW">
+            <service>/launch_ros_*</service>
+          </services>
+        </profile>
+      </profiles>
+    </enclave>
+
+    <enclave path="/jarvis/container">
+      <profiles>
+        <profile ns="/jarvis" node="container">
+          <topics publish="ALLOW">
+            <topic>/jarvis/*</topic>
+            <topic>/diagnostics</topic>
+            <topic>/rosout</topic>
+            <topic>/parameter_events</topic>
+          </topics>
+          <topics subscribe="ALLOW">
+            <topic>/*</topic>
+          </topics>
+          <services reply="ALLOW">
+            <service>/jarvis/*</service>
+          </services>
+          <services request="ALLOW">
+            <service>/*</service>
+          </services>
+          <actions execute="ALLOW">
+            <action>/jarvis/*</action>
+          </actions>
+          <actions call="ALLOW">
+            <action>/*</action>
+          </actions>
+        </profile>
+      </profiles>
+    </enclave>
+
+    <enclave path="/jarvis/lake">
+      <profiles>
+        <profile ns="/jarvis" node="lake">
+          <topics publish="ALLOW">
+            <topic>/jarvis/ingest</topic>
+            <topic>/diagnostics</topic>
+            <topic>/rosout</topic>
+            <topic>/parameter_events</topic>
+          </topics>
+          <topics subscribe="ALLOW">
+            <topic>/jarvis/faults</topic>
+            <topic>/jarvis/recorder/events/write_split</topic>
+            <topic>/parameter_events</topic>
+          </topics>
+          <services reply="ALLOW">
+            <service>/jarvis/lake/*</service>
+          </services>
+        </profile>
+      </profiles>
+    </enclave>
+
+    <enclave path="/jarvis/gateway">
+      <profiles>
+        <profile ns="/jarvis" node="gateway">
+          <topics publish="ALLOW">
+            <topic>/rosout</topic>
+            <topic>/parameter_events</topic>
+          </topics>
+          <topics subscribe="ALLOW">
+            <topic>/jarvis/events</topic>
+            <topic>/jarvis/faults</topic>
+            <topic>/jarvis/executions</topic>
+            <topic>/parameter_events</topic>
+          </topics>
+          <services reply="ALLOW">
+            <service>/jarvis/gateway/*</service>
+          </services>
+          <services request="ALLOW">
+            <service>/jarvis/event_hub/query_events</service>
+            <service>/jarvis/fault_manager/get_faults</service>
+            <service>/jarvis/fault_manager/acknowledge_fault</service>
+            <service>/jarvis/fault_manager/clear_fault</service>
+            <service>/jarvis/fault_manager/close_incident</service>
+            <service>/jarvis/recovery/cancel</service>
+            <service>/jarvis/recovery/decide</service>
+            <service>/jarvis/recovery/list_plans</service>
+            <service>/jarvis/recovery/reload</service>
+            <service>/jarvis/recovery/set_mode</service>
+            <service>/jarvis/rule_engine/list_rules</service>
+            <service>/jarvis/rule_engine/reload</service>
+            <service>/jarvis/rule_engine/set_rule_state</service>
+          </services>
+          <actions call="ALLOW">
+            <action>/jarvis/recovery/execute</action>
+            <action>/jarvis/agent/analyze</action>
+          </actions>
+        </profile>
+      </profiles>
+    </enclave>
+
+    <enclave path="/jarvis/agent">
+      <profiles>
+        <profile ns="/jarvis" node="agent">
+          <topics publish="ALLOW">
+            <topic>/jarvis/ingest</topic>
+            <topic>/rosout</topic>
+            <topic>/parameter_events</topic>
+          </topics>
+          <topics subscribe="ALLOW">
+            <topic>/parameter_events</topic>
+          </topics>
+          <services reply="ALLOW">
+            <service>/jarvis/agent/*</service>
+          </services>
+          <actions execute="ALLOW">
+            <action>/jarvis/agent/analyze</action>
+          </actions>
+          <actions call="ALLOW">
+            <action>/jarvis/recovery/execute</action>
+          </actions>
+        </profile>
+      </profiles>
+    </enclave>
+
+    <enclave path="/jarvis/operator">
+      <profiles>
+        <profile ns="/" node="operator">
+          <topics publish="ALLOW">
+            <topic>/rosout</topic>
+            <topic>/parameter_events</topic>
+          </topics>
+          <topics subscribe="ALLOW">
+            <topic>/jarvis/events</topic>
+            <topic>/jarvis/faults</topic>
+            <topic>/jarvis/executions</topic>
+            <topic>/diagnostics</topic>
+            <topic>/rosout</topic>
+            <topic>/parameter_events</topic>
+          </topics>
+          <services reply="ALLOW">
+            <service>/ros2_jarvis_*</service>
+            <service>/_ros2cli_*</service>
+            <service>/demo/monitor/*</service>
+          </services>
+          <services request="ALLOW">
+            <service>/jarvis/*</service>
+          </services>
+          <actions call="ALLOW">
+            <action>/jarvis/recovery/execute</action>
+            <action>/jarvis/agent/analyze</action>
+          </actions>
+        </profile>
+      </profiles>
+    </enclave>
+
+    <enclave path="/jarvis/producer">
+      <profiles>
+        <profile ns="/" node="producer">
+          <topics publish="ALLOW">
+            <topic>/jarvis/ingest</topic>
+            <topic>/rosout</topic>
+            <topic>/parameter_events</topic>
+          </topics>
+          <topics subscribe="ALLOW">
+            <topic>/parameter_events</topic>
+          </topics>
+          <services reply="ALLOW">
+            <service>/producer*</service>
+          </services>
+        </profile>
+      </profiles>
+    </enclave>
+  </enclaves>
+</policy>

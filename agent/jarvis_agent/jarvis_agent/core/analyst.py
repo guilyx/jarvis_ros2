@@ -10,7 +10,8 @@
 It never runs anything: what it recommends goes through the harness checks and the autonomy policy
 like the heuristic analyst's. Triage that is conclusive on its own (one fault, fixed by a plan)
 skips the model. Every analysis that calls a model leaves a trace (no event content: hashes, tool
-names and arguments, tokens, cost, latency) in `traces_dir`.
+names and arguments, tokens, cost, latency) in `traces_dir`. What the model reads is redacted where
+the agent reads it (core/redaction.py), and every message is scrubbed of secrets before it leaves.
 """
 
 import collections
@@ -28,6 +29,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from jarvis_agent.core.context import render
+from jarvis_agent.core.redaction import Scrubber, redacting
 from jarvis_agent.llm.base import ModelUnavailable
 from jarvis_agent.llm.heuristic import HeuristicAnalyst
 from jarvis_agent.model import SEVERITIES, Hypothesis, Insight, Recommendation, Severity, Usage, iso_now
@@ -227,6 +229,7 @@ class LLMAnalyst:
         tokens_per_analysis=250_000,
         context_tokens=30_000,
         redact=(),
+        scrubber=None,
         traces_dir="",
         skip_when_conclusive=True,
         clients=None,
@@ -235,7 +238,8 @@ class LLMAnalyst:
         self.client = client
         self.proposals = proposals  # offer propose_recovery (autonomy supervised or autonomous)
         self.clients = dict(clients or {})  # TriggerType -> a client for that trigger
-        self.query = query
+        self.query = redacting(query, redact)
+        self.scrub = scrubber or Scrubber()
         self.fallback = fallback or HeuristicAnalyst()
         self.budget = budget or Budget()
         self.max_tool_calls = max_tool_calls
@@ -313,11 +317,14 @@ class LLMAnalyst:
             t0 = time.monotonic()
             say("model", f"{client.name}, turn {len(turns) + 1}" + (": wrapping up" if force else ""))
             try:
+                # The last line: whatever made it this far, no secret leaves for the model.
                 c = client.complete(
-                    messages, [SUBMIT] if force else offered, FORCE_SUBMIT if force else "auto"
+                    self.scrub.messages(messages),
+                    [SUBMIT] if force else offered,
+                    FORCE_SUBMIT if force else "auto",
                 )
             except ModelUnavailable as e:
-                return finish("fallback", f"model unavailable: {e}")
+                return finish("fallback", f"model unavailable: {self.scrub.text(str(e))}")
             spend.input_tokens += c.input_tokens
             spend.output_tokens += c.output_tokens
             spend.cost_usd += c.cost_usd
@@ -364,11 +371,15 @@ class LLMAnalyst:
                 if calls >= self.max_tool_calls or force:
                     content = '{"error": "not run: the tool-call limit is reached; call submit_insight"}'
                 else:
-                    say("tool", f"{t.name} {t.arguments[:160]}".strip())
+                    say("tool", self.scrub.text(f"{t.name} {t.arguments[:160]}".strip()))
                     content = tools.run(t.name, t.arguments)
                     calls += 1
-                turn["tool_calls"].append(
-                    {"name": t.name, "arguments": t.arguments[:500], "result_chars": len(content)}
+                turn["tool_calls"].append(  # the model wrote them: it may have copied something
+                    {
+                        "name": t.name,
+                        "arguments": self.scrub.text(t.arguments[:500]),
+                        "result_chars": len(content),
+                    }
                 )
                 messages.append(_tool_message(t, content))
             if submitted is None:

@@ -6,8 +6,14 @@ LAN that reaches the gateway."""
 
 import asyncio
 import json
+import urllib.parse
 
 import httpx
+
+
+def _seg(value):
+    """One path segment: an id with a `/` or `..` in it stays one segment, never another route."""
+    return urllib.parse.quote(str(value), safe="")
 
 
 class GatewayQuery:
@@ -26,7 +32,7 @@ class GatewayQuery:
         return r.json()
 
     def incident(self, incident_id):
-        return self._get(f"/incidents/{incident_id}")
+        return self._get(f"/incidents/{_seg(incident_id)}")
 
     def events(
         self,
@@ -53,7 +59,7 @@ class GatewayQuery:
         return (page or {}).get("events", [])
 
     def event(self, event_id):
-        found = self._get(f"/events/{event_id}")
+        found = self._get(f"/events/{_seg(event_id)}")
         return (found or {}).get("event") if found else None
 
     def active_faults(self):
@@ -69,7 +75,7 @@ class GatewayQuery:
         return (self._get("/plans") or {}).get("plans", [])
 
     def rule(self, rule_id):
-        return self._get(f"/rules/{rule_id}")
+        return self._get(f"/rules/{_seg(rule_id)}")
 
     def seq_before(self, since):
         """The since_seq that resumes the stream at the first event from `since` (ISO 8601) on, or
@@ -87,15 +93,14 @@ async def stream(base_url, token="", since=None, connect=None, backoff_s=(1, 2, 
     from websockets.exceptions import WebSocketException
 
     url = base_url.rstrip("/").replace("http://", "ws://").replace("https://", "wss://") + "/api/v1/stream"
-    if token:
-        url += f"?token={token}"
+    headers = {"Authorization": f"Bearer {token}"} if token else {}  # not in the URL: URLs get logged
     connect = connect or websockets.connect
     failures = 0
     while True:
         try:
             if since is None and catch_up is not None:
                 since = await asyncio.to_thread(catch_up)
-            async with connect(url) as ws:
+            async with connect(url, additional_headers=headers) as ws:
                 await ws.send(json.dumps({"op": "subscribe", **({"since_seq": since} if since else {})}))
                 failures = 0
                 async for raw in ws:

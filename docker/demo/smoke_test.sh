@@ -24,6 +24,7 @@ for _ in $(seq 1 20); do [ -f demo-data/lake/status.json ] && break; sleep 1; do
 [ -f demo-data/lake/status.json ] || fail "the lake service is not running"
 for _ in $(seq 1 30); do [ "$(api /health 2>/dev/null | json 'd["status"]')" = ok ] && break; sleep 1; done
 [ "$(api /health | json 'd["status"]')" = ok ] || fail "the gateway is not healthy"
+expect 'id="root"' "$(curl -fsS http://localhost:8080/)" "the dashboard is not served"
 expect "none, all good" "$(open_faults)" "faults on a healthy start"
 sleep 3 # a full rate window of the lidar relay, where a startup glitch would show
 if grep -q " RAISE " <<<"$(screen)"; then fail "a fault was raised on a healthy start"; fi

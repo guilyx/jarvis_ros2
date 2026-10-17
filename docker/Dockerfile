@@ -1,7 +1,15 @@
 # syntax=docker/dockerfile:1
-# Stages: dev (toolchain, used by .devcontainer) -> build (colcon build) -> runtime (install space only)
-#         -> demo (runtime + Foxglove bridge and the demo tools; what compose.yaml runs)
+# Stages: dev (toolchain, used by .devcontainer) -> build (colcon build) -> runtime (install space only,
+#         plus the dashboard bundle) -> demo (runtime + Foxglove bridge and the demo tools; compose.yaml)
+#         dashboard (Node, builds the dashboard; nothing of it but the bundle reaches the robot)
 ARG ROS_DISTRO=jazzy
+
+FROM node:22.22-bookworm-slim AS dashboard
+WORKDIR /dashboard
+COPY dashboard/package.json dashboard/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY dashboard/ ./
+RUN npm run build
 
 FROM ros:${ROS_DISTRO}-ros-base AS dev
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -45,6 +53,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3-rosdep 
          -r /tmp/manifests/gateway/jarvis_gateway/requirements.txt \
     && rm -rf /var/lib/apt/lists/* /tmp/manifests
 COPY --from=build /ws/install /opt/jarvis
+# The gateway serves it from there (no Node.js on the robot).
+COPY --from=dashboard /dashboard/dist /opt/jarvis/share/jarvis_gateway/dashboard
 RUN sed -i "s|^exec \"\$@\"|source /opt/jarvis/setup.bash\nexec \"\$@\"|" /ros_entrypoint.sh
 ENV JARVIS_DATA=/var/lib/jarvis
 VOLUME ["/var/lib/jarvis"]

@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+/* Dark is the default (an ops console); `html:not(.dark)` is the light theme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-fg: var(--muted-fg);
+  --color-border: var(--border);
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+:root {
+  --bg: #f8fafc;
+  --fg: #0f172a;
+  --card: #ffffff;
+  --muted: #eef2f7;
+  --muted-fg: #64748b;
+  --border: #dbe2ea;
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #0b1120;
+  --fg: #e2e8f0;
+  --card: #111a2e;
+  --muted: #1b2740;
+  --muted-fg: #8494ad;
+  --border: #22314d;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

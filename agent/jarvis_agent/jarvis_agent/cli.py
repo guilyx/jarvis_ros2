@@ -9,7 +9,8 @@
 incidents that open at ERROR or worse and recoveries that fail, and publishes the insights (as
 INSIGHT events on /jarvis/ingest, where the dashboard shows them). With a model configured
 (model.name, $JARVIS_AGENT_MODEL or --model), it investigates with read-only tools; without one, or
-when the model cannot answer, the heuristic analyst does. Proposals stay advice (milestone 4.3).
+when the model cannot answer, the heuristic analyst does. At autonomy supervised or autonomous,
+`run` sends the model's proposals to the recovery gates as requester AGENT; `analyze` only advises.
 """
 
 import argparse
@@ -92,7 +93,7 @@ def parser():
     return p
 
 
-def make_analyst(config, query):
+def make_analyst(config, query, proposals=False):
     """The model analyst for the configured model, or None (the heuristic analyst). Exits when the
     model cannot be used: litellm missing, or a model that does not call tools."""
     if not config.model:
@@ -130,14 +131,17 @@ def make_analyst(config, query):
         traces_dir=config.traces_dir,
         skip_when_conclusive=config.skip_when_conclusive,
         clients={TriggerType(t): client(name) for t, name in config.per_trigger.items()},
+        proposals=proposals,
     )
 
 
-def make_agent(config, query, sink=None):
+def make_agent(config, query, sink=None, recovery=None):
+    proposals = recovery is not None and config.level in ("supervised", "autonomous")
     return Agent(
         query,
         sink=sink,
-        analyst=make_analyst(config, query),
+        recovery=recovery,
+        analyst=make_analyst(config, query, proposals),
         policy=AutonomyPolicy(config.level, config.min_confidence),
         redact=config.redact,
         windows=WindowManager(query, context_s=config.context_s, sliding_s=config.sliding_s),
@@ -172,14 +176,15 @@ def cmd_run(args, config):
 
     logging.basicConfig(level=args.log_level, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)  # not every request
+    recovery = None
     if args.publish == "ros":
-        from jarvis_agent.adapters.ros2 import RosInsightSink  # rclpy only here
+        from jarvis_agent.adapters.ros2 import RosAgent  # rclpy only here
 
-        sink = RosInsightSink()
+        sink = recovery = RosAgent()
     else:
         sink = StdoutSink()
     query = GatewayQuery(config.gateway_url, config.token)
-    agent = make_agent(config, query, sink)
+    agent = make_agent(config, query, sink, recovery)
     policy = TriggerPolicy(config.min_severity, config.settle_s, config.max_per_hour)
     logging.getLogger("jarvis_agent").info(
         "watching %s (autonomy %s, %s)",

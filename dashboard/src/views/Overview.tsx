@@ -1,10 +1,10 @@
 import { Link } from "@tanstack/react-router";
 import { Clock, Sparkles } from "lucide-react";
 import { useMemo } from "react";
-import { useDecide, useIncidents, useInsights, useStats } from "@/api/queries";
+import { useIncidents, useInsights, useStats } from "@/api/queries";
 import { SEVERITIES, insightConfidence, insightOf, type RatePoint, type Severity } from "@/api/types";
 import { Chart, chartColors, type ChartOption } from "@/components/Chart";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { DecideButtons } from "@/components/DecideButtons";
 import { Empty, ErrorNote, SeverityBadge, StateBadge } from "@/components/domain";
 import { FaultActions } from "@/components/FaultActions";
 import { Button } from "@/components/ui/button";
@@ -88,7 +88,6 @@ function NeedsAttention() {
   const faults = useLive((s) => s.faults);
   const executions = useLive((s) => s.executions);
   const escalated = useIncidents("ESCALATED");
-  const decide = useDecide();
   const can = useCan();
   const pending = (executions?.executions ?? []).filter((x) => x.state === "PENDING_APPROVAL");
   const urgent = (faults ?? []).filter(
@@ -121,28 +120,7 @@ function NeedsAttention() {
                 {x.expires ? ` · expires ${ago(x.expires)}` : ""}
               </span>
             </div>
-            {can("operator") ? (
-              <div className="flex gap-1.5">
-                <ConfirmDialog
-                  trigger={<Button size="sm">Reject</Button>}
-                  title={`Reject ${x.plan_id}`}
-                  confirm="Reject"
-                  onConfirm={(note) => decide.mutateAsync({ id: x.execution_id, approve: false, note })}
-                />
-                <ConfirmDialog
-                  trigger={
-                    <Button size="sm" variant="default">
-                      Approve
-                    </Button>
-                  }
-                  title={`Approve ${x.plan_id}`}
-                  description={x.rationale || undefined}
-                  confirm="Approve"
-                  requireNote
-                  onConfirm={(note) => decide.mutateAsync({ id: x.execution_id, approve: true, note })}
-                />
-              </div>
-            ) : null}
+            {can("operator") ? <DecideButtons x={x} description={x.rationale || undefined} /> : null}
           </div>
         ))}
         {(escalated.data?.incidents ?? []).map((i) => (

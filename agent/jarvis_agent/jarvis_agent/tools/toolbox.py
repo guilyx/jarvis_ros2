@@ -5,14 +5,19 @@ windows. Every event is redacted before the model sees it, every result is bound
 id a result shows counts as seen (the harness accepts those as evidence). `submit_insight` ends the
 loop (core/analyst.py).
 
+`propose_recovery` (offered at autonomy supervised or autonomous) only records a proposal: the agent
+routes it after the insight is checked, and the recovery gates decide (core/agent.py).
+
 Absent on purpose: shell, service calls, parameter writes, files. Breadth comes from the plan
-catalog, which humans review. Proposing a plan arrives with milestone 4.3.
+catalog, which humans review.
 """
 
 import contextlib
 import json
 
+from jarvis_agent.core.checks import validate_args
 from jarvis_agent.core.triage import redact
+from jarvis_agent.core.windows import Proposal
 from jarvis_agent.events import component
 from jarvis_agent.model import SEVERITIES
 
@@ -101,6 +106,22 @@ SPECS = [
     _fn("get_rule", "A rule's definition and its recent matches.", {"rule_id": _STR}, ["rule_id"]),
 ]
 NAMES = {s["function"]["name"] for s in SPECS}
+MAX_PROPOSALS = 3
+PROPOSE = _fn(
+    "propose_recovery",
+    "Ask Jarvis to run a plan of the catalog now. It never runs directly: the autonomy policy and the "
+    "recovery gates decide, and an operator may have to approve it. Only for a plan whose "
+    "preconditions hold, with all its required arguments, citing the events that call for it. At "
+    "most 3; mention them in your recommendations too.",
+    {
+        "plan_id": _STR,
+        "args": {"type": "object", "additionalProperties": {"type": "string"}},
+        "rationale": {"type": "string", "description": "Why, for the operator who approves it"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "evidence": {"type": "array", "items": _STR, "description": "Event ids"},
+    },
+    ["plan_id", "args", "rationale", "confidence", "evidence"],
+)
 
 
 def row(e):
@@ -129,17 +150,18 @@ def _error(text):
 
 
 class Toolbox:
-    def __init__(self, query, window, result, redact_patterns=()):
+    def __init__(self, query, window, result, redact_patterns=(), proposals=False):
         self.query = query
         self.window = window
         self.result = result
         self.redact = tuple(redact_patterns)
+        self.names = NAMES | ({"propose_recovery"} if proposals else set())
 
     def run(self, name, arguments):
         """The tool's result as JSON text for the model; errors are results too (the model can
         correct itself). Event ids in what it returns join the window's seen ids."""
-        if name not in NAMES:
-            return _error(f"no tool '{name}'; the tools are {', '.join(sorted(NAMES))}")
+        if name not in self.names:
+            return _error(f"no tool '{name}'; the tools are {', '.join(sorted(self.names))}")
         try:
             args = json.loads(arguments or "{}")
         except ValueError:
@@ -236,6 +258,32 @@ class Toolbox:
         limit = min(int(a.get("limit") or 20), MAX_ROWS)
         found = [x for x in self.query.recoveries() if not a.get("plan_id") or x.get("plan") == a["plan_id"]]
         return {"executions": found[:limit]}
+
+    def _propose_recovery(self, a):
+        plan = next((p for p in self.window.plans if p["id"] == a["plan_id"]), None)
+        if plan is None:
+            return {"error": f"no plan '{a['plan_id']}' in the catalog"}
+        policy = plan.get("agent_policy", "never")
+        if policy in ("never", "advise") or "AGENT" not in (plan.get("allowed_requesters") or []):
+            return {"error": f"{plan['id']} takes no agent proposals (agent_policy {policy}): recommend it"}
+        if not isinstance(a.get("args"), dict):
+            raise ValueError("args must be an object")
+        args = {k: (str(v).lower() if isinstance(v, bool) else str(v)) for k, v in a["args"].items()}
+        problems = validate_args(plan, args)
+        if problems:
+            return {"error": f"{plan['id']}: {'; '.join(problems)}"}
+        confidence = float(a["confidence"])
+        if not 0 <= confidence <= 1:
+            raise ValueError("confidence must be between 0 and 1")
+        evidence = [i for i in a.get("evidence") or [] if isinstance(i, str) and i in self.window.ids]
+        if not evidence:
+            return {"error": "cite at least one event id you were shown"}
+        if len(self.window.proposals) >= MAX_PROPOSALS:
+            return {"error": f"at most {MAX_PROPOSALS} proposals"}
+        self.window.proposals.append(
+            Proposal(plan["id"], args, str(a.get("rationale") or "")[:500], confidence, evidence)
+        )
+        return {"recorded": plan["id"], "next": "Jarvis routes it once you submit your insight"}
 
     def _get_rule(self, a):
         found = self.query.rule(a["rule_id"])

@@ -89,6 +89,25 @@ with `--ignore-installed`, since pip cannot replace Debian's own copies of share
 Tests: a scripted `FakeLLM` for the loop, and a local OpenAI-compatible server for LiteLLM over
 HTTP; the Docker smoke test runs the image's model path against a stub of that server.
 
+### As built (4.3)
+
+`propose_recovery` is offered to the model only at autonomy `supervised` or `autonomous` and only
+in the service (`jarvis-agent run`, which has the ROS node). The tool checks a proposal at once
+(the plan exists and takes agent proposals, every required argument validates, confidence in 0..1,
+at least one cited event the model was shown, at most 3) and records it; nothing runs during the
+loop. After the harness checks, `Agent._route` decides each one with `AutonomyPolicy` (the lower of
+the agent's level and the plan's `agent_policy`; the heuristic analyst, including a fallback after
+the model failed, is capped at advise): supervised or autonomous proposals go to
+`adapters/ros2.py`'s `RosAgent.submit`, an `ExecuteRecovery` goal with requester AGENT, the
+insight id in the rationale, the incident as correlation and the trigger as causation; it returns
+at the orchestrator's first answer (PENDING_APPROVAL, QUEUED, RUNNING, or REJECTED with the gate's
+reason), and the execution id joins the insight's `proposals`. Everything else becomes a RECOVER
+recommendation. The orchestrator stays authoritative: its `agent_autonomy` ceiling (bringup
+default `supervised`) and `min_confidence` apply whatever the agent decided. A LAN agent without
+ROS only advises; a gateway route for agent proposals would need an `agent` role (not built).
+On its first connection the agent's stream resumes from the first event of the last
+`catch_up_s` (120 s), so an incident that opened while it started is not missed.
+
 ## 2. Triggers
 
 | Trigger | Source | Default |

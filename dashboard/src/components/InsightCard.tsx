@@ -1,6 +1,9 @@
-import { ChevronDown, ChevronRight, Play, Sparkles } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { ChevronDown, ChevronRight, Play, Send, Sparkles } from "lucide-react";
 import { useState } from "react";
+import { useRecovery } from "@/api/queries";
 import { analystLabel, insightConfidence, insightOf, type JarvisEvent } from "@/api/types";
+import { DecideButtons } from "@/components/DecideButtons";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { useCan } from "@/lib/auth";
@@ -19,7 +22,38 @@ export function ConfidenceBar({ value }: { value: number }) {
   );
 }
 
-/** One insight: what the agent thinks happened, why, and what to do (a human runs any recovery). */
+/** A plan the agent sent to the recovery gates: where it stands, and Approve / Reject while it waits. */
+function Proposal({ id }: { id: string }) {
+  const can = useCan();
+  const { data } = useRecovery(id);
+  const x = data?.execution ?? null;
+  const state = x?.state ?? data?.history?.outcome ?? data?.history?.last_phase ?? "";
+  return (
+    <div
+      data-testid="insight-proposal"
+      className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-violet-500/5 px-3 py-2 text-sm ring-1 ring-violet-500/20"
+    >
+      <div className="min-w-0">
+        <Send size={12} className="mr-1.5 inline text-violet-400" />
+        Proposed{" "}
+        <Link
+          to="/recovery/$executionId"
+          params={{ executionId: id }}
+          className="font-medium hover:underline"
+        >
+          {x?.plan_id ?? data?.history?.plan ?? id}
+        </Link>
+        {state ? <span className="text-muted-fg"> · {state.toLowerCase().replace("_", " ")}</span> : null}
+      </div>
+      {x?.state === "PENDING_APPROVAL" && can("operator") ? (
+        <DecideButtons x={x} description={x.rationale || undefined} />
+      ) : null}
+    </div>
+  );
+}
+
+/** One insight: what the agent thinks happened, why, and what to do. Advice has a Run button; a
+ * proposal went to the recovery gates and may wait for an operator's approval. */
 export function InsightCard({
   event,
   onEvidence,
@@ -97,6 +131,13 @@ export function InsightCard({
               </li>
             ))}
           </ul>
+        ) : null}
+        {insight.proposals?.length ? (
+          <div className="space-y-1.5">
+            {insight.proposals.map((id) => (
+              <Proposal key={id} id={id} />
+            ))}
+          </div>
         ) : null}
         {insight.facts?.length || insight.flags?.length ? (
           <div>

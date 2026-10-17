@@ -31,7 +31,7 @@ from jarvis_agent.core.context import render
 from jarvis_agent.llm.base import ModelUnavailable
 from jarvis_agent.llm.heuristic import HeuristicAnalyst
 from jarvis_agent.model import SEVERITIES, Hypothesis, Insight, Recommendation, Severity, Usage, iso_now
-from jarvis_agent.tools.toolbox import SPECS, Toolbox
+from jarvis_agent.tools.toolbox import PROPOSE, SPECS, Toolbox
 
 log = logging.getLogger("jarvis_agent.llm")
 
@@ -51,6 +51,10 @@ plans from the catalog only, with arguments that fit their parameters, and only 
 preconditions plausibly hold. You cannot run anything: an operator, or Jarvis' policy, decides.
 
 The window below often holds enough: use few tool calls. Finish by calling submit_insight."""
+
+PROPOSING = """You may also call propose_recovery for a plan of the catalog that should run now. It \
+never runs directly: Jarvis' autonomy policy and the recovery gates decide, and an operator may \
+have to approve it. Propose only with all required arguments and evidence; when unsure, recommend."""
 
 FORCE_SUBMIT = {"type": "function", "function": {"name": "submit_insight"}}
 _HYPOTHESIS = {
@@ -226,8 +230,10 @@ class LLMAnalyst:
         traces_dir="",
         skip_when_conclusive=True,
         clients=None,
+        proposals=False,
     ):
         self.client = client
+        self.proposals = proposals  # offer propose_recovery (autonomy supervised or autonomous)
         self.clients = dict(clients or {})  # TriggerType -> a client for that trigger
         self.query = query
         self.fallback = fallback or HeuristicAnalyst()
@@ -250,12 +256,13 @@ class LLMAnalyst:
 
         insight_id = str(uuid.uuid4())
         stable, text = render(window, result, self.context_tokens)
-        system = SYSTEM + "\n\n" + stable
+        system = SYSTEM + ("\n\n" + PROPOSING if self.proposals else "") + "\n\n" + stable
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": text + "\n\nInvestigate, then call submit_insight."},
         ]
-        tools = Toolbox(self.query, window, result, self.redact)
+        tools = Toolbox(self.query, window, result, self.redact, proposals=self.proposals)
+        offered = [*SPECS, *([PROPOSE] if self.proposals else []), SUBMIT]
         spend, turns, started = _Spend(), [], time.monotonic()
         trace = {
             "insight_id": insight_id,
@@ -302,7 +309,7 @@ class LLMAnalyst:
             t0 = time.monotonic()
             try:
                 c = client.complete(
-                    messages, [SUBMIT] if force else [*SPECS, SUBMIT], FORCE_SUBMIT if force else "auto"
+                    messages, [SUBMIT] if force else offered, FORCE_SUBMIT if force else "auto"
                 )
             except ModelUnavailable as e:
                 return finish("fallback", f"model unavailable: {e}")

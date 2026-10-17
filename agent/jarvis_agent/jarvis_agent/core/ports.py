@@ -15,6 +15,7 @@ recorded events (adapters/replay.py, for tests and evals). Everything is the sch
     rule(id)              {rule, fires, ...} | None
 """
 
+import dataclasses
 from typing import Protocol
 
 
@@ -48,3 +49,27 @@ class EventQuery(Protocol):
 
 class InsightSink(Protocol):
     def publish(self, insight, correlation_id: str = "", causation_id: str = "") -> None: ...
+
+
+@dataclasses.dataclass
+class Submitted:
+    """What the orchestrator said when it took a proposal (it may run long after)."""
+
+    execution_id: str
+    state: str  # PENDING_APPROVAL, QUEUED, RUNNING, or an outcome: SUCCEEDED, REJECTED, ...
+    reason: str = ""
+
+
+class RecoveryClient(Protocol):
+    """The one gate to recovery (ExecuteRecovery), as requester AGENT: the orchestrator applies the
+    deployment's agent autonomy, the plan's agent_policy, the confidence threshold and every gate."""
+
+    def submit(
+        self,
+        plan_id: str,
+        args: dict,
+        rationale: str,
+        confidence: float,
+        correlation_id: str = "",
+        causation_id: str = "",
+    ) -> Submitted: ...

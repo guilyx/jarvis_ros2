@@ -17,8 +17,15 @@ adapters/    gateway.py (REST + live stream) · replay.py (recorded events) · r
 - **Evidence or it did not happen**: every evidence id must be an event the analyst saw; others are
   dropped and an unsupported hypothesis is capped at 0.3. A recommended plan must exist and the
   arguments it gives must validate.
-- **Advice, not action** (autonomy `advise`): recovery recommendations show in the dashboard with a
-  Run button; a human runs them, through the same gates as anyone.
+- **Advice, not action** (autonomy `advise`, the default): recovery recommendations show in the
+  dashboard with a Run button; a human runs them, through the same gates as anyone.
+- **Proposals go through the one gate** (autonomy `supervised` or `autonomous`, with a model): the
+  model may `propose_recovery` a catalog plan, with every required argument and the events that
+  call for it. The agent's node sends it as an `ExecuteRecovery` goal, requester AGENT; the
+  orchestrator applies its own `agent_autonomy` ceiling, the plan's `agent_policy`, the confidence
+  threshold and every other gate. A supervised proposal waits for an operator (Approve / Reject on
+  the insight's card); the insight lists its execution ids. The heuristic analyst never proposes,
+  and `analyze` from the command line only advises.
 - **No future**: history is cut at the incident's first report, so replays and evals are honest.
 - **The model is optional**: without one, offline, over budget, or when its answer stays invalid
   after one repair turn, the heuristic analyst answers and the insight says why.

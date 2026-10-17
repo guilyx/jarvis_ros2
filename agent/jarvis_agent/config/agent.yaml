@@ -1,7 +1,8 @@
 # Jarvis agent settings (jarvis-agent --config). See jarvis_agent/config.py.
 schema: jarvis.agent/v1
 gateway: { url: http://127.0.0.1:8080 }   # a token, if the gateway wants one: $JARVIS_AGENT_TOKEN
-autonomy: { level: advise, min_confidence: 0.7 }
+autonomy: { level: advise, min_confidence: 0.7 }   # supervised / autonomous: a model's proposals go
+                                                  # to the recovery gates (the orchestrator decides)
 triggers: { min_severity: ERROR, settle_s: 20, max_per_hour: 20, catch_up_s: 120 }
 windows: { context_s: 300, sliding_s: 600 }
 redact: []                               # e.g. ["attrs.gps.*"]: attributes the analyst never sees

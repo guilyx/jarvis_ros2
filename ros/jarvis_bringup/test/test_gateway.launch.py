@@ -230,6 +230,47 @@ class TestGateway(unittest.TestCase):
         self.assertTrue(insight["payload"]["hypotheses"][0]["evidence"])
         self.assertEqual(insight["correlation_id"], insight["payload"]["window"]["correlation_id"])
 
+    def test_an_agent_proposal_waits_for_an_operator(self):
+        """The agent's node proposes a plan: the orchestrator takes it as an AGENT request, supervised
+        (the bringup's agent_autonomy), so it waits for approval; an operator rejects it."""
+        from jarvis_agent.adapters.ros2 import RosAgent
+
+        agent = RosAgent(node_name="agent_proposer")
+        try:
+            got = agent.submit(
+                "restart-lifecycle-node",
+                {"node": "/jarvis/nothing_here", "component": "test.proposal"},
+                rationale="a test proposal (insight t-1)",
+                confidence=0.9,
+                correlation_id="incident-t-1",
+            )
+        finally:
+            agent.close()
+        self.assertEqual(got.state, "PENDING_APPROVAL", got)
+        self.assertTrue(got.execution_id)
+
+        def pending():
+            found = call("GET", f"/recoveries/{got.execution_id}")[1]
+            return found if isinstance(found, dict) and found.get("execution") else None
+
+        x = self.wait(pending, "the proposal in the gateway")["execution"]
+        self.assertEqual(x["requester"], {"type": "AGENT", "id": "/jarvis/agent_proposer"})
+        self.assertEqual(
+            (x["rationale"], x["correlation_id"]), ("a test proposal (insight t-1)", "incident-t-1")
+        )
+        self.assertAlmostEqual(x["confidence"], 0.9)
+        self.assertTrue(x["needs_approval"])
+        status, _ = call("POST", f"/recoveries/{got.execution_id}:reject", {"note": "not now"}, "op-secret")
+        self.assertEqual(status, 200)
+
+        def rejected():
+            found = call("GET", f"/recoveries/{got.execution_id}")[1]
+            live = (found or {}).get("execution") or {}
+            past = (found or {}).get("history") or {}
+            return "REJECTED" in (live.get("state"), past.get("outcome"))
+
+        self.wait(rejected, "the rejection")
+
     def test_metrics(self):
         with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/metrics", timeout=10) as r:
             text = r.read().decode()

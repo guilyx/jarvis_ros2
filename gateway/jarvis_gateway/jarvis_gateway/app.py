@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import datetime
 import fnmatch
+import json
 import pathlib
 import subprocess
 import tempfile
@@ -18,7 +19,7 @@ import time
 
 import yaml
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, WebSocket
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from jarvis_lake import model, storage
 
@@ -470,9 +471,42 @@ def create_app(settings, port, notifier=None):
             raise HTTPException(404, f"no insight '{event_id}'")
         return found
 
-    @api.post("/agent/ask", tags=["agent"])
-    def ask(who=Depends(operator)):
-        raise HTTPException(501, "the agent arrives with milestone 4")
+    @api.post(
+        "/agent/ask",
+        tags=["agent"],
+        response_class=StreamingResponse,
+        responses={200: {"content": {"text/event-stream": {}}, "description": "Server-sent events"}},
+    )
+    async def ask(body: models.Ask, who=Depends(operator)):
+        """Asks the agent; the answer streams as server-sent events: `progress` ({stage, detail}) as
+        it works, then `insight` (jarvis.insight/v1, also published as an INSIGHT event) or `error`
+        ({message}). An operator's call: a model costs money."""
+        if not body.incident_id and not body.question.strip():
+            raise HTTPException(422, "ask about an incident, or ask a question")
+        answers = gw.port.ask(body.incident_id, body.question.strip(), who.name)
+        try:  # the first answer, here: a missing agent is a 503, not a stream with an error
+            first = await anext(answers)
+        except ConnectionError as e:
+            gw.metrics.requests.labels("ask", "unavailable").inc()
+            raise HTTPException(503, f"the agent did not answer: {e}") from e
+        except StopAsyncIteration:
+            first = None
+        gw.metrics.requests.labels("ask", "ok").inc()
+
+        async def stream():
+            if first is not None:
+                yield _sse(*first)
+            try:
+                async for kind, data in answers:
+                    yield _sse(kind, data)
+            except ConnectionError as e:
+                yield _sse("error", {"message": str(e)})
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @api.get("/bags", tags=["recordings"])
     def bag_list(who=Depends(viewer)):
@@ -596,3 +630,8 @@ def _lint(settings, text):
 
 
 __all__ = ["create_app", "Gateway"]
+
+
+def _sse(kind, data):
+    """One server-sent event."""
+    return f"event: {kind}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"

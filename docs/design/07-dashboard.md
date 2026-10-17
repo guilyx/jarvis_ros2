@@ -50,7 +50,7 @@ decimal string everywhere: a uint64 does not fit a JavaScript number. Tokens go 
 | `POST /recoveries/{id}:approve` · `:reject` · `:cancel` | operator | Approval flow / cancel |
 | `PUT /recovery/mode` | admin | `ENABLED` / `DRY_RUN` / `DISABLED` (kill switch), `cancel_running` |
 | `GET /insights` · `GET /insights/{id}` | viewer | Agent insights (payload decoded), with the events they cite |
-| `POST /agent/ask` | operator | 501 until M4: question → SSE stream of phases and the final insight |
+| `POST /agent/ask` | operator | `{incident_id?, question?}` → SSE: `progress` ({stage, detail}) as the agent works, then `insight` or `error`; 503 without the agent |
 | `GET /stats?hours=24` | viewer | KPIs (below), open faults by severity, event rate, top codes, plans |
 | `GET /analytics/{name}?hours=24` | viewer | `components`, `top_codes`, `heatmap`, `flapping`, `plans`, `rules`, `event_rate` |
 | `GET /bags` | viewer | Recorded splits and black-box snapshots: time range, size, open, converted, linked incidents |

@@ -16,9 +16,9 @@ manages faults, restarts what hangs on its own, escalates to a human when that d
 replays recordings to check rule changes. **M3 (history, analytics and the dashboard) is in**: a web
 console over the gateway's API and live stream, with Parquet history behind it. **M4 (the agent) has
 started**: it explains incidents and failed recoveries from the event stream, with the evidence
-behind each claim, offline or with any model through LiteLLM, and can propose recoveries that go
-through the same gates as everyone's (an operator approves them by default); asking it questions
-comes next ([roadmap](docs/design/09-roadmap.md)). The design
+behind each claim, offline or with any model through LiteLLM, can propose recoveries that go
+through the same gates as everyone's (an operator approves them by default), and answers questions
+from the dashboard; an evaluation suite comes next ([roadmap](docs/design/09-roadmap.md)). The design
 package starts at
 [`docs/design/README.md`](docs/design/README.md).
 
@@ -203,6 +203,9 @@ was never shown is dropped, budgets cap the spend, and the heuristic analyst ans
 model cannot. At autonomy `supervised` (`agent.yaml`), the model may also propose a recovery: it goes
 to the orchestrator as an AGENT request and waits for an operator's approval on the insight's card.
 In Docker: `JARVIS_AGENT_MODEL=openrouter/<vendor>/<model> OPENROUTER_API_KEY=... ./demo`.
+
+Operators can also ask it, from the dashboard (Agent, or "Ask agent" on an incident) or the API
+(`POST /api/v1/agent/ask`, server-sent events): it streams what it is doing, then the insight.
 
 ```bash
 ros2 run jarvis_agent jarvis-agent analyze <incident-id>        # explain one incident, now

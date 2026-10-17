@@ -50,7 +50,9 @@ def _args_for(plan, episode):
 class HeuristicAnalyst:
     name = "heuristic"
 
-    def analyze(self, window, result):
+    def analyze(self, window, result, progress=None):
+        if progress:
+            progress("analyst", "heuristic (no model)")
         if result.root is None:
             return self._without_faults(window, result)
         root = result.root

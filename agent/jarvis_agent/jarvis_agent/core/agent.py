@@ -6,6 +6,9 @@ A proposal (the model's propose_recovery) goes to the recovery gates when the au
 supervised or autonomous and a recovery client is there (the ROS node); the orchestrator then
 applies its own agent autonomy, the plan's agent_policy and the confidence threshold, and every
 other gate. Otherwise it stays advice: a RECOVER recommendation an operator can run.
+
+`ask` is the on-demand path (the Analyze action, the gateway's /agent/ask): explain an incident,
+or answer a question about the last minutes; `progress(stage, detail)` hears what it is doing.
 """
 
 import time
@@ -46,25 +49,47 @@ class Agent:
             TriggerType.INCIDENT_OPENED,
             TriggerType.RECOVERY_FAILED,
             TriggerType.RULE_REQUEST,
-        ):
-            return self.windows.incident(trigger, trigger.ref)
-        if trigger.type == TriggerType.ON_DEMAND and trigger.ref:
-            return self.windows.incident(trigger, trigger.ref)  # None when there is no such incident
+        ) or (trigger.type == TriggerType.ON_DEMAND and trigger.ref):
+            window = self.windows.incident(trigger, trigger.ref)  # None when there is no such incident
+            if window is not None:
+                window.question = question
+            return window
         return self.windows.sliding(trigger, self.clock(), question)
 
-    def analyze(self, trigger, causation_id="", question=""):
+    def analyze(self, trigger, causation_id="", question="", progress=None):
         """The checked insight for the trigger (published to the sink), or None without a window."""
+        say = progress or _quiet
         window = self.window(trigger, question)
         if window is None:
             return None
+        say(
+            "window",
+            f"{len(window.events)} events"
+            + (f", incident {window.correlation_id}" if window.incident else ""),
+        )
         result = triage(window, self.redact)
-        insight = check(self.analyst.analyze(window, result), window.ids, window.plans)
-        self._route(window, insight, causation_id)
+        say("triage", f"{len(result.facts)} facts" + (f", root {result.root['code']}" if result.root else ""))
+        insight = check(self.analyst.analyze(window, result, progress=say), window.ids, window.plans)
+        say("checks", f"{len(insight.flags)} harness note(s)")
+        self._route(window, insight, causation_id, say)
         if self.sink is not None:
             self.sink.publish(insight, correlation_id=window.correlation_id, causation_id=causation_id)
+        say("done", insight.title)
         return insight
 
-    def _route(self, window, insight, causation_id):
+    def ask(self, incident_id="", question="", progress=None):
+        """Explain an incident, or answer a question about the last minutes. LookupError when
+        there is no such incident."""
+        if not incident_id and not question.strip():
+            raise ValueError("ask about an incident, or ask a question")
+        trigger = Trigger(type=TriggerType.ON_DEMAND, ref=incident_id)
+        insight = self.analyze(trigger, question=question.strip(), progress=progress)
+        if insight is None:
+            raise LookupError(f"no incident '{incident_id}'")
+        return insight
+
+    def _route(self, window, insight, causation_id, say=None):
+        say = say or _quiet
         plans = {p["id"]: p for p in window.plans}
         flags = []
         for p in sorted(window.proposals, key=lambda p: p.confidence, reverse=True)[:MAX_PROPOSALS]:
@@ -89,6 +114,7 @@ class Agent:
                     insight.proposals.append(got.execution_id)
                 reason = f": {got.reason}" if got.reason else ""
                 flags.append(f"proposed {p.plan_id} ({mode}): {got.state}{reason}")
+                say("proposals", f"{p.plan_id}: {got.state}")
                 continue
             if mode == "observe":
                 flags.append(f"dropped the proposal of {p.plan_id}: autonomy observe")
@@ -110,3 +136,7 @@ class Agent:
 
     def explain(self, incident_id):
         return self.analyze(Trigger(type=TriggerType.ON_DEMAND, ref=incident_id))
+
+
+def _quiet(stage, detail=""):
+    pass

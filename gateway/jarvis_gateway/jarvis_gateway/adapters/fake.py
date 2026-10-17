@@ -130,6 +130,7 @@ class FakeJarvis(JarvisPort):
         correlation="",
         causation="",
         payload=None,
+        payload_schema="",
         **attrs,
     ):
         self.seq += 1
@@ -154,6 +155,8 @@ class FakeJarvis(JarvisPort):
             e["causation_id"] = causation
         if payload is not None:
             e["payload"] = payload
+        if payload_schema:
+            e["payload_schema"] = payload_schema
         self.events.append(e)
         del self.events[: max(0, len(self.events) - self.capacity)]
         if self.sink:
@@ -312,6 +315,62 @@ class FakeJarvis(JarvisPort):
         )
         self._incident(incident_id, "CLOSED", f"closed by {operator}")
         return CommandResult(True, "closed")
+
+    # -- the agent ---------------------------------------------------------------------------------
+
+    async def ask(self, incident_id, question, requester):
+        """A stand-in for the agent: what it would say from the fake's own events, no model."""
+        inc = self.incidents.get(incident_id) if incident_id else None
+        if incident_id and inc is None:
+            yield "error", {"message": f"no incident '{incident_id}'"}
+            return
+        events = [e for e in self.events if not incident_id or e.get("correlation_id") == incident_id]
+        for stage, detail in (
+            ("window", f"{len(events)} events" + (f", incident {incident_id}" if inc else "")),
+            ("triage", "the fake agent does not triage"),
+            ("analyst", "heuristic (no model)"),
+        ):
+            yield "progress", {"stage": stage, "detail": detail}
+            await asyncio.sleep(0.05)
+        title = inc["title"] if inc else f"About “{question[:120]}”: {len(events)} event(s) in the fake"
+        insight = {
+            "insight_id": str(uuid.uuid4()),
+            "trigger": {"type": "ON_DEMAND", "ref": incident_id},
+            "window": {
+                "from": events[0]["stamp"] if events else now_iso(self.clock),
+                "to": events[-1]["stamp"] if events else now_iso(self.clock),
+                "event_count": len(events),
+                **({"correlation_id": incident_id} if incident_id else {}),
+            },
+            "title": title,
+            "summary": "The fake gateway's stand-in agent: run the real one for an analysis.",
+            "assessment": "WARN" if inc else "INFO",
+            "hypotheses": [
+                {
+                    "cause": "Whatever the fake scenario injected",
+                    "confidence": 0.3,
+                    "evidence": [e["id"] for e in events[-1:]],
+                }
+            ],
+            "recommendations": [],
+            "proposals": [],
+            "degraded": True,
+            "analyst": "heuristic",
+            "flags": [f"asked by {requester}"] + ([f"question: {question}"] if question else []),
+            "facts": [],
+            "model": None,
+            "created": now_iso(self.clock),
+        }
+        self.emit(
+            "INSIGHT",
+            "jarvis.insight",
+            message=insight["title"],
+            correlation=incident_id,
+            payload=insight,
+            payload_schema="jarvis.insight/v1",
+        )
+        yield "progress", {"stage": "done", "detail": insight["title"]}
+        yield "insight", insight
 
     # -- recovery ----------------------------------------------------------------------------------
 

@@ -10,7 +10,6 @@ import { Empty, ErrorNote, Loading, Mono, PageHeader, SeverityBadge, StateBadge 
 import { EventSheet } from "@/components/EventSheet";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Tip } from "@/components/ui/tooltip";
 import { useCan } from "@/lib/auth";
 import { between, clock, dateTime, duration, severityName, toMs } from "@/lib/format";
 import { SEVERITY_STYLE } from "@/lib/severity";
@@ -271,13 +270,11 @@ export function IncidentTimeline() {
             <ListTree size={13} /> Events
           </Button>
         </Link>
-        <Tip content="The agent arrives with milestone 4">
-          <span>
-            <Button size="sm" disabled>
-              <Sparkles size={13} /> Ask agent
-            </Button>
-          </span>
-        </Tip>
+        <Link to="/agent" search={{ incident: incidentId }}>
+          <Button size="sm">
+            <Sparkles size={13} /> Ask agent
+          </Button>
+        </Link>
         {can("operator") && d.state === "RESOLVED" ? (
           <ConfirmDialog
             trigger={

@@ -1,0 +1,14 @@
+# Ask the agent (docs/design/06-agent.md §11): explain an incident, or answer a question about the
+# last minutes. Served by the agent's node (/jarvis/agent/analyze); the gateway's /agent/ask calls
+# it. Feedback says what the agent is doing; the result is the insight, which the agent also
+# publishes as an INSIGHT event like any other.
+string incident_id       # explain this incident; empty: a question about the recent events
+string question          # what to answer (optional with an incident)
+string requester         # who asked, for the audit trail
+---
+bool success
+string message           # why not, when success is false (no such incident, the agent is busy)
+string insight_json      # jarvis.insight/v1
+---
+string stage             # window · triage · model · tool · checks · proposals · done
+string detail

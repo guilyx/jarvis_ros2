@@ -13,7 +13,12 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Ask */
+    /**
+     * Ask
+     * @description Asks the agent; the answer streams as server-sent events: `progress` ({stage, detail}) as
+     *     it works, then `insight` (jarvis.insight/v1, also published as an INSIGHT event) or `error`
+     *     ({message}). An operator's call: a model costs money.
+     */
     post: operations["ask_api_v1_agent_ask_post"];
     delete?: never;
     options?: never;
@@ -592,6 +597,22 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /**
+     * Ask
+     * @description Explain an incident, or ask about the last minutes (or both: a question about an incident).
+     */
+    Ask: {
+      /**
+       * Incident Id
+       * @default
+       */
+      incident_id: string;
+      /**
+       * Question
+       * @default
+       */
+      question: string;
+    };
     /** Cancel */
     Cancel: {
       /**
@@ -1045,15 +1066,19 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["Ask"];
+      };
+    };
     responses: {
-      /** @description Successful Response */
+      /** @description Server-sent events */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": unknown;
+          "text/event-stream": unknown;
         };
       };
       /** @description Validation Error */

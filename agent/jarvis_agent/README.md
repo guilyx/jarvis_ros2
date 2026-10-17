@@ -30,6 +30,13 @@ adapters/    gateway.py (REST + live stream) · replay.py (recorded events) · r
 - **The model is optional**: without one, offline, over budget, or when its answer stays invalid
   after one repair turn, the heuristic analyst answers and the insight says why.
 
+## Asking it
+
+The service answers the `Analyze` action (`/jarvis/agent/analyze`): explain an incident, or answer
+a question about the last minutes (or a question about an incident). The gateway's
+`POST /api/v1/agent/ask` calls it and streams the progress as server-sent events, then the insight;
+the dashboard's Agent view has the Ask box.
+
 ## A model
 
 Any [LiteLLM](https://docs.litellm.ai/) model string, with its provider's key in the environment:

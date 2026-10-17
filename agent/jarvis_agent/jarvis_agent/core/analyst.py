@@ -245,13 +245,16 @@ class LLMAnalyst:
         self.traces_dir = traces_dir
         self.skip_when_conclusive = skip_when_conclusive
 
-    def analyze(self, window, result):
+    def analyze(self, window, result, progress=None):
+        say = progress or (lambda stage, detail="": None)
         client = self.clients.get(window.trigger.type, self.client)
         if self.skip_when_conclusive and not window.question and (why := conclusive(window, result)):
+            say("analyst", f"triage was conclusive ({why}): no model call")
             insight = self.fallback.analyze(window, result)
             insight.flags.append(f"triage was conclusive ({why}): no model call")
             return insight
         if why := self.budget.exhausted():
+            say("analyst", f"over the model budget ({why}): the heuristic analyst answers")
             return self._fallback(window, result, client, f"over the model budget: {why}", None)
 
         insight_id = str(uuid.uuid4())
@@ -294,6 +297,7 @@ class LLMAnalyst:
                 f" ({reason})" if reason else "",
             )
             if insight is None:
+                say("analyst", f"{reason}: the heuristic analyst answers")
                 insight = self._fallback(window, result, client, reason, spend)
             return insight.model_copy(update={"insight_id": insight_id})
 
@@ -307,6 +311,7 @@ class LLMAnalyst:
                 or bool(self.budget.exhausted())  # spent elsewhere meanwhile: wrap up
             )
             t0 = time.monotonic()
+            say("model", f"{client.name}, turn {len(turns) + 1}" + (": wrapping up" if force else ""))
             try:
                 c = client.complete(
                     messages, [SUBMIT] if force else offered, FORCE_SUBMIT if force else "auto"
@@ -359,6 +364,7 @@ class LLMAnalyst:
                 if calls >= self.max_tool_calls or force:
                     content = '{"error": "not run: the tool-call limit is reached; call submit_insight"}'
                 else:
+                    say("tool", f"{t.name} {t.arguments[:160]}".strip())
                     content = tools.run(t.name, t.arguments)
                     calls += 1
                 turn["tool_calls"].append(

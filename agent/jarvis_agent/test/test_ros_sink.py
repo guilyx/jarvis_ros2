@@ -120,3 +120,46 @@ def test_proposals_go_to_the_one_gate_as_the_agent():
         assert (got.execution_id, got.state) == ("", "UNAVAILABLE")
     finally:
         lonely.close()
+
+
+def test_questions_are_answered_over_the_analyze_action(query):
+    rclpy = pytest.importorskip("rclpy")
+    pytest.importorskip("jarvis_interfaces")
+    from jarvis_agent.adapters.ros2 import RosAgent
+    from jarvis_interfaces.action import Analyze
+    from rclpy.action import ActionClient
+
+    agent = RosAgent(node_name="agent_answering", domain_id=DOMAIN + 3)
+    agent.serve(lambda incident_id, question, progress: Agent(query).ask(incident_id, question, progress))
+    context = rclpy.Context()
+    rclpy.init(context=context, domain_id=DOMAIN + 3)
+    node = rclpy.create_node("asker", context=context)
+    client = ActionClient(node, Analyze, "/jarvis/agent/analyze")
+    executor = rclpy.executors.SingleThreadedExecutor(context=context)
+    executor.add_node(node)
+
+    def ask(**goal):
+        stages = []
+        sent = client.send_goal_async(
+            Analyze.Goal(requester="test", **goal),
+            feedback_callback=lambda m: stages.append(m.feedback.stage),
+        )
+        executor.spin_until_future_complete(sent, timeout_sec=20)
+        assert sent.done(), "the goal was not taken"
+        result = sent.result().get_result_async()
+        executor.spin_until_future_complete(result, timeout_sec=30)
+        assert result.done(), "no result"
+        return result.result().result, stages
+
+    try:
+        assert client.wait_for_server(timeout_sec=30)
+        r, stages = ask(incident_id=STALL)
+        assert r.success, r.message
+        assert json.loads(r.insight_json)["window"]["correlation_id"] == STALL
+        assert stages[0] == "window" and stages[-1] == "done"
+        r, _ = ask(incident_id="nope")
+        assert (r.success, r.message) == (False, "no incident 'nope'")
+    finally:
+        node.destroy_node()
+        context.try_shutdown()
+        agent.close()

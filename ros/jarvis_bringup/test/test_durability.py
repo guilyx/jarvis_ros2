@@ -134,12 +134,19 @@ def test_a_crash_keeps_faults_sequence_and_recordings(ros, tmp_path, rate, secon
         restored = {f.code for f in open_faults(ros, faults)}
         assert restored == set(FAULTS), f"faults after the crash: {restored}"
 
-        # The boot counter moved on: seqs of the new run are above every seq of the first.
+        # The boot counter moved on: seqs of the new run are above every seq of the first. Sent until
+        # one comes back: the fault manager being up says nothing of the hub's ingest being matched.
         seqs.clear()
         e = Event(kind=Event.KIND_LOG, code="test.durability.after", severity=Event.SEVERITY_INFO)
         e.source.node = "/durability"
-        ingest.publish(e)
-        wait_for(ros, lambda: seqs, "an event after the crash", 30)
+
+        def after_the_crash():
+            if not seqs:
+                ingest.publish(e)
+                rclpy.spin_once(ros, timeout_sec=0.5)
+            return bool(seqs)
+
+        wait_for(ros, after_the_crash, "an event after the crash", 30)
         assert min(seqs) > last_seq
 
         # The torn split of the first run is recovered into the lake: the stream up to the crash, bar
@@ -167,16 +174,22 @@ def test_a_crash_keeps_faults_sequence_and_recordings(ros, tmp_path, rate, secon
         log.close()
 
 
-def test_a_disk_short_of_space_raises_a_fault(ros, tmp_path):
-    """No disk is ever this big: the lake deletes what it may, then reports the disk low."""
+def test_a_disk_short_of_space_raises_a_fault_until_there_is_room(ros, tmp_path):
+    """No disk is ever this big: the lake deletes what it may, then reports the disk low. Restarted
+    with a floor the disk can hold, it clears the fault the fault manager restored."""
     log = open(tmp_path / "launch.log", "w")  # noqa: SIM115 - closed below
     faults = ros.create_client(GetFaults, "/jarvis/fault_manager/get_faults")
+    storage = ("jarvis.storage.*",)
     jarvis = launch(tmp_path, log, "lake_min_free_gib:=1000000000")
     try:
-        storage = ("jarvis.storage.*",)
         wait_for(ros, lambda: open_faults(ros, faults, storage), "jarvis.storage.low", 90)
         (fault,) = open_faults(ros, faults, storage)
         assert fault.code == "jarvis.storage.low" and "disk low" in fault.message
+    finally:
+        stop(jarvis)
+    jarvis = launch(tmp_path, log, "lake_min_free_gib:=0")
+    try:
+        wait_for(ros, lambda: open_faults(ros, faults, storage) == [], "the fault cleared", 90)
     finally:
         stop(jarvis)
         log.close()

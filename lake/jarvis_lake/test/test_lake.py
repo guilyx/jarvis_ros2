@@ -13,6 +13,7 @@ import pyarrow.parquet as pq
 import pytest
 from conftest import MSG, T0, Events, write_split
 from jarvis_lake import analytics, cli, convert, model, storage
+from jarvis_lake import lake as lake_module
 from jarvis_lake.lake import GIB, Lake, Retention
 from jarvis_lake.service import LakeService
 
@@ -352,16 +353,23 @@ def test_retention_deletes_converted_splits_only_and_never_the_newest_day(data_d
 def test_retention_by_size_and_black_box_budget(data_dir, events):
     e = Events(step=datetime.timedelta(days=1))
     write_split(split(data_dir, "b1", 0), [e("LOG", "x") for _ in range(3)])
-    box = data_dir / "blackbox" / "bb_1"
-    box.mkdir(parents=True)
-    for i in range(3):
-        (box / f"bb_1_{i}.mcap").write_bytes(b"x" * 1000)
-        os.utime(box / f"bb_1_{i}.mcap", (1000 + i, 1000 + i))
+    box = snapshots(data_dir, "bb_1", 3)
     lake = Lake(data_dir, retention=Retention(lake_max_bytes=1, blackbox_max_bytes=1500))
     lake.sync()
     report = lake.enforce_retention()
     assert len(report.deleted_partitions) == 2, "down to the newest day, which always stays"
     assert sorted(p.name for p in box.iterdir()) == ["bb_1_2.mcap"], "oldest snapshots first"
+
+
+def snapshots(data_dir, bag, n, finalized=True, t0=1000):
+    """Black-box files as the black box leaves them: closed (MCAP magic at both ends), or open."""
+    box = data_dir / "blackbox" / bag
+    box.mkdir(parents=True, exist_ok=True)
+    for i in range(n):
+        f = box / f"{bag}_{i}.mcap"
+        f.write_bytes(storage.MCAP_MAGIC + b"x" * 1000 + (storage.MCAP_MAGIC if finalized else b""))
+        os.utime(f, (t0 + i, t0 + i))
+    return box
 
 
 def pressure_fixture(data_dir):
@@ -370,11 +378,7 @@ def pressure_fixture(data_dir):
     write_split(split(data_dir, "b1", 0), [e("LOG", "x")])
     write_split(split(data_dir, "b1", 1), [e("LOG", "x")])
     write_split(split(data_dir, "b1", 2), [e("LOG", "x")])
-    box = data_dir / "blackbox" / "bb_1"
-    box.mkdir(parents=True)
-    for i in range(3):
-        (box / f"bb_1_{i}.mcap").write_bytes(b"x" * 1000)
-        os.utime(box / f"bb_1_{i}.mcap", (1000 + i, 1000 + i))
+    box = snapshots(data_dir, "bb_1", 3)
     Lake(data_dir).sync()
     unconverted = write_split(split(data_dir, "b2", 0), [e("LOG", "x")], finalize=False)
     return box, unconverted
@@ -384,7 +388,7 @@ def test_disk_pressure_deletes_the_cheapest_loss_first(data_dir):
     box, _ = pressure_fixture(data_dir)
     first = split(data_dir, "b1", 0)
     floor = 10 * GIB
-    lake = Lake(data_dir, retention=Retention(min_free_bytes=floor), disk_free=lambda: floor - 1)
+    lake = Lake(data_dir, retention=Retention(min_free_bytes=floor), disk_free=lambda _: floor - 1)
     report = lake.enforce_retention()
     assert report.deleted_splits == [str(first)], "one converted split frees enough"
     assert not report.deleted_blackbox and not report.deleted_partitions
@@ -395,7 +399,7 @@ def test_disk_pressure_deletes_the_cheapest_loss_first(data_dir):
 
 def test_disk_pressure_stops_at_what_may_not_go(data_dir):
     box, unconverted = pressure_fixture(data_dir)
-    lake = Lake(data_dir, retention=Retention(min_free_bytes=10 * GIB), disk_free=lambda: 0)
+    lake = Lake(data_dir, retention=Retention(min_free_bytes=10 * GIB), disk_free=lambda _: 0)
     dry = lake.enforce_retention(dry_run=True)
     assert split(data_dir, "b1", 0).exists(), "a dry run deletes nothing"
     report = lake.enforce_retention()
@@ -411,7 +415,7 @@ def test_disk_pressure_stops_at_what_may_not_go(data_dir):
 def test_the_service_runs_retention_at_every_pass_while_the_disk_is_low(data_dir):
     pressure_fixture(data_dir)
     free = {"bytes": 10 * GIB}
-    lake = Lake(data_dir, retention=Retention(min_free_bytes=GIB), disk_free=lambda: free["bytes"])
+    lake = Lake(data_dir, retention=Retention(min_free_bytes=GIB), disk_free=lambda _: free["bytes"])
     logs = []
     service = LakeService(lake, retention_period=3600.0, log=logs.append)
     assert not service.run_once()["disk_low"], "the first pass runs retention: nothing to delete"
@@ -420,6 +424,84 @@ def test_the_service_runs_retention_at_every_pass_while_the_disk_is_low(data_dir
     assert status["disk_low"] and status["disk_free_bytes"] == 0
     assert not split(data_dir, "b1", 0).exists(), "retention ran although it was not due"
     assert any(line.startswith("disk low:") for line in logs)
+    assert status["disk_short_bytes"] > 0, "nothing else may go: the adapter raises the fault"
+    free["bytes"] = 10 * GIB
+    status = service.run_once()
+    assert not status["disk_low"] and status["disk_short_bytes"] == 0, "room again: it clears"
+
+
+def test_what_failed_to_convert_is_never_deleted(data_dir, events):
+    write_split(split(data_dir, "b1", 0), [events("LOG", "x")])
+    bad = split(data_dir, "b1", 1)
+    bad.write_bytes(storage.MCAP_MAGIC + b"garbage" + storage.MCAP_MAGIC)
+    write_split(split(data_dir, "b1", 2), [events("LOG", "x")])
+    lake = Lake(data_dir, retention=Retention(bags_max_bytes=0, min_free_bytes=GIB), disk_free=lambda _: 0)
+    lake.sync()
+    assert lake.ledger.entries[str(bad)].get("error")
+    report = lake.enforce_retention()
+    assert str(bad) not in report.deleted_splits and bad.exists(), "its events are in no Parquet file"
+    assert len(report.deleted_splits) == 2
+
+
+def test_a_full_disk_is_not_the_splits_fault(data_dir, events, monkeypatch):
+    s = write_split(split(data_dir, "b1", 0), [events("LOG", "x")])
+    lake = Lake(data_dir)
+
+    def full(*_):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(convert, "convert", full)
+    (result,) = lake.sync()
+    assert result.failed and result.transient and "No space left" in result.error
+    assert str(s) not in lake.ledger.entries, "not recorded: it is tried again"
+    assert lake.pending() == [s]
+    monkeypatch.undo()
+    (result,) = lake.sync()
+    assert result.rows == 1 and lake.ledger.in_parquet(s)
+
+
+def test_the_snapshot_being_written_is_never_deleted(data_dir):
+    snapshots(data_dir, "bb_1", 2, finalized=False, t0=1000)  # a crash left these
+    open_box = snapshots(data_dir, "bb_2", 1, finalized=False, t0=2000)  # the black box writes here
+    policy = Retention(blackbox_max_bytes=0, min_free_bytes=GIB)
+    lake = Lake(data_dir, retention=policy, disk_free=lambda _: 0)
+    report = lake.enforce_retention()
+    assert sorted(pathlib.Path(f).name for f in report.deleted_blackbox) == ["bb_1_0.mcap", "bb_1_1.mcap"]
+    assert (open_box / "bb_2_0.mcap").exists()
+
+
+@pytest.mark.parametrize("short", ["lake", "recordings"])
+def test_each_file_system_is_kept_above_the_floor_with_its_own_data(data_dir, monkeypatch, short):
+    pressure_fixture(data_dir)
+
+    def device(path):  # Parquet on its own file system, bags and black box on another
+        return "lake" if str(path).startswith(str(data_dir / "lake")) else "recordings"
+
+    monkeypatch.setattr(lake_module, "_device", device)
+    lake = Lake(
+        data_dir,
+        retention=Retention(min_free_bytes=GIB),
+        disk_free=lambda path: 0 if device(path) == short else 100 * GIB,
+    )
+    report = lake.enforce_retention()
+    assert report.disk_short_bytes > 0
+    if short == "lake":
+        assert len(report.deleted_partitions) == 2
+        assert not report.deleted_splits and not report.deleted_blackbox, "they would free nothing there"
+    else:
+        assert len(report.deleted_splits) == 3 and len(report.deleted_blackbox) == 3
+        assert not report.deleted_partitions, "it would free nothing there"
+
+
+def test_a_bag_left_without_splits_is_swept_but_not_the_newest(data_dir, events):
+    old, new = data_dir / "bags" / "b1", data_dir / "bags" / "b3"
+    for bag in (old, new):
+        bag.mkdir(parents=True)
+        (bag / "metadata.yaml").write_text("rosbag2_bagfile_information: {}\n")
+    write_split(split(data_dir, "b2", 0), [events("LOG", "x")])
+    Lake(data_dir).enforce_retention()
+    assert not old.exists(), "a crash between deleting its splits and the bag"
+    assert new.exists(), "the recorder may have just made it"
 
 
 # -- service and CLI -----------------------------------------------------------------------------

@@ -122,6 +122,10 @@ class Ledger:
             return True  # converted, then deleted by retention
         return entry.get("size") == st.st_size and entry.get("mtime_ns") == st.st_mtime_ns
 
+    def in_parquet(self, split):
+        """Converted without an error: its events are in Parquet, so the split may be deleted."""
+        return self.converted(split) and not self.entries.get(str(split), {}).get("error")
+
     def record(self, split, rows, files, finalized, error=""):
         st = pathlib.Path(split).stat()
         self.entries[str(split)] = {

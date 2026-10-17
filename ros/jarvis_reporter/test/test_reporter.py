@@ -87,6 +87,14 @@ def test_clear_is_sent_only_for_a_raised_fault(h):
     assert msgs[1].message == "scans are back"
 
 
+def test_a_forced_clear_heals_what_a_previous_life_raised(h):
+    # After a restart the reporter has raised nothing, but the fault manager restored the fault.
+    assert h.reporter.clear("sensor.lidar.stale", "scans are back", force=True)
+    assert not h.reporter.is_raised("sensor.lidar.stale")
+    (msg,) = h.receive(1)
+    assert msg.kind == Event.KIND_FAULT_CLEAR and msg.code == "sensor.lidar.stale"
+
+
 def test_state_is_sent_when_the_value_or_its_type_changes(h):
     assert h.reporter.state("robot.mode", "IDLE")
     assert not h.reporter.state("robot.mode", "IDLE")

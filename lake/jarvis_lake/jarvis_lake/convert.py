@@ -29,6 +29,7 @@ class SplitResult:
     skipped: int = 0  # messages that did not decode as an Event
     error: str = ""  # why the read stopped early (torn split) or failed
     failed: bool = False  # nothing could be read: the split is recorded as failed
+    transient: bool = False  # failed for the file system's sake (a full disk): tried again later
 
 
 class _Stream:

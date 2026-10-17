@@ -1,9 +1,10 @@
 # rosbag2's MCAP writer for the Jarvis recorder (launch arg recorder_storage_config). Records go to
 # the file as they come instead of into chunks. A chunk stays in memory until it is full, so a hard
 # crash loses it: on a quiet robot that is the last seconds before the crash, the ones worth keeping
-# (16 KiB chunks lost 7 s at 10 events/s). Unchunked, a SIGKILL loses under a second at any rate
-# (test/test_durability.py). The cost is compression: bags take about 4x the disk, within the bags
-# budget, while the lake keeps the history compressed (Parquet). To compress the bags instead:
+# (16 KiB chunks lost 7 s at 10 events/s). Unchunked, a SIGKILL loses the writer's file buffer,
+# 4 KiB: 0.04 s at 200 events/s, under a second at 10/s (test/test_durability.py). The cost is
+# compression: bags take about 4x the disk, within the bags budget, while the lake keeps the
+# history compressed (Parquet). To compress the bags instead:
 #   compression: Zstd
 #   compressionLevel: Fastest
 #   chunkSize: 16384

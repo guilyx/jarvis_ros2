@@ -461,7 +461,7 @@ flowchart LR
 | **State** | Open fault episodes, incidents, acks, latches; running executions; rule cooldowns/counters; hub `boot_count` | `$JARVIS_DATA/state/*.json` (write tmp → fsync → rename) | Current only |
 | **Black box** | High-rate sensor topics in a rosbag2 **snapshot-mode** ring buffer, dumped on fault | `$JARVIS_DATA/blackbox/` | 2 GiB budget |
 
-All of it keeps 1 GiB of the disk free (`lake_min_free_gib`): below that, the lake deletes converted splits, then black-box snapshots, then old Parquet days, whatever their age, and raises `jarvis.storage.low` if that is not enough.
+All of it keeps 1 GiB free on each file system it is on (`lake_min_free_gib`): below that, the lake deletes there splits already in Parquet, then black-box snapshots (not the one being written), then old Parquet days, whatever their age, and raises `jarvis.storage.low` if that is not enough. A split that failed to convert is never deleted: it waits for a human.
 
 Notes:
 - **Why this split**: bags are the ROS-standard record. They open in Foxglove/PlotJuggler next to sensor data, and replay feeds backtesting directly. Parquet + DuckDB gives fast ad-hoc queries and analytics with no server, and it ships to the cloud as plain files later.

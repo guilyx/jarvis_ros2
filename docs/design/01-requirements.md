@@ -144,25 +144,32 @@ directory:
 
 | Target | Measured | |
 |--------|----------|---|
-| NFR-6 durability | The open faults are back, the stream's `seq` carries on above the last one, and the torn split is recovered into the lake up to the last 0.04–0.05 s before the crash at 200/s, 0.5–0.8 s at 10/s (nothing lost before that) | ✔ |
-| NFR-7 storage | The budgets, plus a free-disk floor (1 GiB): below it the lake deletes more, cheapest loss first, and raises `jarvis.storage.low` when nothing else may go (unit tests, and the same test file on the stack) | ✔ |
+| NFR-6 durability | The open faults are back, the stream's `seq` carries on above the last one, and the torn split is recovered into the lake up to the last 0.04–0.05 s before the crash at 200/s, 0.5–0.9 s at 10/s, nothing lost at 1/s (nothing lost before that) | ✔ |
+| NFR-7 storage | The budgets, plus a free-disk floor (1 GiB) on each file system the lake writes to: below it the lake deletes more, cheapest loss first, and raises `jarvis.storage.low` when nothing else may go; restarted with room, it clears it (unit tests, and the same test file on the stack) | ✔ |
 
 What it took:
 - **No MCAP chunks.** rosbag2's MCAP writer keeps a chunk in memory until it is full, 768 KiB of
   records by default: a crash lost everything since the start of a split. Smaller chunks bound
   the bytes, not the time: 16 KiB lost 0.2–0.5 s at 200 events/s but 7 s at 10/s, and on a quiet
   robot those are the seconds before the crash. rosbag2 has no time-based flush, so the recorder
-  writes records as they come (`noChunking`, `config/mcap_writer.yaml`): what is lost is the file
-  buffer, a few KiB. Bags then take about 4× the disk; the lake's Parquet stays compressed.
-  `recorder_storage_config` brings compression back, chunked, for robots short of disk.
+  writes records as they come (`noChunking`, `config/mcap_writer.yaml`): what is lost is its file
+  buffer, 4 KiB of records. On an idle robot Jarvis's own 1 Hz diagnostics keep it moving. Bags
+  then take about 4× the disk; the lake's Parquet stays compressed. `recorder_storage_config`
+  brings compression back, chunked, for robots short of disk.
 - **A free-space floor.** The age and size budgets don't know how big the disk is, nor what else
-  uses it. The lake checks the free space at every pass. Below the floor it deletes converted
-  splits (their events are in Parquet), then black-box snapshots, then old days of Parquet. A
-  split that is not converted yet and the newest day never go.
+  uses it. The lake checks the free space of each file system it writes to at every pass, and
+  makes room before it converts (that needs room too). Below the floor it deletes, on that file
+  system, converted splits (their events are in Parquet), then black-box snapshots, then old days
+  of Parquet. Never deleted: a split that is pending or failed to convert, the black-box file
+  being written, the newest day. A full disk doesn't mark a split failed: it is tried again.
+- **A fault that doesn't flap.** `jarvis.storage.low` is raised when retention found nothing more
+  to delete, and cleared when a fresh look at the disk finds room. File systems that free space
+  lazily land in between, where nothing changes. The fault manager restores open faults after a
+  restart: a lake that starts with room clears the fault it finds there.
 
-A kill keeps what the OS had not written back yet; a power cut also loses that (up to the file
-system's commit interval, 5 s on ext4 by default). The state snapshots are fsynced for this; the
-recorder is not.
+A kill keeps what the OS had not written back yet; a power cut also loses that: file data waits
+up to `vm.dirty_expire_centisecs` (30 s by default) before it is written back. The state snapshots
+are fsynced for this; the recorder is not.
 
 ## 6. Glossary
 

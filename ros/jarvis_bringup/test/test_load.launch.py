@@ -46,7 +46,7 @@ class TestLoad(unittest.TestCase):
         out = pathlib.Path(DATA_DIR) / "load.json"
         args = ["--rate", "500", "--seconds", "10", "--burst", "5000", "--sources", "200"]
         run = subprocess.run(
-            [str(LOAD), *args, "--check", "--max-p99-ms", "250", "--json", str(out)],
+            [str(LOAD), *args, "--json", str(out)],
             capture_output=True,
             text=True,
             timeout=150,
@@ -55,7 +55,11 @@ class TestLoad(unittest.TestCase):
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         r = json.loads(out.read_text())
         self.assertEqual(r["sent"], 10000)
-        self.assertEqual(r["lost"], 0, r)
+        # Every event is delivered or accounted for: the burst's tail may be shed (routine logs,
+        # once the hub is 1 s behind), never lost.
+        self.assertEqual(r["lost"], 0, run.stdout)
+        self.assertEqual(r["delivered"] + r["suppressed"] + r["shed"], r["sent"], run.stdout)
+        self.assertLessEqual(r["latency_ms"]["p99"], 250, run.stdout)
         self.assertTrue(r["process"]["pids"], "the container's RSS and CPU were measured")
 
 

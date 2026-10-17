@@ -542,3 +542,29 @@ TEST_F(FaultManagerTest, SameInputsGiveTheSameDecisions)
   };
   EXPECT_EQ(run(), run());
 }
+
+TEST_F(FaultManagerTest, AFlappingFaultKeepsMemoryBounded)
+{
+  // Every raise after a clear opens a new incident; the resolved ones would wait 24 h to close.
+  FaultManagerConfig c = config();
+  c.max_resolved_incidents = 5;
+  FaultManager fm(FaultCatalog::from_yaml(kCatalog), c, 7);
+  std::vector<std::string> closed;
+  for (int i = 0; i < 20; ++i) {
+    fm.on_event(report(Kind::FaultRaise, "drive.motor.fault"), kT0 + i * kSecond);
+    for (const auto & e : emitted(fm.on_event(
+           report(Kind::FaultClear, "drive.motor.fault"),
+           kT0 + i * kSecond + 500 * kMillisecond))) {
+      if (e.code == "jarvis.incident.closed") {
+        closed.push_back(*attr_string(e.attrs, "reason"));
+      }
+    }
+  }
+  EXPECT_EQ(fm.incidents(true).size(), 5u);
+  ASSERT_EQ(closed.size(), 15u);
+  EXPECT_EQ(closed.front(), "auto-closed: more than 5 resolved incidents");
+  for (const auto & inc : fm.incidents(true)) {
+    EXPECT_EQ(inc.state, IncidentState::Resolved);
+    EXPECT_GE(inc.resolved_at, kT0 + 15 * kSecond) << "the newest are kept";
+  }
+}

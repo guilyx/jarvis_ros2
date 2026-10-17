@@ -88,6 +88,11 @@ rclcpp_components_register_node(jarvis_components
   EXECUTABLE recovery
 )
 
+# `jarvis_load`: Jarvis under load, end to end (tools/load.cpp).
+add_executable(jarvis_load tools/load.cpp)
+target_link_libraries(jarvis_load rclcpp::rclcpp nlohmann_json::nlohmann_json ${jarvis_interfaces_TARGETS})
+install(TARGETS jarvis_load RUNTIME DESTINATION lib/${PROJECT_NAME})
+
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 install(TARGETS jarvis_ros jarvis_actuators jarvis_components
   EXPORT export_${PROJECT_NAME}

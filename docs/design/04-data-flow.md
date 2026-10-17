@@ -68,7 +68,7 @@ sequenceDiagram
 
 - **Rejections** (bad schema, oversize, causal depth > 16) produce a rate-limited `jarvis.ingest.rejected` event with the reason.
 - **Suppression**: once the token bucket is empty, the hub counts instead of forwarding, then emits one `jarvis.ingest.suppressed` event (`attrs.code`, `attrs.count`, `attrs.window_s`).
-- **Load shedding**: above the high-water mark, DEBUG and then INFO are dropped and counted. ≥ ERROR is always forwarded.
+- **Load shedding**: when the hub is behind (an event waited more than `shed_after_s`, 1 s, in the ingest queue, by the middleware's receive time), LOG events below `shed_below` (WARN) are dropped and counted, then summarized as one `jarvis.ingest.shed` event (`attrs.count`, `attrs.window_s`) every 10 s. Faults, states, warnings and Jarvis's own events are never shed. The ingest queue holds a burst of 20 000 events (NFR-1).
 
 ## 2. Fault confirmation, incident & black box
 

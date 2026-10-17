@@ -3,6 +3,7 @@
 //
 // /jarvis/event_hub: the single publisher of /jarvis/events (docs/design/04-data-flow.md §1).
 
+#include <chrono>
 #include <diagnostic_updater/diagnostic_updater.hpp>
 #include <jarvis_core/event_hub.hpp>
 #include <jarvis_core/util.hpp>
@@ -34,9 +35,17 @@ public:
     declare<double>(*this, "rate_limit_per_sec", 50.0, "Token refill per (node, code)", false);
     declare<double>(*this, "rate_limit_burst", 100.0, "Token bucket size per (node, code)", false);
     declare<double>(*this, "suppression_window_s", 10.0, "Period of suppression summaries", false);
+    declare<double>(
+      *this, "shed_after_s", 1.0, "Behind by more than this, logs below shed_below are dropped",
+      false);
+    declare<std::string>(*this, "shed_below", "WARN", "Logs below this severity can be shed");
     declare<int>(*this, "buffer_capacity_mb", 128, "Memory budget of the recent-events buffer");
     declare<int>(*this, "max_causal_depth", 16, "Longest allowed chain of caused events");
-    declare<int>(*this, "queue_depth", 1000, "History depth of /jarvis/ingest and /jarvis/events");
+    // A burst waits in the ingest queue (NFR-1: 20 000 events) while the hub catches up. The
+    // stream's writer stays shallow: a deep reliable writer slows down for its slowest reader;
+    // readers that may lag (the recorder, the gateway) are deep instead.
+    declare<int>(*this, "queue_depth", 1000, "History depth of /jarvis/events (the writer)");
+    declare<int>(*this, "ingest_queue_depth", 20000, "History depth of /jarvis/ingest");
     if (declare<bool>(*this, "autostart", false, "Configure and activate on startup")) {
       autostart_timer_ = create_wall_timer(std::chrono::milliseconds(1), [this]() {
         autostart_timer_->cancel();
@@ -54,10 +63,19 @@ public:
     config.rate_limit_burst = get_parameter("rate_limit_burst").as_double();
     config.suppression_window =
       static_cast<jarvis_core::Duration>(get_parameter("suppression_window_s").as_double() * 1e9);
+    config.shed_after =
+      static_cast<jarvis_core::Duration>(get_parameter("shed_after_s").as_double() * 1e9);
+    const auto shed_below = jarvis_core::parse_severity(get_parameter("shed_below").as_string());
+    if (!shed_below) {
+      RCLCPP_ERROR(get_logger(), "shed_below: not a severity");
+      return CallbackReturn::FAILURE;
+    }
+    config.shed_below = *shed_below;
     config.buffer_capacity_bytes =
       static_cast<std::size_t>(get_parameter("buffer_capacity_mb").as_int()) << 20;
     config.max_causal_depth = static_cast<int>(get_parameter("max_causal_depth").as_int());
     depth_ = static_cast<std::size_t>(get_parameter("queue_depth").as_int());
+    ingest_depth_ = static_cast<std::size_t>(get_parameter("ingest_queue_depth").as_int());
 
     StateFile state(get_parameter("state_dir").as_string(), "event_hub.json");
     try {
@@ -93,6 +111,7 @@ public:
       s.add("rejected", st.rejected);
       s.add("duplicates", st.duplicates);
       s.add("suppressed", st.suppressed);
+      s.add("shed", st.shed);
       s.add("evicted", st.evicted);
       s.add("buffered_events", st.buffered_events);
       s.add("buffered_bytes", st.buffered_bytes);
@@ -105,7 +124,10 @@ public:
   CallbackReturn on_activate(const rclcpp_lifecycle::State &) override
   {
     ingest_sub_ = create_subscription<AdaptedEvent>(
-      "ingest", stream_qos(depth_), [this](const jarvis_core::Event & event) { on_ingest(event); });
+      "ingest", stream_qos(ingest_depth_),
+      [this](const jarvis_core::Event & event, const rclcpp::MessageInfo & info) {
+        on_ingest(event, info);
+      });
     tick_timer_ = create_wall_timer(
       std::chrono::seconds(1), [this]() { publish_all(hub_->advance_to(now_ns(*this))); });
     is_active_ = true;
@@ -138,12 +160,26 @@ public:
   }
 
 private:
-  void on_ingest(const jarvis_core::Event & event)
+  void on_ingest(const jarvis_core::Event & event, const rclcpp::MessageInfo & info)
   {
-    auto result = hub_->ingest(event, now_ns(*this));
+    // How long it waited in the queue, on this host's clock: the hub sheds routine logs when it is
+    // behind. Unknown (0) for intra-process deliveries, whose message info carries no timestamps
+    // (Jarvis's own components, in this container), and for an implausible one.
+    const auto & rmw = info.get_rmw_message_info();
+    jarvis_core::Duration queued = 0;
+    if (!rmw.from_intra_process && rmw.received_timestamp > 0) {
+      const auto wall = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                          std::chrono::system_clock::now().time_since_epoch())
+                          .count();
+      const auto waited = wall - rmw.received_timestamp;
+      if (waited > 0 && waited < 3600 * jarvis_core::kSecond) {
+        queued = waited;
+      }
+    }
+    auto result = hub_->ingest(event, now_ns(*this), queued);
     if (
       !result.accepted && result.reject_reason != "rate limited" &&
-      result.reject_reason != "duplicate id") {
+      result.reject_reason != "duplicate id" && result.reject_reason != "shed") {
       RCLCPP_WARN_THROTTLE(
         get_logger(), *get_clock(), 5000, "rejected %s from %s: %s", event.code.c_str(),
         event.source.node.c_str(), result.reject_reason.c_str());
@@ -201,6 +237,7 @@ private:
   rclcpp::TimerBase::SharedPtr autostart_timer_;
   std::unique_ptr<diagnostic_updater::Updater> diagnostics_;
   std::size_t depth_{1000};
+  std::size_t ingest_depth_{20000};
   uint16_t boot_count_{0};
   bool is_active_{false};
 };

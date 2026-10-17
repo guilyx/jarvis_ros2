@@ -892,6 +892,30 @@ void FaultManager::check_incident_resolved(
     [this](const std::string & id) { return open_.count(id) != 0; });
   if (!any_open) {
     transition_incident(it->second, IncidentState::Resolved, at, {}, "all faults cleared", fx);
+    close_oldest_resolved(at, fx);
+  }
+}
+
+void FaultManager::close_oldest_resolved(Timestamp at, Effects & fx)
+{
+  auto resolved = static_cast<std::size_t>(std::count_if(
+    incidents_.begin(), incidents_.end(),
+    [](const auto & kv) { return kv.second.state == IncidentState::Resolved; }));
+  for (; resolved > config_.max_resolved_incidents; --resolved) {
+    auto oldest = incidents_.end();
+    for (auto it = incidents_.begin(); it != incidents_.end(); ++it) {
+      if (
+        it->second.state == IncidentState::Resolved &&
+        (oldest == incidents_.end() || it->second.resolved_at < oldest->second.resolved_at)) {
+        oldest = it;
+      }
+    }
+    transition_incident(
+      oldest->second, IncidentState::Closed, at, {},
+      "auto-closed: more than " + std::to_string(config_.max_resolved_incidents) +
+        " resolved incidents",
+      fx);
+    incidents_.erase(oldest);
   }
 }
 

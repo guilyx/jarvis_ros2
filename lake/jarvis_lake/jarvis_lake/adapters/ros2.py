@@ -5,13 +5,14 @@
 This is the only module of jarvis_lake that imports rclpy, and only when the service runs with ROS.
 """
 
-import contextlib
+import signal
 import threading
 
 import rclpy
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from rclpy.executors import ExternalShutdownException, SingleThreadedExecutor
 from rclpy.node import Node
+from rclpy.signals import SignalHandlerOptions
 from rosbag2_interfaces.msg import WriteSplitEvent
 
 SPLIT_TOPIC = "/jarvis/recorder/events/write_split"
@@ -55,12 +56,22 @@ class LakeNode(Node):
 
 
 def run(service, args=None):
-    """Runs the service with ROS: passes on the main thread, the node on a background executor."""
-    rclpy.init(args=args)
+    """Runs the service with ROS: passes on the main thread, the node on a background executor.
+
+    SIGINT and SIGTERM are the lake's own: they stop the loop, then the node shuts down in order.
+    rclpy's handler would shut the context down from C under the executor and the main thread
+    (an RCLError, or a shutdown that hangs until SIGKILL)."""
+    rclpy.init(args=args, signal_handler_options=SignalHandlerOptions.NO)
     node = LakeNode(service)
     executor = SingleThreadedExecutor()
     executor.add_node(node)
     stop = threading.Event()
+
+    def on_signal(signum, frame):
+        stop.set()
+        service.poke()
+
+    previous = {s: signal.signal(s, on_signal) for s in (signal.SIGINT, signal.SIGTERM)}
 
     def spin():
         try:
@@ -84,14 +95,11 @@ def run(service, args=None):
     service.write_status = write_and_publish
     try:
         service.run(stop)
-    except KeyboardInterrupt:
-        pass
     finally:
         stop.set()
         executor.shutdown()
         node.destroy_node()
-        # rclpy's SIGINT handler shuts the context down from C, between try_shutdown's check and
-        # its own shutdown: that RCLError must not abort the process.
-        with contextlib.suppress(Exception):
-            rclpy.try_shutdown()
+        rclpy.try_shutdown()
         thread.join(timeout=5.0)
+        for s, handler in previous.items():
+            signal.signal(s, handler)

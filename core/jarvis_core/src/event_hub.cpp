@@ -212,9 +212,21 @@ void EventHub::sequence_and_store(Event & e, Timestamp now)
   store(e);
 }
 
-IngestResult EventHub::ingest(Event event, Timestamp now)
+IngestResult EventHub::ingest(Event event, Timestamp now, Duration queued)
 {
   IngestResult result;
+
+  // First, and cheap: behind by more than shed_after, the hub drops routine logs to catch up.
+  if (
+    config_.shed_after > 0 && queued > config_.shed_after && event.kind == Kind::Log &&
+    event.severity < config_.shed_below) {
+    ++stats_.shed;
+    if (shed_pending_++ == 0) {
+      shed_since_ = now;
+    }
+    result.reject_reason = "shed";
+    return result;
+  }
 
   if (!event.id.empty() && depth_by_id_.count(event.id) != 0) {
     ++stats_.duplicates;
@@ -276,6 +288,21 @@ IngestResult EventHub::ingest(Event event, Timestamp now)
 std::vector<Event> EventHub::advance_to(Timestamp now)
 {
   std::vector<Event> out;
+  if (shed_pending_ > 0 && now - shed_since_ >= config_.suppression_window) {
+    const double window_s = static_cast<double>(now - shed_since_) / 1e9;
+    const auto below = std::string(to_string(config_.shed_below));
+    Event summary = make_system_event(
+      "jarvis.ingest.shed", Severity::Warn,
+      "Shed " + std::to_string(shed_pending_) + " log(s) below " + below +
+        ": the event hub was behind",
+      {{"count", static_cast<std::int64_t>(shed_pending_)},
+       {"window_s", window_s},
+       {"below", below}},
+      now);
+    sequence_and_store(summary, now);
+    out.push_back(std::move(summary));
+    shed_pending_ = 0;
+  }
   for (auto it = buckets_.begin(); it != buckets_.end();) {
     Bucket & b = it->second;
     if (b.suppressed > 0 && now - b.suppressed_since >= config_.suppression_window) {

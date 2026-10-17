@@ -53,6 +53,8 @@ public:
       *this, "incident_min_severity", "ERROR", "Lowest severity that opens an incident");
     declare<double>(*this, "incident_merge_window_s", 120.0, "Same-component faults join within");
     declare<double>(*this, "incident_auto_close_h", 24.0, "Resolved incidents close after");
+    declare<int>(
+      *this, "max_resolved_incidents", 500, "Resolved incidents kept; the oldest close early");
     declare<bool>(*this, "export_diagnostics", true, "Publish active faults on /diagnostics");
     declare<std::string>(
       *this, "blackbox_service", "/jarvis/blackbox/snapshot",
@@ -102,6 +104,8 @@ public:
       get_parameter("incident_merge_window_s").as_double() * 1e9);
     config.incident_auto_close = static_cast<jarvis_core::Duration>(
       get_parameter("incident_auto_close_h").as_double() * 3600e9);
+    config.max_resolved_incidents = static_cast<std::size_t>(
+      std::max<int64_t>(1, get_parameter("max_resolved_incidents").as_int()));
     manager_ = std::make_unique<jarvis_core::FaultManager>(std::move(catalog), config);
 
     state_ =

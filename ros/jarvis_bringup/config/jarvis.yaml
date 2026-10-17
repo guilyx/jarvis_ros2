@@ -5,6 +5,8 @@
     rate_limit_per_sec: 50.0      # per (node, code, component)
     rate_limit_burst: 100.0
     suppression_window_s: 10.0
+    shed_after_s: 1.0             # behind by more than this, INFO/DEBUG logs are dropped (0: never)
+    shed_below: WARN
     buffer_capacity_mb: 128       # recent-events ring buffer, must cover one recorder split
     max_causal_depth: 16
 
@@ -13,6 +15,7 @@
     incident_min_severity: ERROR
     incident_merge_window_s: 120.0
     incident_auto_close_h: 24.0
+    max_resolved_incidents: 500   # kept until they auto-close; the oldest close early
     export_diagnostics: true
     blackbox_service: /jarvis/blackbox/snapshot
     blackbox_wait_s: 2.0          # a capture waits this long for the recorder (e.g. at startup)

@@ -25,7 +25,7 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, OpaqueFunction, SetEnvironmentVariable
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
@@ -59,6 +59,13 @@ ARGUMENTS = {
     "agent": ("true", "Analyze incidents and failed recoveries (jarvis_agent, through the gateway)"),
     "agent_config": ("", "Agent settings (jarvis.agent/v1): autonomy, triggers, redaction"),
     "log_level": ("info", "Log level of the container"),
+    # One thread per component: an event costs half the CPU of the multi-threaded container's
+    # shared executor (docs/design/01-requirements.md §5, measured), and a slow one can't stall
+    # the others.
+    "container": ("component_container_isolated", "rclcpp_components container executable"),
+    # Fast DDS caps histories at 5 000 samples whatever their depth: the profile lifts it for the
+    # event stream's 20 000-deep queues. Not applied when a profile file is already set.
+    "fastdds_profile": (str(SHARE / "config" / "fastdds.xml"), "Fast DDS profile of the Jarvis processes"),
 }
 
 
@@ -238,13 +245,19 @@ def _setup(context):
             )
         )
 
+    env = []
+    if arg["fastdds_profile"] and not (
+        os.environ.get("FASTRTPS_DEFAULT_PROFILES_FILE") or os.environ.get("FASTDDS_DEFAULT_PROFILES_FILE")
+    ):
+        env.append(SetEnvironmentVariable("FASTRTPS_DEFAULT_PROFILES_FILE", arg["fastdds_profile"]))
     return [
+        *env,
         *processes,
         ComposableNodeContainer(
             name="container",
             namespace="jarvis",
             package="rclcpp_components",
-            executable="component_container_mt",
+            executable=arg["container"],
             composable_node_descriptions=nodes,
             arguments=["--ros-args", "--log-level", arg["log_level"]],
             output="screen",

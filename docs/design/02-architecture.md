@@ -194,7 +194,7 @@ flowchart BT
 - Each core-backed component owns **one MutuallyExclusive callback group** that feeds its core. The core is single-threaded, so it needs no locks.
 - Actuator service/action clients run in a **Reentrant** group with `async_send_request` and timeouts. Results come back to the core as inputs.
 - State snapshots are written by a small background writer (debounced ≤ 100 ms, write-tmp + fsync + rename). Callbacks never block on disk.
-- Container: `component_container_mt`, intra-process communication on between Jarvis components.
+- Container: `component_container_isolated` (one executor thread per component), intra-process communication on between Jarvis components.
 
 ## 6. Deployment topologies
 

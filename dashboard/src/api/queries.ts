@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { client, unwrap } from "./client";
+import { ApiError, client, unwrap } from "./client";
 import type {
   Bag,
   ComponentHealth,
@@ -134,6 +134,25 @@ export const useFault = (id: string) =>
     queryKey: ["fault", id],
     queryFn: () =>
       unwrap<FaultDetail>(client.GET("/api/v1/faults/{fault_id}", { params: { path: { fault_id: id } } })),
+  });
+
+/** The runbook of a fault code: Markdown, or null when its catalog entry has none. */
+export const useRunbook = (code: string) =>
+  useQuery({
+    queryKey: ["runbook", code],
+    enabled: !!code,
+    staleTime: 60_000,
+    queryFn: async () => {
+      try {
+        const book = await unwrap<{ code: string; markdown: string }>(
+          client.GET("/api/v1/runbooks/{code}", { params: { path: { code } } }),
+        );
+        return book.markdown;
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) return null;
+        throw e;
+      }
+    },
   });
 
 export const useIncidents = (state = "") =>

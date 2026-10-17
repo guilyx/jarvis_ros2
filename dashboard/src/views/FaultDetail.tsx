@@ -1,5 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router";
-import { useFault } from "@/api/queries";
+import { useFault, useRunbook } from "@/api/queries";
 import {
   Empty,
   ErrorNote,
@@ -15,6 +15,7 @@ import {
   Th,
 } from "@/components/domain";
 import { FaultActions } from "@/components/FaultActions";
+import { Markdown } from "@/components/Markdown";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { useLive } from "@/live/context";
 import { between, clock, dateTime, duration, severityName } from "@/lib/format";
@@ -116,6 +117,7 @@ export function FaultDetail() {
           </CardBody>
         </Card>
       </div>
+      <RunbookCard code={code} />
       <Card>
         <CardHeader title="State transitions" />
         {d.transitions.length ? (
@@ -189,5 +191,19 @@ export function FaultDetail() {
         )}
       </Card>
     </div>
+  );
+}
+
+/** What to check and do, from the fault catalog. Nothing when the code has no runbook. */
+function RunbookCard({ code }: { code: string }) {
+  const book = useRunbook(code);
+  if (!code || book.isLoading || book.data === null) return null;
+  return (
+    <Card data-testid="runbook">
+      <CardHeader title="Runbook" />
+      <CardBody>
+        {book.error ? <ErrorNote error={book.error} /> : <Markdown text={book.data ?? ""} />}
+      </CardBody>
+    </Card>
   );
 }

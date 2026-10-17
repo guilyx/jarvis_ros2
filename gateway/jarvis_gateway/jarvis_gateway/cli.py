@@ -43,6 +43,10 @@ def parser():
     p.add_argument(
         "--dashboard", dest="dashboard_dir", help="the dashboard's built files (default: the installed ones)"
     )
+    p.add_argument("--catalog", help="the fault catalog (jarvis.faults/v1): descriptions and runbooks")
+    p.add_argument(
+        "--runbooks", action="append", metavar="DIR", help="a directory of <code>.md runbooks (repeatable)"
+    )
     p.add_argument("--namespace", default="/jarvis", help="Jarvis' ROS namespace")
     p.add_argument("--fake", action="store_true", help="an in-memory Jarvis instead of ROS")
     p.add_argument("--scenario", action="store_true", help="with --fake: make things happen")
@@ -82,6 +86,8 @@ def settings_from(args):
         dashboard_dir=args.dashboard_dir,
         tls_cert=args.tls_cert,
         tls_key=args.tls_key,
+        catalog=args.catalog,
+        runbooks=args.runbooks,
     )
     if bool(s.tls_cert) != bool(s.tls_key):
         raise SystemExit("jarvis-gateway: TLS needs both a certificate and its key")

@@ -17,6 +17,8 @@
       groups_header: X-Forwarded-Groups
       roles: { jarvis-admins: admin, jarvis-operators: operator }   # group -> role, highest wins
       default_role: viewer          # signed in, in no listed group (null: refused)
+    catalog: /path/to/faults.yaml   # the fault manager's catalog: descriptions and runbooks
+    runbooks: [/path/to/runbooks]   # more <code>.md runbooks (besides runbooks/ next to the catalog)
     lint: { plans_dir: ..., catalog: ... }        # what POST /rules:validate checks rules against
 
 Tokens can also come from $JARVIS_GATEWAY_TOKENS ("token:name:role,..."), to keep them out of files.
@@ -62,8 +64,10 @@ class Settings:
     dashboard_dir: str = ""
     recent_capacity: int = 20000  # live events kept in memory until the lake has them
     jarvis_bin: str = os.environ.get("JARVIS_BIN", "jarvis")
+    catalog: str = ""  # the fault catalog (jarvis.faults/v1): what codes mean, their runbooks
+    runbooks: list = dataclasses.field(default_factory=list)  # directories of <code>.md runbooks
     lint_plans_dir: str = ""
-    lint_catalog: str = ""
+    lint_catalog: str = ""  # default: catalog
     tls_cert: str = ""
     tls_key: str = ""
     proxy_auth: object = None  # jarvis_gateway.auth.ProxyAuth
@@ -76,7 +80,16 @@ class Settings:
             raw = yaml.safe_load(pathlib.Path(path).read_text()) or {}
             if raw.get("schema", "jarvis.gateway/v1") != "jarvis.gateway/v1":
                 raise ValueError(f"{path}: expected schema jarvis.gateway/v1")
-            for key in ("host", "port", "data_dir", "dashboard_dir", "recent_capacity", "jarvis_bin"):
+            for key in (
+                "host",
+                "port",
+                "data_dir",
+                "dashboard_dir",
+                "recent_capacity",
+                "jarvis_bin",
+                "catalog",
+                "runbooks",
+            ):
                 if key in raw:
                     setattr(s, key, raw[key])
             if "anonymous" in raw:

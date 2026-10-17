@@ -89,9 +89,10 @@ def executions(events):
 
 
 class ReplayQuery:
-    def __init__(self, events, plans=()):
+    def __init__(self, events, plans=(), runbooks=None):
         self.all = sorted(events, key=lambda e: int(e.get("seq") or 0))
         self._plans = list(plans)
+        self.runbooks = dict(runbooks or {})  # code -> Markdown
 
     def incident(self, incident_id):
         timeline = [e for e in self.all if incident_of(e) == incident_id]
@@ -170,6 +171,9 @@ class ReplayQuery:
 
     def rule(self, rule_id):
         return None  # a recording has the rules' matches, not their definitions
+
+    def runbook(self, code):
+        return self.runbooks.get(code)
 
     def now_ns(self):
         """The time of the last event: replays run in their own time."""

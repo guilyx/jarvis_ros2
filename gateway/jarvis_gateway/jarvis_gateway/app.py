@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from jarvis_lake import model, storage
 
 from jarvis_gateway import __version__, auth, bags, models, stream
+from jarvis_gateway.catalog import Catalog
 from jarvis_gateway.history import History
 from jarvis_gateway.metrics import Metrics
 from jarvis_gateway.notifier import Notifier
@@ -41,6 +42,7 @@ class Gateway:
         self.port = port
         self.state = LiveState(settings.recent_capacity)
         self.history = History(settings.data_dir, self.state)
+        self.catalog = Catalog(settings.catalog, settings.runbooks)
         self.metrics = Metrics()
         self.notifier = notifier or Notifier(settings.webhooks, on_delivery=self.metrics.on_delivery)
         self.clients = set()
@@ -278,6 +280,22 @@ def create_app(settings, port, notifier=None):
                 x for x in gw.history.executions(limit=500) if incident and x["incident_id"] == incident
             ],
         }
+
+    @api.get("/catalog", response_model=models.Catalog, tags=["faults"])
+    def catalog(who=Depends(viewer)):
+        """The fault catalog: what each code means, and which have a runbook."""
+        return {"faults": gw.catalog.faults()}
+
+    @api.get("/runbooks/{code}", response_model=models.Runbook, tags=["faults"])
+    def runbook(code: str, who=Depends(viewer)):
+        """What to check and do about a fault code (Markdown), from its catalog entry."""
+        try:
+            text = gw.catalog.runbook(code)
+        except LookupError as e:
+            raise HTTPException(500, str(e)) from None
+        if text is None:
+            raise HTTPException(404, f"no runbook for '{code}'")
+        return {"code": code, "markdown": text}
 
     @api.post("/faults/{fault_id}:ack", response_model=models.Outcome, tags=["faults"])
     async def ack(fault_id: str, body: models.Note, who=Depends(operator)):
@@ -607,8 +625,8 @@ def _lint(settings, text):
         cmd = [settings.jarvis_bin, "lint", "--rules", str(rules)]
         if settings.lint_plans_dir:
             cmd += ["--plans", settings.lint_plans_dir]
-        if settings.lint_catalog:
-            cmd += ["--catalog", settings.lint_catalog]
+        if settings.lint_catalog or settings.catalog:
+            cmd += ["--catalog", settings.lint_catalog or settings.catalog]
         try:
             out = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         except FileNotFoundError as e:

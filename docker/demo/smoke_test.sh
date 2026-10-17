@@ -78,6 +78,12 @@ out=$(docker compose exec -T -e OPENAI_API_KEY=smoke demo bash -c "source /opt/j
 echo "$out"
 expect "The stub model read [1-9][0-9]* event" "$out" "the model's insight was not used"
 expect "llm analyst · openai/jarvis-smoke" "$out" "the agent did not go through the model"
+# Asking the agent through the gateway (its Analyze action): progress as it works, then the insight.
+answer=$(curl -fsS -N -X POST -H "Content-Type: application/json" \
+  -d "{\"incident_id\": \"$stall\", \"question\": \"What broke?\"}" \
+  http://localhost:8080/api/v1/agent/ask) || fail "asking the agent failed"
+expect "event: progress" "$answer" "no progress from the agent"
+expect "event: insight" "$answer" "the agent did not answer: $answer"
 
 expect "cleared safety\.estop\.engaged" "$(./demo clear)" "operator clear failed"
 if grep -q "safety.estop.engaged" <<<"$(open_faults)"; then fail "e-stop still open after the clear"; fi

@@ -6,6 +6,7 @@ test_ros_sink.py and the launch test), or kept as advice."""
 
 import json
 
+import pytest
 from conftest import STALL
 from jarvis_agent.adapters.replay import ReplayQuery
 from jarvis_agent.core.agent import Agent
@@ -169,3 +170,38 @@ def test_the_cli_offers_proposals_only_to_the_service(monkeypatch):
     assert cli.make_agent(config, query=None).analyst == ("offered", False)  # analyze: no client
     config.level = "advise"
     assert cli.make_agent(config, query=None, recovery=Gate()).analyst == ("offered", False)
+
+
+# -- asking (milestone 4.4) ------------------------------------------------------------------------
+
+
+def test_asking_about_an_incident_or_the_last_minutes(query):
+    heard = []
+    insight = Agent(query).ask(STALL, progress=lambda stage, detail="": heard.append(stage))
+    assert insight.trigger.type == TriggerType.ON_DEMAND and insight.window.correlation_id == STALL
+    assert heard == ["window", "triage", "analyst", "checks", "done"]
+
+    llm = FakeLLM(
+        [turn(call("query_events", component="lidar")), turn(call("submit_insight", **body(query)))]
+    )
+    heard = []
+    agent = Agent(query, analyst=LLMAnalyst(llm, query), clock=lambda: query.now_ns())
+    insight = agent.ask(question="Why did the lidar stop?", progress=lambda s, d="": heard.append((s, d)))
+    assert insight.analyst == "llm" and insight.trigger.ref == ""
+    assert "## Question\nWhy did the lidar stop?" in llm.calls[0]["messages"][1]["content"]
+    stages = [s for s, _ in heard]
+    assert stages == ["window", "triage", "model", "tool", "model", "checks", "done"]
+    assert heard[3][1].startswith("query_events {")
+
+    # A question about an incident: the incident's window, and the model hears the question.
+    llm = FakeLLM([turn(call("submit_insight", **body(query)))])
+    Agent(query, analyst=LLMAnalyst(llm, query)).ask(STALL, "Was it the cable?")
+    assert "## Question\nWas it the cable?" in llm.calls[0]["messages"][1]["content"]
+
+
+def test_asking_about_nothing_is_refused(query):
+    agent = Agent(query)
+    with pytest.raises(LookupError, match="no incident 'nope'"):
+        agent.ask("nope")
+    with pytest.raises(ValueError):
+        agent.ask("", "  ")

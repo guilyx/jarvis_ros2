@@ -7,25 +7,31 @@
 - proposals in: ExecuteRecovery goals as requester AGENT, the one gate rules and operators use too.
   The orchestrator applies the deployment's agent autonomy, the plan's agent_policy and the
   confidence threshold; `submit` returns as soon as it took the goal (a supervised proposal waits
-  for an operator long after).
+  for an operator long after);
+- questions: the Analyze action (/jarvis/agent/analyze), which the gateway's /agent/ask calls;
+  `serve` answers it with the agent, a few at a time, feedback as it goes.
 
 rclpy is imported only here; the node has its own context and spins in its own thread.
 """
 
 import contextlib
 import json
+import logging
 import math
 import threading
 
 import rclpy
-from jarvis_interfaces.action import ExecuteRecovery
+from jarvis_interfaces.action import Analyze, ExecuteRecovery
 from jarvis_interfaces.msg import Attribute, Event
-from rclpy.action import ActionClient
-from rclpy.executors import SingleThreadedExecutor
+from rclpy.action import ActionClient, ActionServer
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.signals import SignalHandlerOptions
 
 from jarvis_agent.core.ports import Submitted
+
+log = logging.getLogger("jarvis_agent.ros")
 
 FEEDBACK_STATES = {
     ExecuteRecovery.Feedback.STATE_PENDING_APPROVAL: "PENDING_APPROVAL",
@@ -43,7 +49,7 @@ OUTCOMES = {
 
 class RosAgent:
     def __init__(self, namespace="/jarvis", node_name="agent", domain_id=None):
-        ns = namespace.rstrip("/")
+        self.ns = ns = namespace.rstrip("/")
         self.context = rclpy.Context()
         rclpy.init(context=self.context, domain_id=domain_id, signal_handler_options=SignalHandlerOptions.NO)
         self.node = rclpy.create_node(node_name, namespace=namespace, context=self.context)
@@ -51,10 +57,16 @@ class RosAgent:
             depth=100, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.VOLATILE
         )
         self.publisher = self.node.create_publisher(Event, f"{ns}/ingest", qos)
-        self.action = ActionClient(self.node, ExecuteRecovery, f"{ns}/recovery/execute")
+        # Reentrant, on several threads: an analysis (Analyze) runs while feedback and the answers
+        # to its proposals (ExecuteRecovery) come in.
+        self._group = ReentrantCallbackGroup()
+        self.action = ActionClient(
+            self.node, ExecuteRecovery, f"{ns}/recovery/execute", callback_group=self._group
+        )
+        self._server = None
         self._goals = {}  # goal id -> handle, until its result (kept alive)
         self._lock = threading.Lock()
-        self.executor = SingleThreadedExecutor(context=self.context)
+        self.executor = MultiThreadedExecutor(num_threads=4, context=self.context)
         self.executor.add_node(self.node)
         self._thread = threading.Thread(target=self._spin, name="jarvis-agent-ros", daemon=True)
         self._thread.start()
@@ -130,7 +142,45 @@ class RosAgent:
             return Submitted("", "UNKNOWN", f"no answer from the orchestrator within {timeout_s:g} s")
         return Submitted(**out)
 
+    def serve(self, ask, concurrency=2):
+        """Answers /jarvis/agent/analyze with ask(incident_id, question, progress) -> Insight
+        (LookupError or ValueError: a refusal), `concurrency` questions at a time."""
+        slots = threading.BoundedSemaphore(concurrency)
+
+        def execute(handle):
+            g = handle.request
+            if not slots.acquire(blocking=False):
+                handle.abort()
+                return Analyze.Result(success=False, message="the agent is busy: ask again in a moment")
+            try:
+                log.info("asked by %s: %s", g.requester or "?", g.incident_id or g.question[:80])
+
+                def progress(stage, detail=""):
+                    handle.publish_feedback(Analyze.Feedback(stage=stage, detail=str(detail)[:500]))
+
+                try:
+                    insight = ask(g.incident_id, g.question, progress)
+                except (LookupError, ValueError) as e:
+                    handle.abort()
+                    return Analyze.Result(success=False, message=str(e.args[0] if e.args else e))
+                except Exception as e:  # noqa: BLE001 - the asker hears it, the agent goes on
+                    log.exception("the analysis for %s failed", g.requester)
+                    handle.abort()
+                    return Analyze.Result(success=False, message=f"the analysis failed: {type(e).__name__}")
+                handle.succeed()
+                return Analyze.Result(
+                    success=True, insight_json=json.dumps(insight.to_json(), separators=(",", ":"))
+                )
+            finally:
+                slots.release()
+
+        self._server = ActionServer(
+            self.node, Analyze, f"{self.ns}/agent/analyze", execute, callback_group=self._group
+        )
+
     def close(self):
+        if self._server is not None:
+            self._server.destroy()
         self.executor.shutdown(timeout_sec=1.0)
         self.node.destroy_node()
         self.context.try_shutdown()

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The REST API over a FakeJarvis: auth, reads, commands and their audit trail."""
 
+import json
 import stat
 
 from conftest import ADMIN, OPERATOR, VIEWER
@@ -406,8 +407,48 @@ def test_insights_decode_their_payload(gw):
     assert gw.client.get(f"/api/v1/insights/{other['id']}").status_code == 404
 
 
-def test_agent_is_not_there_yet(gw):
-    assert gw.client.post("/api/v1/agent/ask", headers=OPERATOR).status_code == 501
+def sse(text):
+    """[(event, data)] of a server-sent event stream."""
+    out = []
+    for block in text.strip().split("\n\n"):
+        lines = dict(line.split(": ", 1) for line in block.splitlines())
+        out.append((lines["event"], json.loads(lines["data"])))
+    return out
+
+
+def test_asking_the_agent_streams_progress_then_the_insight(gw):
+    incident = gw.do(gw.fake.raise_fault, "sensor.scan.stale", "lidar")["incident_id"]
+    r = gw.client.post("/api/v1/agent/ask", json={"incident_id": incident}, headers=OPERATOR)
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+    events = sse(r.text)
+    assert [k for k, _ in events[:-1]] == ["progress"] * (len(events) - 1)
+    assert [d["stage"] for _, d in events[:-1]] == ["window", "triage", "analyst", "done"]
+    kind, insight = events[-1]
+    assert kind == "insight" and insight["trigger"] == {"type": "ON_DEMAND", "ref": incident}
+    assert insight["window"]["correlation_id"] == incident and "asked by olga" in insight["flags"]
+    published = gw.get("/api/v1/insights")["insights"]  # it is an INSIGHT event too
+    assert published[0]["payload"]["insight_id"] == insight["insight_id"]
+    assert published[0]["payload_schema"] == "jarvis.insight/v1"
+
+    r = gw.client.post("/api/v1/agent/ask", json={"question": "what happened?"}, headers=OPERATOR)
+    assert sse(r.text)[-1][1]["title"].startswith("About “what happened?”")
+
+
+def test_asking_needs_an_operator_and_a_question(gw):
+    assert gw.client.post("/api/v1/agent/ask", json={"question": "hi"}, headers=VIEWER).status_code == 403
+    assert gw.client.post("/api/v1/agent/ask", json={"question": "  "}, headers=OPERATOR).status_code == 422
+    r = gw.client.post("/api/v1/agent/ask", json={"incident_id": "nope"}, headers=OPERATOR)
+    assert sse(r.text) == [("error", {"message": "no incident 'nope'"})]
+
+
+def test_a_missing_agent_is_503(gw):
+    async def gone(*args, **kwargs):
+        raise ConnectionError("/jarvis/agent/analyze is not available (is the agent running?)")
+        yield  # an async generator, like the real one
+
+    gw.fake.ask = gone
+    r = gw.client.post("/api/v1/agent/ask", json={"question": "hi"}, headers=OPERATOR)
+    assert r.status_code == 503 and "is the agent running" in r.json()["detail"]
 
 
 # -- the rest --------------------------------------------------------------------------------------

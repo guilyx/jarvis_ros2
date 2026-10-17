@@ -31,6 +31,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   srv/CloseIncident.srv
   srv/ListPlans.srv
   action/ExecuteRecovery.action
+  action/Analyze.action
   DEPENDENCIES action_msgs builtin_interfaces
 )
 

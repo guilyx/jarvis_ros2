@@ -89,3 +89,10 @@ class JarvisPort(abc.ABC):
     @abc.abstractmethod
     async def reload(self, target, validate_only, operator):
         """target: "rules" or "plans". data: {revision, errors, warnings}."""
+
+    # -- the agent -------------------------------------------------------------------------------
+
+    @abc.abstractmethod
+    def ask(self, incident_id, question, requester):
+        """Asks the agent (its Analyze action): an async iterator of ("progress", {stage, detail}),
+        then ("insight", Insight JSON) or ("error", {message}). ConnectionError when it is not there."""

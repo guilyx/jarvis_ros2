@@ -9,12 +9,13 @@ schemas' JSON there and handed to the gateway's event loop; replies come back as
 
 import asyncio
 import contextlib
+import json
 import math
 import threading
 
 import rclpy
 from jarvis_cli import convert
-from jarvis_interfaces.action import ExecuteRecovery
+from jarvis_interfaces.action import Analyze, ExecuteRecovery
 from jarvis_interfaces.msg import Event, ExecutionArray, FaultArray
 from jarvis_interfaces.srv import (
     AcknowledgeFault,
@@ -41,6 +42,7 @@ LATCHED = QoSProfile(
     depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL
 )
 WAIT_S = 2.0  # how long a command waits for a service to show up before it is "unavailable"
+ASK_TIMEOUT_S = 300.0  # an answer from the agent (a model may take a while)
 
 TRISTATE = {
     None: SetRuleState.Request.KEEP,
@@ -95,6 +97,7 @@ class RosPort(JarvisPort):
         for key, (srv_type, name) in SERVICES.items():
             self._clients[key] = (srv_type, n.create_client(srv_type, f"{self.ns}/{name}"))
         self._action = ActionClient(n, ExecuteRecovery, f"{self.ns}/recovery/execute")
+        self._analyze = ActionClient(n, Analyze, f"{self.ns}/agent/analyze")
         self._executor = SingleThreadedExecutor(context=self._context)
         self._executor.add_node(n)
         self._thread = threading.Thread(target=self._spin, name="rclpy", daemon=True)
@@ -273,3 +276,51 @@ class RosPort(JarvisPort):
             message = "; ".join([message, *r.errors[:5]]) if message else "; ".join(r.errors[:5])
         data = {"revision": r.revision, "errors": list(r.errors), "warnings": list(r.warnings)}
         return CommandResult(r.success, message, data)
+
+    # -- the agent -------------------------------------------------------------------------------
+
+    async def ask(self, incident_id, question, requester, timeout_s=ASK_TIMEOUT_S):
+        if not self._analyze.server_is_ready():
+            ready = await asyncio.to_thread(self._analyze.wait_for_server, timeout_sec=WAIT_S)
+            if not ready:
+                raise ConnectionError(f"{self.ns}/agent/analyze is not available (is the agent running?)")
+        feedback = asyncio.Queue()
+
+        def on_feedback(msg):
+            f = msg.feedback
+            self._post(feedback.put_nowait, ("progress", {"stage": f.stage, "detail": f.detail}))
+
+        goal = Analyze.Goal(incident_id=incident_id, question=question, requester=requester)
+        handle = await self._bridge(self._analyze.send_goal_async(goal, feedback_callback=on_feedback))
+        if not handle.accepted:
+            yield "error", {"message": "the agent did not take the question"}
+            return
+        key = bytes(handle.goal_id.uuid)
+        self._goals[key] = handle
+        result = self._bridge(handle.get_result_async())
+        deadline = self._loop.time() + timeout_s
+        try:
+            while True:
+                nxt = asyncio.ensure_future(feedback.get())
+                done, _ = await asyncio.wait(
+                    {nxt, result},
+                    timeout=max(0.0, deadline - self._loop.time()),
+                    return_when="FIRST_COMPLETED",
+                )
+                if nxt in done:
+                    yield nxt.result()
+                    continue
+                nxt.cancel()
+                if result not in done:
+                    yield "error", {"message": f"no answer from the agent within {timeout_s:g} s"}
+                    return
+                while not feedback.empty():  # what came in just before the result
+                    yield feedback.get_nowait()
+                r = result.result().result
+                if r.success:
+                    yield "insight", json.loads(r.insight_json)
+                else:
+                    yield "error", {"message": r.message or "the agent could not answer"}
+                return
+        finally:
+            self._goals.pop(key, None)

@@ -112,3 +112,15 @@ test("analytics show health per component and the Pareto of faults", async ({ pa
   await expect(page.getByTestId("component-row").first()).toBeVisible();
   await expect(page.getByRole("img", { name: "Pareto of fault codes" })).toBeVisible();
 });
+
+test("an operator asks the agent about an incident", async ({ page }) => {
+  await page.goto("/incidents");
+  await page.getByTestId("incident-row").first().getByRole("link").click();
+  await page.getByRole("button", { name: "Ask agent" }).click();
+  const box = page.getByTestId("ask-box");
+  await expect(box).toContainText("about incident");
+  await box.getByRole("textbox", { name: "Question" }).fill("What happened?");
+  await box.getByRole("button", { name: "Ask", exact: true }).click();
+  await expect(box.getByTestId("ask-progress")).toContainText("window");
+  await expect(box.getByTestId("insight-card")).toBeVisible({ timeout: 30_000 });
+});

@@ -168,6 +168,13 @@ class Cancel(BaseModel):
     reason: str = ""
 
 
+class Ask(BaseModel):
+    """Explain an incident, or ask about the last minutes (or both: a question about an incident)."""
+
+    incident_id: str = ""
+    question: str = Field(default="", max_length=2000)
+
+
 class Mode(BaseModel):
     mode: Literal["ENABLED", "DRY_RUN", "DISABLED"]
     reason: str = ""

@@ -146,6 +146,19 @@ function api(role: "viewer" | "operator") {
         return json({
           insights: url.searchParams.get("limit") === "50" ? [PROPOSING_INSIGHT, INSIGHT_EVENT] : [],
         });
+      case "/api/v1/agent/ask": {
+        const events = [
+          ["progress", { stage: "window", detail: "12 events, incident i1" }],
+          ["progress", { stage: "tool", detail: "query_events {}" }],
+          [
+            "insight",
+            { ...PROPOSING_INSIGHT.payload, insight_id: "z", title: "Asked: the relay hangs", proposals: [] },
+          ],
+        ];
+        return new Response(events.map(([k, d]) => `event: ${k}\ndata: ${JSON.stringify(d)}\n\n`).join(""), {
+          headers: { "Content-Type": "text/event-stream" },
+        });
+      }
       case "/api/v1/recoveries/x-9":
         return json({ execution: PROPOSED, history: null });
       case "/api/v1/recoveries/x-9:reject":
@@ -248,6 +261,22 @@ describe("dashboard", () => {
     await user.click(within(proposal).getByRole("button", { name: "Reject" }));
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Reject" }));
     await waitFor(() => expect(calls.some((c) => c.path === "/api/v1/recoveries/x-9:reject")).toBe(true));
+  });
+
+  it("asks the agent and streams its answer", async () => {
+    const calls = api("operator");
+    renderApp("/agent?incident=i1");
+    const box = await screen.findByTestId("ask-box");
+    expect(within(box).getByText(/about incident/)).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.type(within(box).getByRole("textbox", { name: "Question" }), "Why?");
+    await user.click(within(box).getByRole("button", { name: "Ask" }));
+    expect(await within(box).findByText("Asked: the relay hangs")).toBeInTheDocument();
+    expect(within(within(box).getByTestId("ask-progress")).getByText("query_events {}")).toBeInTheDocument();
+    expect(calls.find((c) => c.path === "/api/v1/agent/ask")?.body).toEqual({
+      incident_id: "i1",
+      question: "Why?",
+    });
   });
 
   it("hides commands from viewers", async () => {

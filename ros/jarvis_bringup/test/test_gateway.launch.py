@@ -271,6 +271,37 @@ class TestGateway(unittest.TestCase):
 
         self.wait(rejected, "the rejection")
 
+    def test_operators_ask_the_agent(self):
+        """POST /agent/ask on the real stack: the gateway calls the agent's Analyze action and
+        streams its progress, then the insight."""
+
+        def incident():
+            for e in call("GET", "/insights")[1]["insights"]:
+                if "test.gateway.broken" in e["payload"]["title"]:
+                    return e["correlation_id"]
+            return None
+
+        incident_id = self.wait(incident, "the incident of test_faults", timeout=60.0)
+        request = urllib.request.Request(
+            BASE + "/agent/ask",
+            method="POST",
+            data=json.dumps({"incident_id": incident_id, "question": "What broke?"}).encode(),
+            headers={"Content-Type": "application/json", "Authorization": "Bearer op-secret"},
+        )
+        with urllib.request.urlopen(request, timeout=60) as r:
+            self.assertTrue(r.headers["Content-Type"].startswith("text/event-stream"))
+            text = r.read().decode()
+        events = [
+            (dict(line.split(": ", 1) for line in block.splitlines())) for block in text.strip().split("\n\n")
+        ]
+        kinds = [e["event"] for e in events]
+        self.assertEqual(kinds[-1], "insight", text[-500:])
+        stages = [json.loads(e["data"])["stage"] for e in events if e["event"] == "progress"]
+        self.assertEqual((stages[0], stages[-1]), ("window", "done"))
+        insight = json.loads(events[-1]["data"])
+        self.assertEqual(insight["trigger"], {"type": "ON_DEMAND", "ref": incident_id})
+        self.assertIn("test.gateway.broken", insight["title"])
+
     def test_metrics(self):
         with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/metrics", timeout=10) as r:
             text = r.read().decode()

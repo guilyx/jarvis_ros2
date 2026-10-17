@@ -185,6 +185,8 @@ def cmd_run(args, config):
         sink = StdoutSink()
     query = GatewayQuery(config.gateway_url, config.token)
     agent = make_agent(config, query, sink, recovery)
+    if recovery is not None:  # questions over ROS (the gateway's /agent/ask)
+        recovery.serve(lambda incident_id, question, progress: agent.ask(incident_id, question, progress))
     policy = TriggerPolicy(config.min_severity, config.settle_s, config.max_per_hour)
     logging.getLogger("jarvis_agent").info(
         "watching %s (autonomy %s, %s)",

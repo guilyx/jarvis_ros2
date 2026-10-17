@@ -1,7 +1,7 @@
 import { createRootRoute, createRoute, createRouter, type RouterHistory } from "@tanstack/react-router";
 import { Layout } from "@/components/Layout";
 import { Empty } from "@/components/domain";
-import { Agent } from "@/views/Agent";
+import { Agent, type AgentSearch } from "@/views/Agent";
 import { Analytics, type AnalyticsSearch } from "@/views/Analytics";
 import { Events, type EventsSearch } from "@/views/Events";
 import { FaultDetail } from "@/views/FaultDetail";
@@ -79,7 +79,14 @@ const routes = [
       return { hours: Number.isFinite(hours) && hours > 0 ? hours : undefined };
     },
   }),
-  createRoute({ getParentRoute: () => root, path: "/agent", component: Agent }),
+  createRoute({
+    getParentRoute: () => root,
+    path: "/agent",
+    component: Agent,
+    validateSearch: (s: Record<string, unknown>): AgentSearch => ({
+      incident: typeof s.incident === "string" && s.incident ? s.incident : undefined,
+    }),
+  }),
   createRoute({ getParentRoute: () => root, path: "/system", component: System }),
 ] as const;
 

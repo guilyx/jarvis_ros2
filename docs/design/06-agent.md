@@ -108,6 +108,21 @@ ROS only advises; a gateway route for agent proposals would need an `agent` role
 On its first connection the agent's stream resumes from the first event of the last
 `catch_up_s` (120 s), so an incident that opened while it started is not missed.
 
+### As built (4.4)
+
+`jarvis_interfaces/action/Analyze.action`: `{incident_id, question, requester}` → feedback
+`{stage, detail}` (window · triage · analyst / model · tool · checks · proposals · done) → result
+`{success, message, insight_json}`. The agent's node (`RosAgent.serve`) answers it on a
+multi-threaded executor with a reentrant callback group, so an analysis runs while its feedback and
+its proposals' answers come in; two at a time, a third is told the agent is busy. `Agent.ask` takes
+the incident's window (with the question, when there is one, in the model's context) or, without an
+incident, the sliding window and the question; the insight is published like any other. The
+gateway's `POST /api/v1/agent/ask` (operator: a model costs money) calls the action and streams
+server-sent events (`progress`, then `insight` or `error`); a missing agent is a 503 before the
+stream starts. The fake gateway answers with a stand-in. The dashboard's Agent view has the Ask box
+(progress as it streams, the answer as an insight card), and an incident's "Ask agent" opens it
+about that incident.
+
 ## 2. Triggers
 
 | Trigger | Source | Default |

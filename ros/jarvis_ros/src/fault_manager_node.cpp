@@ -15,6 +15,7 @@
 #include <jarvis_interfaces/srv/clear_fault.hpp>
 #include <jarvis_interfaces/srv/close_incident.hpp>
 #include <jarvis_interfaces/srv/get_faults.hpp>
+#include <map>
 #include <memory>
 #include <rclcpp/create_timer.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
@@ -59,6 +60,9 @@ public:
     declare<double>(
       *this, "blackbox_wait_s", 2.0,
       "How long a capture waits for the snapshot service (e.g. at startup) before giving up");
+    declare<double>(
+      *this, "blackbox_timeout_s", 10.0,
+      "How long a capture waits for the snapshot service's answer once the request is sent");
     declare<int>(*this, "queue_depth", 1000, "History depth of /jarvis/events and /jarvis/ingest");
     if (declare<bool>(*this, "autostart", false, "Configure and activate on startup")) {
       autostart_timer_ = create_wall_timer(std::chrono::milliseconds(1), [this]() {
@@ -206,6 +210,12 @@ public:
     deadline_timer_.reset();
     blackbox_retry_timer_.reset();
     waiting_captures_.clear();
+    for (const auto & [id, sent] : sent_captures_) {
+      if (blackbox_client_) {
+        blackbox_client_->remove_pending_request(id);
+      }
+    }
+    sent_captures_.clear();
     diagnostics_timer_.reset();
     persist_if_dirty();
     persist_timer_.reset();
@@ -387,6 +397,11 @@ private:
     waiting_captures_.push_back(
       {capture, std::chrono::steady_clock::now() +
                   std::chrono::duration_cast<std::chrono::steady_clock::duration>(wait)});
+    watch_blackbox();
+  }
+
+  void watch_blackbox()
+  {
     if (!blackbox_retry_timer_) {
       blackbox_retry_timer_ =
         create_wall_timer(std::chrono::milliseconds(100), [this]() { retry_blackbox(); });
@@ -410,22 +425,47 @@ private:
         waiting_captures_.push_back({std::move(capture), deadline});
       }
     }
-    if (waiting_captures_.empty()) {
+    // A request sent to a recorder that went away (or that the graph still listed after it did)
+    // is never answered: give it up after blackbox_timeout_s, and say so.
+    for (auto it = sent_captures_.begin(); it != sent_captures_.end();) {
+      if (now < it->second.deadline) {
+        ++it;
+        continue;
+      }
+      blackbox_client_->remove_pending_request(it->first);
+      blackbox_notice(
+        it->second.capture, "jarvis.blackbox.unavailable", jarvis_core::Severity::Warn,
+        "No answer from the black-box recorder at " +
+          std::string(blackbox_client_->get_service_name()));
+      it = sent_captures_.erase(it);
+    }
+    if (waiting_captures_.empty() && sent_captures_.empty()) {
       blackbox_retry_timer_.reset();
     }
   }
 
   void send_blackbox(const jarvis_core::CaptureBlackbox & capture)
   {
-    blackbox_client_->async_send_request(
+    // The answer and the timeout run in this node's (mutually exclusive) callback group: the
+    // request id is stored before either can look for it.
+    auto id = std::make_shared<int64_t>(-1);
+    auto sent = blackbox_client_->async_send_request(
       std::make_shared<Snapshot::Request>(),
-      [this, capture](rclcpp::Client<Snapshot>::SharedFuture future) {
+      [this, capture, id](rclcpp::Client<Snapshot>::SharedFuture future) {
+        sent_captures_.erase(*id);
         const bool ok = future.get()->success;
         blackbox_notice(
           capture, ok ? "jarvis.blackbox.captured" : "jarvis.blackbox.failed",
           ok ? jarvis_core::Severity::Info : jarvis_core::Severity::Warn,
           ok ? "Black-box snapshot saved" : "Black-box snapshot failed");
       });
+    *id = sent.request_id;
+    const auto timeout =
+      std::chrono::duration<double>(get_parameter("blackbox_timeout_s").as_double());
+    sent_captures_[sent.request_id] = {
+      capture, std::chrono::steady_clock::now() +
+                 std::chrono::duration_cast<std::chrono::steady_clock::duration>(timeout)};
+    watch_blackbox();
   }
 
   void blackbox_notice(
@@ -473,6 +513,7 @@ private:
   rclcpp::TimerBase::SharedPtr deadline_timer_;
   rclcpp::TimerBase::SharedPtr blackbox_retry_timer_;
   std::vector<WaitingCapture> waiting_captures_;
+  std::map<int64_t, WaitingCapture> sent_captures_;  ///< request id -> capture, until answered
   rclcpp::TimerBase::SharedPtr persist_timer_;
   rclcpp::TimerBase::SharedPtr diagnostics_timer_;
   rclcpp::TimerBase::SharedPtr autostart_timer_;

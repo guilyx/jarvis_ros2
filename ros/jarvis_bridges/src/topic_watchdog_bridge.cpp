@@ -85,11 +85,11 @@ protected:
     discover();
     tick_timer_ = rclcpp::create_timer(
       this, get_clock(), rclcpp::Duration::from_seconds(get_parameter("tick_period_s").as_double()),
-      [this]() { tick(); });
+      [this]() { on_graph([this] { tick(); }); });
     discovery_timer_ = create_wall_timer(
       std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::duration<double>(get_parameter("discovery_period_s").as_double())),
-      [this]() { discover(); });
+      [this]() { on_graph([this] { discover(); }); });
   }
 
   void deactivate_bridge() override

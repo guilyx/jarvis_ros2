@@ -62,7 +62,7 @@ protected:
       discovery_timer_ = create_wall_timer(
         std::chrono::duration_cast<std::chrono::nanoseconds>(
           std::chrono::duration<double>(get_parameter("discovery_period_s").as_double())),
-        [this]() { discover(); });
+        [this]() { on_graph([this] { discover(); }); });
     }
   }
 

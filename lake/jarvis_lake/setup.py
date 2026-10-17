@@ -6,9 +6,9 @@ from setuptools import find_packages, setup
 
 HERE = pathlib.Path(__file__).parent
 REQUIREMENTS = [
-    line.strip()
+    line.split("#")[0].strip()
     for line in (HERE / "requirements.txt").read_text().splitlines()
-    if line.strip() and not line.startswith("#")
+    if line.split("#")[0].strip()
 ]
 
 setup(

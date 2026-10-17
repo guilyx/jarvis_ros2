@@ -18,6 +18,7 @@ expect() { grep -Eq "$1" <<<"$2" || fail "$3"; }
 rm -rf demo-data
 docker compose up -d --no-build
 ./demo wait || fail "Jarvis never became healthy"
+for _ in $(seq 1 20); do [ -f demo-data/lake/status.json ] && break; sleep 1; done
 [ -f demo-data/lake/status.json ] || fail "the lake service is not running"
 expect "none, all good" "$(open_faults)" "faults on a healthy start"
 sleep 3 # a full rate window of the lidar relay, where a startup glitch would show

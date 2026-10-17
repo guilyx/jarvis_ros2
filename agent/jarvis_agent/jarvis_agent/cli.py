@@ -4,6 +4,7 @@
 
     jarvis-agent analyze INCIDENT [--gateway URL | --replay events.jsonl [--plans plans.yaml]] [--json]
     jarvis-agent run [--gateway URL] [--config agent.yaml] [--publish ros|stdout]
+    jarvis-agent eval [--corpus DIR] [--case NAME] [--judge MODEL] [--max-cost-usd 2] [--results TSV]
 
 `analyze` explains one incident and prints the insight. `run` watches the live stream, analyzes
 incidents that open at ERROR or worse and recoveries that fail, and publishes the insights (as
@@ -11,6 +12,8 @@ INSIGHT events on /jarvis/ingest, where the dashboard shows them). With a model 
 (model.name, $JARVIS_AGENT_MODEL or --model), it investigates with read-only tools; without one, or
 when the model cannot answer, the heuristic analyst does. At autonomy supervised or autonomous,
 `run` sends the model's proposals to the recovery gates as requester AGENT; `analyze` only advises.
+`eval` scores the analyst on the labelled corpus (evals/corpus) and can add a row to results.tsv;
+it exits 1 below --min-score, 2 on a bad corpus, 3 when the cost cap cut the run short.
 """
 
 import argparse
@@ -90,10 +93,20 @@ def parser():
     r = sub.add_parser("run", help="watch the live stream and analyze what goes wrong")
     r.add_argument("--publish", choices=["ros", "stdout"], default="ros")
     r.add_argument("--log-level", default="INFO")
+    e = sub.add_parser("eval", help="score the analyst on the labelled corpus")
+    e.add_argument("--corpus", help="the cases (default: evals/corpus of the source tree)")
+    e.add_argument("--case", action="append", default=[], help="only this case (repeat for more)")
+    e.add_argument("--judge", help="a LiteLLM model that grades the root cause in words (rubric)")
+    e.add_argument("--max-cost-usd", type=float, default=2.0, help="for the whole run (0: no cap)")
+    e.add_argument("--min-score", type=float, help="exit 1 when the mean score is below this")
+    e.add_argument("--results", help="add a row to this TSV (evals/results.tsv)")
+    e.add_argument("--note", default="", help="for the row: what changed")
+    e.add_argument("--report", help="write every case, insight and grade to this JSON file")
+    e.add_argument("--traces", help="where the model's traces go (default from the config)")
     return p
 
 
-def make_analyst(config, query, proposals=False):
+def make_analyst(config, query, proposals=False, budget=None):
     """The model analyst for the configured model, or None (the heuristic analyst). Exits when the
     model cannot be used: litellm missing, or a model that does not call tools."""
     if not config.model:
@@ -123,7 +136,7 @@ def make_analyst(config, query, proposals=False):
     return LLMAnalyst(
         client(config.model),
         query,
-        budget=Budget(config.usd_per_hour, config.usd_per_day),
+        budget=budget or Budget(config.usd_per_hour, config.usd_per_day),
         max_tool_calls=config.max_tool_calls,
         tokens_per_analysis=config.tokens_per_analysis,
         context_tokens=config.context_tokens,
@@ -204,12 +217,64 @@ def cmd_run(args, config):
     return 0
 
 
+def make_judge(model, config):
+    from jarvis_agent.evals.graders import Judge
+
+    try:
+        from jarvis_agent.llm.litellm_client import LiteLLMClient
+    except ImportError:
+        raise SystemExit(f"judge {model}: litellm is not installed: {LLM_INSTALL}") from None
+    return Judge(LiteLLMClient(model, timeout_s=config.timeout_s, max_output_tokens=300, temperature=0))
+
+
+def cmd_eval(args, config):
+    from jarvis_agent.core.analyst import Budget
+    from jarvis_agent.evals import corpus, runner
+
+    try:
+        cases = corpus.load(args.corpus or runner.DEFAULT_CORPUS, args.case)
+    except corpus.CorpusError as e:
+        print(f"jarvis-agent eval: {e}", file=sys.stderr)
+        return 2
+    if args.traces:
+        config.traces_dir = args.traces
+    budget = Budget(args.max_cost_usd, args.max_cost_usd)  # one, for the whole run
+    proposals = config.level in ("supervised", "autonomous")  # as `run` would offer them
+    judge = make_judge(args.judge, config) if args.judge else None
+
+    def heard(r):
+        print(f"{r.case}: {r.score:.2f} ({r.analyst}, ${r.cost_usd:.4f})", file=sys.stderr)
+
+    report = runner.run(
+        cases,
+        lambda query: make_analyst(config, query, proposals, budget),
+        config,
+        judge=judge,
+        max_cost_usd=args.max_cost_usd,
+        analyst=config.model or "heuristic",
+        progress=heard,
+    )
+    print(runner.render(report))
+    rev = runner.revision()
+    if args.report:
+        pathlib.Path(args.report).write_text(json.dumps(report.to_json(rev), indent=1) + "\n")
+    if args.results:
+        runner.append_tsv(args.results, runner.row(report, rev, args.note))
+    if report.capped:
+        print(f"the cost cap (${args.max_cost_usd:.2f}) cut the run short", file=sys.stderr)
+        return 3
+    if args.min_score is not None and (report.mean() or 0.0) < args.min_score:
+        print(f"mean score {report.mean() or 0.0:.3f} is below {args.min_score:.3f}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv=None):
     args = parser().parse_args(strip_ros_args(sys.argv[1:] if argv is None else argv))
     config = AgentConfig.load(args.config, gateway_url=args.gateway, model=args.model)
     if args.heuristic:
         config.model = ""
-    return {"analyze": cmd_analyze, "run": cmd_run}[args.command](args, config)
+    return {"analyze": cmd_analyze, "run": cmd_run, "eval": cmd_eval}[args.command](args, config)
 
 
 if __name__ == "__main__":

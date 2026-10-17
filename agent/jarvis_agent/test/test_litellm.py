@@ -178,7 +178,7 @@ def test_the_cli_with_a_model(stub, query, tmp_path, monkeypatch, capsys):
     from jarvis_agent import cli
 
     plans = tmp_path / "plans.yaml"
-    plans.write_text(json.dumps({"plans": json.loads((FIXTURES / "plans.json").read_text())}))
+    plans.write_text(json.dumps({"plans": json.loads((FIXTURES / "demo_tour.plans.json").read_text())}))
     config = tmp_path / "agent.yaml"
     config.write_text(
         "schema: jarvis.agent/v1\n"

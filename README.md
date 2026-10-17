@@ -14,12 +14,12 @@ The core is ROS-agnostic; ROS 2 is the communication layer.
 **M1 (record & manage faults) and M2 (rules & automated recovery) are in**: Jarvis records and
 manages faults, restarts what hangs on its own, escalates to a human when that doesn't work, and
 replays recordings to check rule changes. **M3 (history, analytics and the dashboard) is in**: a web
-console over the gateway's API and live stream, with Parquet history behind it. **M4 (the agent) has
-started**: it explains incidents and failed recoveries from the event stream, with the evidence
-behind each claim, offline or with any model through LiteLLM, can propose recoveries that go
-through the same gates as everyone's (an operator approves them by default), and answers questions
-from the dashboard; an evaluation suite comes next ([roadmap](docs/design/09-roadmap.md)). The design
-package starts at
+console over the gateway's API and live stream, with Parquet history behind it. **M4 (the agent) is
+in**: it explains incidents and failed recoveries from the event stream, with the evidence behind
+each claim, offline or with any model through LiteLLM, can propose recoveries that go through the
+same gates as everyone's (an operator approves them by default), answers questions from the
+dashboard, and is scored on labelled incidents, so a prompt or model change has to hold the score.
+Hardening and the release are next ([roadmap](docs/design/09-roadmap.md)). The design package starts at
 [`docs/design/README.md`](docs/design/README.md).
 
 ## Try it in Docker
@@ -212,6 +212,10 @@ ros2 run jarvis_agent jarvis-agent analyze <incident-id>        # explain one in
 ros2 run jarvis_agent jarvis-agent analyze <id> --replay events.jsonl   # from a recording, no robot
 ros2 run jarvis_agent jarvis-agent --model ollama/<model> analyze <id>  # with a model
 ```
+
+How good it is: `jarvis-agent eval` runs it on labelled incidents
+([`agent/jarvis_agent/evals`](agent/jarvis_agent/evals/README.md)) and scores the root cause, the
+evidence, the plans and the escalation; nightly in CI, and before any prompt or model change.
 
 ## API and live stream
 

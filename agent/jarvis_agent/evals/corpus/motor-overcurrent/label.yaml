@@ -1,0 +1,20 @@
+schema: jarvis.eval/v1
+description: >-
+  The left motor driver reports an overcurrent on /diagnostics for 5 s; the next OK clears it.
+events: ../../recordings/demo_tour.jsonl
+plans: ../../recordings/demo_tour.plans.json
+drop: ["demo.tour.*"]  # the tour narrates what happens: it would give the answers away
+trigger: {type: INCIDENT_OPENED, incident: 01a14a41-928c-775f-9f94-3781b34c4cb4}
+root_cause:
+  code: diag.fault_injector.motor_driver
+  component: motor_left
+  text: >-
+    The left motor's driver reported an overcurrent (14.2 A) for about 5 s, then nominal again: a
+    transient overload of the left motor (a jam, a collision or a load spike), not a software
+    fault. No plan applies; the left wheel is worth a look if it happens again.
+  mentions: [[overcurrent, over-current, "14.2 A"], [motor]]
+must_cite:
+  - [01a14a41-928c-7756-a46e-085831ac1fbf, 01a14a41-928b-72d0-ae03-67dc634611c2]
+expect:
+  assessment: [WARN, ERROR]
+  plans: {forbidden: [restart-lifecycle-node]}  # no node to restart: it is the hardware

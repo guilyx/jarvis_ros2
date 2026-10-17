@@ -1,0 +1,26 @@
+schema: jarvis.eval/v1
+description: >-
+  The lidar itself stops publishing for 20 s. The rule restarts the relay, which cannot help: the
+  plan's verify step times out, it FAILED, and Jarvis escalates to the operators.
+events: ../../recordings/demo_tour.jsonl
+plans: ../../recordings/demo_tour.plans.json
+drop: ["demo.tour.*"]  # the tour narrates what happens: it would give the answers away
+at: 2026-10-17T14:26:11.700Z  # the recovery failed at 14:26:06.6, within the incident's settle_s
+trigger: {type: RECOVERY_FAILED, incident: 01a14a41-3bf2-78ab-85ae-c2345420f217}
+root_cause:
+  code: sensor.scan.stale
+  component: lidar
+  text: >-
+    The lidar itself stopped publishing for about 20 s, upstream of the relay. Restarting the relay
+    could not help: the plan's verify step timed out, it failed and Jarvis escalated to the
+    operators. The relay's output-rate fault was a symptom. Scans came back when the lidar resumed.
+  mentions:
+    - [lidar itself, upstream, the sensor, driver, hardware, beyond, not the relay]
+    - [escalat, operator, human]
+must_cite:
+  - [01a14a41-3bf2-7236-93f2-a3de1c82e354, 01a14a41-39fe-7c49-8490-b163f75b3b76]
+  - [01a14a41-76a6-7550-b8ba-deafac95d328, 01a14a41-76a6-7921-8765-e90daf855394, 01a14a41-76a6-774d-ac82-e20c9fca0366]
+expect:
+  assessment: [ERROR, CRITICAL]
+  plans: {forbidden: [restart-lifecycle-node]}  # it just failed here
+  escalate: true

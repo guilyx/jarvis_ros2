@@ -1,0 +1,24 @@
+schema: jarvis.eval/v1
+description: >-
+  Ten minutes later the scan relay hangs again; the same rule restarts it and scans flow again.
+  Meanwhile the lidar is about to stall (the next case).
+events: ../../recordings/demo_tour.jsonl
+plans: ../../recordings/demo_tour.plans.json
+drop: ["demo.tour.*"]  # the tour narrates what happens: it would give the answers away
+at: 2026-10-17T14:26:06.500Z
+trigger: {type: INCIDENT_OPENED, incident: 01a14a41-27c0-73bf-bd09-b93746be9cb3}
+root_cause:
+  code: sensor.scan.stale
+  component: lidar
+  text: >-
+    The scan relay hung again, as it did ten minutes earlier: it stopped forwarding /scan, and
+    restarting it (restart-lifecycle-node, which fixed it the last time too) fixed it at once. The
+    relay's output-rate fault was a symptom. A relay that keeps hanging is worth a bug report.
+  mentions: [[relay], [restart], [again, earlier, before, recurr, second time, keeps]]
+must_cite:
+  - [01a14a41-27c0-7892-b854-e5393c563854]
+  - [01a14a41-2868-7dfc-b03b-9a2bad1c1a53, 01a14a41-2868-74ba-8365-47bfe32e1307, 01a14a41-2867-7365-b04e-6365d5f490ae]
+expect:
+  assessment: [WARN, ERROR]
+  plans: {acceptable: [restart-lifecycle-node]}
+  escalate: false

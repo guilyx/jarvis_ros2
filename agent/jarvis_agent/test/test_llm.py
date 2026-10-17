@@ -5,7 +5,6 @@ sends, what it accepts, and when the heuristic analyst answers instead."""
 
 import json
 
-import jsonschema
 import pytest
 from conftest import ESTOP, ROOT, STALL, WEDGE
 from jarvis_agent.core.agent import Agent
@@ -43,6 +42,7 @@ def analyze(query, script, ref=STALL, kind=TriggerType.RECOVERY_FAILED, agent_kw
 
 
 def schema_validate(insight):
+    jsonschema = pytest.importorskip("jsonschema")  # not in every test environment (the ROS image)
     from referencing import Registry, Resource
 
     schemas = {p.name: json.loads(p.read_text()) for p in (ROOT / "schemas").glob("*.schema.json")}

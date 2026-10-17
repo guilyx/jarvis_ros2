@@ -5,7 +5,7 @@
 schema: jarvis.agent/v1
 gateway: { url: http://127.0.0.1:8080 }   # token: $JARVIS_AGENT_TOKEN (never in this file)
 autonomy: { level: advise, min_confidence: 0.7 }
-triggers: { min_severity: ERROR, settle_s: 20, max_per_hour: 20 }
+triggers: { min_severity: ERROR, settle_s: 20, max_per_hour: 20, catch_up_s: 120 }
 windows: { context_s: 300, sliding_s: 600 }
 redact: ["attrs.gps.*"]                   # attributes the analyst never sees
 model:                                    # none: the heuristic analyst answers
@@ -43,6 +43,7 @@ class AgentConfig:
     min_severity: str = "ERROR"
     settle_s: float = 20.0
     max_per_hour: int = 20
+    catch_up_s: float = 120.0  # at start, what happened this long before still triggers
     context_s: float = 300.0
     sliding_s: float = 600.0
     redact: list = dataclasses.field(default_factory=list)
@@ -82,6 +83,7 @@ class AgentConfig:
                     "min_severity": "min_severity",
                     "settle_s": "settle_s",
                     "max_per_hour": "max_per_hour",
+                    "catch_up_s": "catch_up_s",
                 },
                 "windows": {"context_s": "context_s", "sliding_s": "sliding_s"},
                 "model": {

@@ -19,6 +19,7 @@ import json
 import logging
 import pathlib
 import sys
+import time
 
 from jarvis_agent import __version__
 from jarvis_agent.config import AgentConfig
@@ -26,6 +27,7 @@ from jarvis_agent.core.agent import Agent
 from jarvis_agent.core.policy import AutonomyPolicy
 from jarvis_agent.core.triggers import TriggerPolicy
 from jarvis_agent.core.windows import WindowManager
+from jarvis_agent.events import iso_ns
 from jarvis_agent.model import Trigger, TriggerType
 
 LLM_INSTALL = "pip install --require-hashes -r requirements-llm.txt (jarvis_agent's, hash-locked)"
@@ -176,7 +178,8 @@ def cmd_run(args, config):
         sink = RosInsightSink()
     else:
         sink = StdoutSink()
-    agent = make_agent(config, GatewayQuery(config.gateway_url, config.token), sink)
+    query = GatewayQuery(config.gateway_url, config.token)
+    agent = make_agent(config, query, sink)
     policy = TriggerPolicy(config.min_severity, config.settle_s, config.max_per_hour)
     logging.getLogger("jarvis_agent").info(
         "watching %s (autonomy %s, %s)",
@@ -185,7 +188,12 @@ def cmd_run(args, config):
         f"model {config.model}" if config.model else "heuristic analyst",
     )
     with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(run(agent, policy, stream(config.gateway_url, config.token)))
+        started = time.time_ns()
+
+        def catch_up():  # what happened while the agent (or the gateway) was starting
+            return query.seq_before(iso_ns(started - int(config.catch_up_s * 1e9)))
+
+        asyncio.run(run(agent, policy, stream(config.gateway_url, config.token, catch_up=catch_up)))
     return 0
 
 

@@ -2,7 +2,7 @@
 schema: jarvis.agent/v1
 gateway: { url: http://127.0.0.1:8080 }   # a token, if the gateway wants one: $JARVIS_AGENT_TOKEN
 autonomy: { level: advise, min_confidence: 0.7 }
-triggers: { min_severity: ERROR, settle_s: 20, max_per_hour: 20 }
+triggers: { min_severity: ERROR, settle_s: 20, max_per_hour: 20, catch_up_s: 120 }
 windows: { context_s: 300, sliding_s: 600 }
 redact: []                               # e.g. ["attrs.gps.*"]: attributes the analyst never sees
 # A model (milestone 4.2; needs requirements-llm.txt). Without one, the heuristic analyst answers.

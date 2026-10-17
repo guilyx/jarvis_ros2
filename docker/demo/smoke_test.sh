@@ -66,11 +66,11 @@ stall=$(api /insights | json 'next(e["correlation_id"] for e in d["insights"] if
 docker compose cp docker/demo/llm_stub.py demo:/tmp/llm_stub.py >/dev/null
 docker compose exec -d demo python3 /tmp/llm_stub.py 18099
 printf '%s\n' 'schema: jarvis.agent/v1' \
-  'model: { name: openai/jarvis-smoke, api_base: "http://127.0.0.1:18099/v1", assume_tools: true }' \
-  >demo-data/agent-smoke.yaml
+  'model: { name: openai/jarvis-smoke, api_base: "http://127.0.0.1:18099/v1", assume_tools: true }' |
+  docker compose exec -T demo sh -c 'cat >/tmp/agent-smoke.yaml' # demo-data belongs to the container
 sleep 1
 out=$(docker compose exec -T -e OPENAI_API_KEY=smoke demo bash -c "source /opt/jarvis/setup.bash && \
-  ros2 run jarvis_agent jarvis-agent --config /var/lib/jarvis/agent-smoke.yaml analyze $stall") ||
+  ros2 run jarvis_agent jarvis-agent --config /tmp/agent-smoke.yaml analyze $stall") ||
   fail "the agent failed with a model: $out"
 echo "$out"
 expect "The stub model read [1-9][0-9]* event" "$out" "the model's insight was not used"

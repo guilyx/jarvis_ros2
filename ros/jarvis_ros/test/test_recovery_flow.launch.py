@@ -288,12 +288,16 @@ class TestRecoveryFlow(unittest.TestCase):
     def test_6_state_is_persisted(self):
         def saved():
             files = {p.name for p in pathlib.Path(STATE_DIR).glob("*.json")}
-            return {"rule_engine.json", "recovery.json"} <= files
+            if not {"rule_engine.json", "recovery.json"} <= files:
+                return None
+            try:
+                return json.loads((pathlib.Path(STATE_DIR) / "recovery.json").read_text())
+            except ValueError:
+                return None
 
-        self.wait_for(saved, what="state files")
-        recovery = json.loads((pathlib.Path(STATE_DIR) / "recovery.json").read_text())
-        self.assertEqual(recovery["schema"], "jarvis.recovery.state/v1")
-        self.assertEqual(recovery["mode"], "ENABLED")
+        # State is written every 100 ms when it changed: wait for test_4's last mode change to land.
+        self.wait_for(lambda: (saved() or {}).get("mode") == "ENABLED", what="the mode persisted")
+        self.assertEqual(saved()["schema"], "jarvis.recovery.state/v1")
 
 
 @launch_testing.post_shutdown_test()

@@ -249,35 +249,43 @@ def clear(node, args):
 
 
 RELAY = "/demo/scan_relay"
-# (narration, step, pause after the step in seconds)
+# The restart rule's cooldown (config/rules: lidar-stale-restart), plus a margin: after a restart, the
+# next stall must come later than this, whatever the pace, or the rule stays quiet and nothing fails.
+RESTART_COOLDOWN_S = 5.0 + 2.0
+# (narration, step, pause after the step in seconds, the least pause whatever the pace)
 TOUR = (
     (
         "1/5 The lidar relay hangs: sensor.scan.stale goes ACTIVE (black-box snapshot), rule "
         "lidar-stale-restart runs plan restart-lifecycle-node, the relay restarts, scans flow: SUCCEEDED.",
         lambda node: scan_wedge(node, SimpleNamespace(relay=RELAY, timeout=30.0, quiet=False)),
         6.0,
+        RESTART_COOLDOWN_S,
     ),
     (
         "2/5 The lidar itself stops for 20 s: its rate symptom is muted, the restart can't help, the "
         "plan's check times out (FAILED) and the incident goes to the operators (ESCALATED, notify).",
         lambda node: scan(node, SimpleNamespace(seconds=20.0, relay=RELAY, quiet=False), "stall"),
         4.0,
+        0.0,
     ),
     (
         "3/5 Motor driver overcurrent on /diagnostics for 5 s: the bridge raises it, the next OK clears it.",
         lambda node: diag_error(node, SimpleNamespace(seconds=5.0)),
         3.0,
+        0.0,
     ),
     (
         "4/5 A node logs errors in a loop: sustained /rosout errors become ros.log.error, which heals "
         "after 60 s of quiet.",
         lambda node: rosout_error(node, SimpleNamespace(count=8, period=0.5)),
         3.0,
+        0.0,
     ),
     (
         "5/5 E-stop pressed for 2 s: CRITICAL, and still LATCHED after release until an operator "
         "clears it (inject clear). While it is latched, Jarvis restarts nothing.",
         lambda node: estop(node, SimpleNamespace(seconds=2.0)),
+        0.0,
         0.0,
     ),
 )
@@ -288,11 +296,11 @@ def tour(node, args):
     narrator = Reporter(node, "tour")
     if not narrator.wait_for_hub():
         raise RuntimeError("the event hub is not reachable: is Jarvis running?")
-    for text, step, pause in TOUR:
+    for text, step, pause, at_least in TOUR:
         print(f"\n== {text}")
         narrator.log(TOUR_CODE, Severity.INFO, text)
         step(node)
-        spin_for(node, pause * args.pace)
+        spin_for(node, max(pause * args.pace, at_least))
     done = "Tour done. The e-stop stays latched until an operator clears it: inject clear."
     narrator.log(TOUR_CODE, Severity.INFO, done)
     narrator.flush()

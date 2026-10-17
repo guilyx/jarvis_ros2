@@ -96,6 +96,37 @@
 | NFR-13 | Security | LAN-only dashboard with roles; LLM API keys from secrets only; data redaction before LLM calls; hash-pinned Python deps; SROS2 compatible |
 | NFR-14 | Operability | Jarvis reports its own health on `/diagnostics` and Prometheus metrics |
 
+### Measured (5.1)
+
+`jarvis-bench` times the core (no ROS); `jarvis_load` puts the stack under load end to end
+(`ros2 run jarvis_ros jarvis_load`, nightly in `.github/workflows/soak.yml`). On an x86 dev VM
+(4 vCPU Xeon, 16 GB), ROS 2 Jazzy, Fast DDS 2.14, the bringup as shipped (agent off):
+
+| Target | Measured | |
+|--------|----------|---|
+| NFR-1 throughput | Core: 110–150 k events/s through the event hub. Stack: 1 000/s plus a 20 000-event burst, nothing lost; 5 000/s loses some, 10 000/s about half | bursts ✔, 10 000/s ✘ (5.2) |
+| NFR-2 latency | p99 12 ms at 500/s, 23 ms at 1 000/s with a burst (publish → `/jarvis/events` → a reader) | ✔ up to ~4 000/s |
+| NFR-3 rules | p99 37 µs per event with 200 rules (event, count and sequence patterns) | ✔ |
+| NFR-5 footprint | Container: 80–90 MB RSS with nothing buffered, growing to the buffers' budgets (event buffer 128 MB, black box 256 MB by default); 45 % of one core at 500/s with the recorder and the black box | ✘ (5.2) |
+
+What it took:
+- **Bounded incidents.** A fault that flaps opened a new incident each time, and every resolved one
+  stayed in memory for `incident_auto_close` (24 h). The fault manager handled 4 000 events/s
+  this way and grew without bound. Now at most `max_resolved_incidents` (500) are kept: the
+  oldest close early. It handles 94 000 events/s.
+- **An isolated container.** In `component_container_mt`, the executor threads share one wait set
+  of every component's entities, and each event wakes them all. `component_container_isolated`
+  gives each component its own thread. At 1 000 events/s that halves the CPU (96 % → 47 %) and the
+  p99 (49 → 13 ms), and a slow component can't stall the others.
+- **Burst-deep queues.** `/jarvis/ingest` and `/jarvis/events` queues now hold 20 000 events, as
+  do their readers (the components, the recorder, the gateway). Before, a burst lost all but
+  the first 1 000. Fast DDS also caps any history at 5 000 samples, whatever the depth asked
+  for: the bringup applies `config/fastdds.xml` to its processes to lift that cap.
+
+The rest is the cost of one ROS message per event. In the profiles, the executor and Fast DDS
+spend more than Jarvis does: wait-set rebuilds, waking readers, locks. 5.2 batches the stream
+(one message per group of events, the "group commit" of NFR-2) to reach NFR-1 and NFR-5.
+
 ## 6. Glossary
 
 | Term | Meaning |

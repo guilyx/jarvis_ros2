@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Fast DDS settings for the Jarvis processes (jarvis.launch.py sets FASTRTPS_DEFAULT_PROFILES_FILE
+  to this file unless it is already set). Fast DDS caps every reader's and writer's history at
+  5 000 samples whatever depth ROS asks for: the event stream's queues are 20 000 deep, so that a
+  burst is buffered while the event hub and its readers catch up (docs/design/01-requirements.md
+  §5, NFR-1). Producers that send bursts of more than 5 000 events from one publisher need this
+  too. Other middlewares have no such cap: the QoS depth is enough.
+-->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <data_writer profile_name="jarvis_writer" is_default_profile="true">
+    <topic>
+      <resourceLimitsQos>
+        <max_samples>25000</max_samples>
+        <max_samples_per_instance>25000</max_samples_per_instance>
+      </resourceLimitsQos>
+    </topic>
+  </data_writer>
+  <data_reader profile_name="jarvis_reader" is_default_profile="true">
+    <topic>
+      <resourceLimitsQos>
+        <max_samples>25000</max_samples>
+        <max_samples_per_instance>25000</max_samples_per_instance>
+      </resourceLimitsQos>
+    </topic>
+  </data_reader>
+</profiles>

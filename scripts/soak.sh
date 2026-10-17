@@ -14,6 +14,9 @@ max_rss_mb=${4:-700}
 mkdir -p "$out"
 data=$(mktemp -d)
 export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
+# The load tool's burst comes from one publisher: it needs the history cap Jarvis lifts too.
+profile="$(ros2 pkg prefix jarvis_bringup)/share/jarvis_bringup/config/fastdds.xml"
+export FASTRTPS_DEFAULT_PROFILES_FILE=${FASTRTPS_DEFAULT_PROFILES_FILE:-$profile}
 
 ros2 launch jarvis_bringup jarvis.launch.py data_dir:="$data" agent:=false >"$out/launch.log" 2>&1 &
 launch=$!

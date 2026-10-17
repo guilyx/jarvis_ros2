@@ -5,6 +5,7 @@ lost, the latency bounded. CI machines are slower and shared than a dev machine:
 checked by the nightly soak (.github/workflows/soak.yml), not here."""
 
 import json
+import os
 import pathlib
 import subprocess
 import tempfile
@@ -22,6 +23,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 DATA_DIR = tempfile.mkdtemp(prefix="jarvis_load_")
 BRINGUP = pathlib.Path(get_package_share_directory("jarvis_bringup")) / "launch" / "jarvis.launch.py"
 LOAD = pathlib.Path(get_package_prefix("jarvis_ros")) / "lib" / "jarvis_ros" / "jarvis_load"
+# The load tool sends its burst from one publisher: it needs the history cap Jarvis lifts too.
+PROFILE = BRINGUP.parent.parent / "config" / "fastdds.xml"
 
 
 @pytest.mark.launch_test
@@ -47,6 +50,7 @@ class TestLoad(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=150,
+            env={"FASTRTPS_DEFAULT_PROFILES_FILE": str(PROFILE), **os.environ},
         )
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         r = json.loads(out.read_text())

@@ -239,13 +239,26 @@ it). Tokens give names and roles (viewer, operator, admin) in
 [docs/design/07-dashboard.md](docs/design/07-dashboard.md) lists it. `jarvis-gateway --fake
 --scenario` runs it over an in-memory Jarvis, without ROS.
 
+## Under load
+
+```bash
+jarvis-bench --check                                    # the core, no ROS: hub, rules, faults, a flood
+ros2 run jarvis_ros jarvis_load --rate 1000 --burst 20000 --check   # the running stack, end to end
+```
+
+`jarvis_load` publishes on `/jarvis/ingest` as a fleet of nodes would, reads the events back on
+`/jarvis/events`, and reports what got through, the latency, and the container's RSS and CPU. CI runs
+both. A nightly soak runs the stack for 15 minutes at 500 events/s
+([`scripts/soak.sh`](scripts/soak.sh)). What they measure against the targets is in
+[docs/design/01-requirements.md §5](docs/design/01-requirements.md#measured-51).
+
 ## Packages
 
 | Package | What it does |
 |---------|--------------|
 | [`core/jarvis_core`](core/jarvis_core) | ROS-free C++ domain: event hub, fault lifecycle, incidents, catalog, rule engine, recovery orchestrator |
 | [`ros/jarvis_interfaces`](ros/jarvis_interfaces) | Messages, services and the `ExecuteRecovery` action |
-| [`ros/jarvis_ros`](ros/jarvis_ros) | Event hub, fault manager, rule engine and recovery lifecycle components; built-in actuators (lifecycle, std_srvs, parameters, bag snapshot) |
+| [`ros/jarvis_ros`](ros/jarvis_ros) | Event hub, fault manager, rule engine and recovery lifecycle components; built-in actuators (lifecycle, std_srvs, parameters, bag snapshot); `jarvis_load` |
 | [`ros/jarvis_cli`](ros/jarvis_cli) | `ros2 jarvis`: faults, rules, recovery, approvals, kill switch, bag export, lint and backtest |
 | [`ros/jarvis_nav2`](ros/jarvis_nav2) | Nav2 actuators: lifecycle manager, costmaps, cancel and send goals |
 | [`ros/jarvis_reporter`](ros/jarvis_reporter) | C++ and Python client libraries for apps |

@@ -17,6 +17,10 @@ The gateway (jarvis_gateway) serves the API, live stream and dashboard on gatewa
 (jarvis_agent) analyzes incidents and failed recoveries through it and publishes insights.
 
 Rules and plans are directories of YAML files (`rules`, `plans`); the defaults ship generic ones.
+
+With SROS2 (security/policy.xml), each process takes its own enclave under `enclave_root`:
+    ros2 run jarvis_bringup jarvis_keystore ~/jarvis_keystore    # prints what to export
+    ROS_SECURITY_ENCLAVE_OVERRIDE=/jarvis/launch ros2 launch jarvis_bringup jarvis.launch.py
 """
 
 import os
@@ -70,6 +74,10 @@ ARGUMENTS = {
     "container": ("component_container_isolated", "rclcpp_components container executable"),
     # Fast DDS caps histories at 5 000 samples whatever their depth: the profile lifts it for the
     # event stream's 20 000-deep queues. Not applied when a profile file is already set.
+    "enclave_root": (
+        "/jarvis",
+        "SROS2: each Jarvis process takes the enclave <root>/<process> (security/policy.xml)",
+    ),
     "fastdds_profile": (str(SHARE / "config" / "fastdds.xml"), "Fast DDS profile of the Jarvis processes"),
 }
 
@@ -86,6 +94,12 @@ def _setup(context):
     autostart = _flag(arg["autostart"])
 
     common = {"robot_id": arg["robot_id"], "use_sim_time": use_sim_time, "autostart": autostart}
+
+    def enclave(process):
+        # Per process, over any inherited override (ros2 launch's own, /jarvis/launch). Without
+        # ROS_SECURITY_ENABLE, ROS ignores it.
+        return {"ROS_SECURITY_ENCLAVE_OVERRIDE": f"{arg['enclave_root'].rstrip('/')}/{process}"}
+
     state = {"state_dir": str(data_dir / "state")}
     fast = [{"use_intra_process_comms": True}]
 
@@ -211,6 +225,7 @@ def _setup(context):
                 executable="jarvis-lake",
                 name="lake",
                 namespace="jarvis",
+                additional_env=enclave("lake"),
                 arguments=["--data-dir", str(data_dir), "--min-free-gib", arg["lake_min_free_gib"], "run"],
                 output="screen",
             )
@@ -225,6 +240,7 @@ def _setup(context):
                 executable="jarvis-gateway",
                 name="gateway",
                 namespace="jarvis",
+                additional_env=enclave("gateway"),
                 arguments=[
                     *config,
                     "--data-dir",
@@ -246,6 +262,7 @@ def _setup(context):
                 executable="jarvis-agent",
                 name="agent",
                 namespace="jarvis",
+                additional_env=enclave("agent"),
                 arguments=[*config, "--gateway", f"http://127.0.0.1:{arg['gateway_port']}", "run"],
                 output="screen",
             )
@@ -265,6 +282,7 @@ def _setup(context):
             package="rclcpp_components",
             executable=arg["container"],
             composable_node_descriptions=nodes,
+            additional_env=enclave("container"),
             arguments=["--ros-args", "--log-level", arg["log_level"]],
             output="screen",
         ),

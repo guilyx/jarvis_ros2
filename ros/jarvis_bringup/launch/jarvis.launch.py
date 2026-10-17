@@ -47,6 +47,10 @@ ARGUMENTS = {
     "record": ("true", "Record /jarvis/** to MCAP"),
     "record_extra_topics": ("/diagnostics /rosout", "Context topics recorded with /jarvis/**"),
     "split_duration_s": ("300", "Length of a recorder split"),
+    "recorder_storage_config": (
+        str(SHARE / "config" / "mcap_writer.yaml"),
+        "MCAP writer settings of the recorder: what a crash loses vs. compression",
+    ),
     "blackbox": ("true", "Run the snapshot-mode black-box recorder"),
     "blackbox_topics": ("/tf /tf_static /odom /scan /cmd_vel /jarvis/events", "Black-box topics"),
     "blackbox_cache_mb": ("256", "Memory of the black-box ring buffer"),
@@ -161,8 +165,8 @@ def _setup(context):
                         "use_sim_time": use_sim_time,
                         "storage.uri": str(data_dir / "bags" / f"jarvis_{stamp}"),
                         "storage.storage_id": "mcap",
-                        # Small chunks: what a crash loses (config/mcap_writer.yaml, NFR-6).
-                        "storage.storage_config_uri": str(SHARE / "config" / "mcap_writer.yaml"),
+                        # What a crash loses (NFR-6): config/mcap_writer.yaml.
+                        "storage.storage_config_uri": arg["recorder_storage_config"],
                         "storage.max_bagfile_duration": int(arg["split_duration_s"]),
                         "record.regex": "^/jarvis/.*",
                         # The ingest side is pre-validation; /jarvis/events is the canonical stream.

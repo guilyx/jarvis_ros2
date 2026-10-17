@@ -86,7 +86,7 @@
 | NFR-3 | Rule evaluation | p99 ≤ 5 ms per event with 200 rules |
 | NFR-4 | Match → first actuation | p99 ≤ 100 ms (excluding approval wait) |
 | NFR-5 | Footprint | Runtime container ≤ 100 MB RSS; ≤ 5 % of one core at 500 events/s |
-| NFR-6 | Durability | Open faults/executions survive crashes and power loss (fsynced snapshots). Recorded events: at most the last unflushed MCAP chunk (≤ ~1 s) lost on a hard crash. |
+| NFR-6 | Durability | Open faults/executions survive crashes and power loss (fsynced snapshots). Recorded events: at most what the recorder had not written yet (≤ ~1 s) lost on a hard crash. |
 | NFR-7 | Storage | Bounded: bags 10 GiB / 7 days, Parquet 5 GiB / 180 days, black box 2 GiB, and ≥ 1 GiB of the disk kept free (defaults) |
 | NFR-8 | Dashboard freshness | Live event visible in UI ≤ 1 s after ingest |
 | NFR-9 | Agent latency | Incident insight p90 ≤ 60 s when online |
@@ -139,18 +139,22 @@ reach NFR-1 and NFR-5.
 ### Measured (5.3)
 
 `ros/jarvis_bringup/test/test_durability.py` (in CI) kills the whole stack with SIGKILL while
-200 events/s flow, then starts it again on the same data directory:
+events flow, 200/s (a busy robot) or 10/s (a quiet one), then starts it again on the same data
+directory:
 
 | Target | Measured | |
 |--------|----------|---|
-| NFR-6 durability | The open faults are back, the stream's `seq` carries on above the last one, and the torn split is recovered into the lake up to the last 0.2–0.5 s before the crash (nothing lost before that) | ✔ |
+| NFR-6 durability | The open faults are back, the stream's `seq` carries on above the last one, and the torn split is recovered into the lake up to the last 0.04–0.05 s before the crash at 200/s, 0.5–0.8 s at 10/s (nothing lost before that) | ✔ |
 | NFR-7 storage | The budgets, plus a free-disk floor (1 GiB): below it the lake deletes more, cheapest loss first, and raises `jarvis.storage.low` when nothing else may go (unit tests, and the same test file on the stack) | ✔ |
 
 What it took:
-- **Small MCAP chunks.** rosbag2's MCAP writer keeps a chunk in memory until it is full, 768 KiB of
-  records by default: a crash lost everything since the start of a split. 16 KiB chunks
-  (`config/mcap_writer.yaml`) still compress about 4×. A quieter stream loses more seconds, never
-  more data.
+- **No MCAP chunks.** rosbag2's MCAP writer keeps a chunk in memory until it is full, 768 KiB of
+  records by default: a crash lost everything since the start of a split. Smaller chunks bound
+  the bytes, not the time: 16 KiB lost 0.2–0.5 s at 200 events/s but 7 s at 10/s, and on a quiet
+  robot those are the seconds before the crash. rosbag2 has no time-based flush, so the recorder
+  writes records as they come (`noChunking`, `config/mcap_writer.yaml`): what is lost is the file
+  buffer, a few KiB. Bags then take about 4× the disk; the lake's Parquet stays compressed.
+  `recorder_storage_config` brings compression back, chunked, for robots short of disk.
 - **A free-space floor.** The age and size budgets don't know how big the disk is, nor what else
   uses it. The lake checks the free space at every pass. Below the floor it deletes converted
   splits (their events are in Parquet), then black-box snapshots, then old days of Parquet. A

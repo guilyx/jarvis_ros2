@@ -150,10 +150,10 @@ ros2 run jarvis_lake jarvis-lake sql "SELECT code, count(*) FROM fault_episodes 
 ```
 
 A split the recorder never closed (a crash, a power cut) is recovered up to its last complete
-chunk when Jarvis restarts: a SIGKILL loses the last 0.2–0.5 s at 200 events/s. Retention deletes
-recordings only after they are converted (7 days or 10 GiB of bags, 180 days or 5 GiB of Parquet,
-2 GiB of black-box snapshots by default), and keeps 1 GiB of the disk free: below that it deletes
-the oldest data first and raises `jarvis.storage.low` when nothing else may go.
+record when Jarvis restarts: a SIGKILL loses well under a second, on a busy robot or a quiet one.
+Retention deletes recordings only after they are converted (7 days or 10 GiB of bags, 180 days or
+5 GiB of Parquet, 2 GiB of black-box snapshots by default), and keeps 1 GiB of the disk free: below
+that it deletes the oldest data first and raises `jarvis.storage.low` when nothing else may go.
 
 ## Dashboard
 

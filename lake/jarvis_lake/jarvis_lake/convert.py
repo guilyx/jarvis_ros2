@@ -4,7 +4,8 @@
 
 A split that was never closed (the recorder died with it) has no footer and no index. It is read
 as a stream instead, record after record, until the data stops making sense: everything up to the
-last complete chunk is kept, which is what `mcap recover` would keep.
+last complete record (or chunk, if the recorder chunks) is kept, which is what `mcap recover` would
+keep.
 """
 
 import collections

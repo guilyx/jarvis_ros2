@@ -6,7 +6,7 @@ the stream's sequence (the boot counter), and the recorded events up to the last
 crash (the torn split is recovered into the lake).
 
 A kill keeps what the OS had not written yet; a power cut would not. The state files are fsynced
-for that; recordings lose the MCAP chunk the recorder had not written yet (config/mcap_writer.yaml)."""
+for that; recordings lose what the recorder had not written yet (config/mcap_writer.yaml)."""
 
 import os
 import signal
@@ -19,8 +19,6 @@ from jarvis_interfaces.msg import Event
 from jarvis_interfaces.srv import GetFaults
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
-RATE = 200  # events per second, from 8 components: under the hub's flood control
-SECONDS = 6
 MAX_LOST_S = 1.5  # NFR-6 is ~1 s; a shared CI machine gets some slack
 FAULTS = ("test.durability.a", "test.durability.b", "test.durability.c")
 
@@ -82,7 +80,10 @@ def open_faults(node, client, codes=("test.durability.*",)):
     return future.result().faults if future.result() else None
 
 
-def test_a_crash_keeps_faults_sequence_and_recordings(ros, tmp_path):
+# A busy robot, and a quiet one: what a crash loses must not depend on how much the robot says.
+# Events come from 8 components, under the hub's flood control.
+@pytest.mark.parametrize(("rate", "seconds"), [(200, 6), (10, 15)], ids=["busy", "quiet"])
+def test_a_crash_keeps_faults_sequence_and_recordings(ros, tmp_path, rate, seconds):
     data_dir = tmp_path
     log = open(data_dir / "launch.log", "w")  # noqa: SIM115 - both runs write to it
     reliable = QoSProfile(depth=1000, reliability=ReliabilityPolicy.RELIABLE)
@@ -111,14 +112,14 @@ def test_a_crash_keeps_faults_sequence_and_recordings(ros, tmp_path):
 
         # Events flow, then the crash: nothing gets to shut down cleanly.
         sent, start = 0, time.monotonic()
-        while time.monotonic() - start < SECONDS:
+        while time.monotonic() - start < seconds:
             e = Event(kind=Event.KIND_LOG, code="test.durability.tick", severity=Event.SEVERITY_INFO)
             e.id = f"tick-{sent}"
             e.source.node, e.source.component = "/durability", f"durability-{sent % 8}"
             e.stamp = ros.get_clock().now().to_msg()
             ingest.publish(e)
             sent += 1
-            while (wait := start + sent / RATE - time.monotonic()) > 0:
+            while (wait := start + sent / rate - time.monotonic()) > 0:
                 rclpy.spin_once(ros, timeout_sec=wait)
         last_seq = max(seqs)
         crashed_at = time.monotonic()
@@ -142,7 +143,7 @@ def test_a_crash_keeps_faults_sequence_and_recordings(ros, tmp_path):
         assert min(seqs) > last_seq
 
         # The torn split of the first run is recovered into the lake: the stream up to the crash, bar
-        # its last moments (the chunk the recorder had not written yet).
+        # its last moments (what the recorder had not written yet).
         from jarvis_lake.lake import Lake
 
         def recovered():
@@ -159,7 +160,7 @@ def test_a_crash_keeps_faults_sequence_and_recordings(ros, tmp_path):
         missing = [seen for id_, seen in published.items() if id_ not in kept]
         lost_s = crashed_at - min(missing, default=crashed_at)
         print(f"durability: {len(missing)} of {len(published)} events lost, the last {lost_s:.2f} s")
-        assert len(published) > RATE * SECONDS * 0.9, f"{len(published)} of {sent} published"
+        assert len(published) > rate * seconds * 0.9, f"{len(published)} of {sent} published"
         assert lost_s <= MAX_LOST_S, f"{len(missing)} events lost: {lost_s:.2f} s before the crash"
     finally:
         stop(second)

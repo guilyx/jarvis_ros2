@@ -73,7 +73,7 @@ flowchart LR
 |----|---------|
 | 5.1 ✔ | Load and soak tests against the NFR targets: `jarvis-bench` (the core, ROS-free) and `jarvis_load` (the stack), a CI smoke test and a nightly soak; the fixes they called for (bounded incidents, the isolated container, burst-deep queues). Measured in [01-requirements §5](01-requirements.md#5-non-functional-requirements) |
 | 5.2 | Batched event stream (group commit): one message per batch on `/jarvis/events`, for NFR-1's 10 000 events/s and NFR-5's footprint |
-| 5.3 | Retention/eviction under disk pressure; power-cut durability test |
+| 5.3 ✔ | Crash durability and disk pressure: small MCAP chunks, a SIGKILL test (faults, `seq` and recordings survive), a free-disk floor in the lake and `jarvis.storage.low`. Measured in [01-requirements §5](01-requirements.md#measured-53) |
 | 5.4 | SROS2 profile, TLS/OIDC guide, redaction audit |
 | 5.5 | Docs: integration guide, rule cookbook, runbook templates, operator guide |
 | 5.6 | Release: versioned Docker images, bloom-ready packages, CHANGELOGs, quality declaration |

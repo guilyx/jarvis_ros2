@@ -228,9 +228,9 @@ flowchart LR
 | Orchestrator crash mid-plan | Plans are **not** resumed, because resuming blind is unsafe. The snapshot lists executions that were `RUNNING`. It emits `jarvis.recovery.interrupted` (ERROR) for each and escalates their incidents. |
 | Rule engine restart | Partial matches are lost (documented). Cooldowns and `max_fires` counters are restored from the snapshot, so a restart can't cause a recovery storm. Optional warm-up replays the last N minutes from the event hub's ring buffer. |
 | Recorder down or lagging | The fault manager raises `jarvis.recorder.down` if `/jarvis/events` has no recorder subscription, or no split closed for 2× the split duration. Live behavior is unaffected. |
-| Hard crash / power cut | Open state survives (fsynced snapshots). The last unflushed MCAP chunk (≤ ~1 s) can be lost. Unfinalized MCAP files are recovered by the lake (`mcap recover` / `ros2 bag reindex`). |
+| Hard crash / power cut | Open state survives (fsynced snapshots). The MCAP chunk being written (16 KiB, ≤ ~1 s) is lost, and on a power cut what the OS had not written back. The lake recovers the torn split when Jarvis restarts. Tested with SIGKILL in CI (`test_durability.py`). |
 | Event flood | Per-(source, code) token bucket. Excess is collapsed into `jarvis.ingest.suppressed` summaries. On overload, DEBUG/INFO are shed first and ≥ ERROR is never dropped. All counted in diagnostics. |
-| Disk pressure | Lake retention deletes the oldest MCAP splits that have **already been converted**, then the oldest Parquet partitions. Disk usage is reported in diagnostics. |
+| Disk pressure | Below a free-disk floor (1 GiB), lake retention deletes more, oldest first: MCAP splits that have **already been converted**, then black-box snapshots, then Parquet days (never the newest). If that is not enough, the lake's diagnostic turns ERROR and it raises `jarvis.storage.low`. |
 | Event loops (rule ↔ rule) | Causal depth is tracked via `causation_id`. Depth > 16 is rejected with `jarvis.loop.detected`. A rule never matches events it caused itself. |
 | LLM offline / rate-limited | The agent falls back to the heuristic analyst and marks insights `degraded=true`. |
 | Bad config pushed | Hot reload validates first. On error, the old config stays live and errors are returned and emitted as events. |

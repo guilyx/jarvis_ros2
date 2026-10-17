@@ -461,10 +461,12 @@ flowchart LR
 | **State** | Open fault episodes, incidents, acks, latches; running executions; rule cooldowns/counters; hub `boot_count` | `$JARVIS_DATA/state/*.json` (write tmp → fsync → rename) | Current only |
 | **Black box** | High-rate sensor topics in a rosbag2 **snapshot-mode** ring buffer, dumped on fault | `$JARVIS_DATA/blackbox/` | 2 GiB budget |
 
+All of it keeps 1 GiB of the disk free (`lake_min_free_gib`): below that, the lake deletes converted splits, then black-box snapshots, then old Parquet days, whatever their age, and raises `jarvis.storage.low` if that is not enough.
+
 Notes:
 - **Why this split**: bags are the ROS-standard record. They open in Foxglove/PlotJuggler next to sensor data, and replay feeds backtesting directly. Parquet + DuckDB gives fast ad-hoc queries and analytics with no server, and it ships to the cloud as plain files later.
 - **Freshness**: the lake converts each split when rosbag2 announces it closed (`events/write_split`), so history lags by ≤ 5 min. The ring buffer covers that gap. The gateway merges both by `seq`.
-- **Durability trade-off (vs. a database)**: the recorder is a subscriber in the same process, so events are recorded unless that process dies. On a hard crash, the last unflushed MCAP chunk (≤ ~1 s) can be lost; unfinalized files are recovered by the lake. **Critical state never depends on bags**: open faults and running executions live in fsynced snapshots.
+- **Durability trade-off (vs. a database)**: the recorder is a subscriber in the same process, so events are recorded unless that process dies. On a hard crash, the MCAP chunk being written (16 KiB, `config/mcap_writer.yaml`: ≤ ~1 s) is lost; unfinalized files are recovered by the lake. **Critical state never depends on bags**: open faults and running executions live in fsynced snapshots.
 - **Recorder QoS**: rosbag2 QoS overrides match the publishers (RELIABLE; TRANSIENT_LOCAL for the latched topics), so late starts still capture the current fault state.
 
 ```sql

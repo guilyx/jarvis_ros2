@@ -44,7 +44,7 @@
 - **FR-R4** Flood control: per-(source, code) rate limiting with summary events, and severity-aware load shedding (never drop ≥ `ERROR`).
 - **FR-R5** Query by time range, sequence cursor, kind, code glob, severity, component and correlation id: recent events from the event hub, history from Parquet via DuckDB.
 - **FR-R6** Black-box capture: on configured faults, trigger a rosbag2 snapshot and link it to the fault.
-- **FR-R7** Retention for bags, Parquet and black-box snapshots by age and size. Bags are deleted only after conversion.
+- **FR-R7** Retention for bags, Parquet and black-box snapshots by age and size, and a free-disk floor. Bags are deleted only after conversion.
 
 ### Faults
 - **FR-F1** Fault catalog (YAML) defines known codes: severity, debounce, heal, latch, capture, runbook.
@@ -87,7 +87,7 @@
 | NFR-4 | Match → first actuation | p99 ≤ 100 ms (excluding approval wait) |
 | NFR-5 | Footprint | Runtime container ≤ 100 MB RSS; ≤ 5 % of one core at 500 events/s |
 | NFR-6 | Durability | Open faults/executions survive crashes and power loss (fsynced snapshots). Recorded events: at most the last unflushed MCAP chunk (≤ ~1 s) lost on a hard crash. |
-| NFR-7 | Storage | Bounded: bags 10 GiB / 7 days, Parquet 5 GiB / 180 days, black box 2 GiB (defaults) |
+| NFR-7 | Storage | Bounded: bags 10 GiB / 7 days, Parquet 5 GiB / 180 days, black box 2 GiB, and ≥ 1 GiB of the disk kept free (defaults) |
 | NFR-8 | Dashboard freshness | Live event visible in UI ≤ 1 s after ingest |
 | NFR-9 | Agent latency | Incident insight p90 ≤ 60 s when online |
 | NFR-10 | Portability | Core builds with plain CMake/pip on Linux x86_64/ARM64 without ROS |
@@ -135,6 +135,30 @@ spend more than Jarvis does: wait-set rebuilds, waking readers, locks. Past abou
 rate, even taking a message to shed it costs too much: the ingest queue fills and most events are
 lost. 5.2 batches the stream (one message per group of events, the "group commit" of NFR-2) to
 reach NFR-1 and NFR-5.
+
+### Measured (5.3)
+
+`ros/jarvis_bringup/test/test_durability.py` (in CI) kills the whole stack with SIGKILL while
+200 events/s flow, then starts it again on the same data directory:
+
+| Target | Measured | |
+|--------|----------|---|
+| NFR-6 durability | The open faults are back, the stream's `seq` carries on above the last one, and the torn split is recovered into the lake up to the last 0.2–0.5 s before the crash (nothing lost before that) | ✔ |
+| NFR-7 storage | The budgets, plus a free-disk floor (1 GiB): below it the lake deletes more, cheapest loss first, and raises `jarvis.storage.low` when nothing else may go (unit tests, and the same test file on the stack) | ✔ |
+
+What it took:
+- **Small MCAP chunks.** rosbag2's MCAP writer keeps a chunk in memory until it is full, 768 KiB of
+  records by default: a crash lost everything since the start of a split. 16 KiB chunks
+  (`config/mcap_writer.yaml`) still compress about 4×. A quieter stream loses more seconds, never
+  more data.
+- **A free-space floor.** The age and size budgets don't know how big the disk is, nor what else
+  uses it. The lake checks the free space at every pass. Below the floor it deletes converted
+  splits (their events are in Parquet), then black-box snapshots, then old days of Parquet. A
+  split that is not converted yet and the newest day never go.
+
+A kill keeps what the OS had not written back yet; a power cut also loses that (up to the file
+system's commit interval, 5 s on ext4 by default). The state snapshots are fsynced for this; the
+recorder is not.
 
 ## 6. Glossary
 

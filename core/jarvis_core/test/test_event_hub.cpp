@@ -245,3 +245,37 @@ TEST(EventHub, EvictsLowSeverityFirstAndReportsIncompleteness)
   q.after_seq = hub.last_seq();
   EXPECT_TRUE(hub.query(q).complete);
 }
+
+TEST(EventHub, ShedsRoutineLogsWhenItIsBehind)
+{
+  EventHub hub(small_config(), 1);  // shed_after 1 s, below WARN (the defaults)
+  const Duration behind = 2 * kSecond;
+  EXPECT_EQ(
+    hub.ingest(report("app.chatty", Kind::Log, Severity::Info), kT0, behind).reject_reason, "shed");
+  EXPECT_EQ(
+    hub.ingest(report("app.chatty", Kind::Log, Severity::Debug), kT0, behind).reject_reason,
+    "shed");
+  EXPECT_TRUE(hub.ingest(report("app.retry", Kind::Log, Severity::Warn), kT0, behind).accepted);
+  EXPECT_TRUE(hub.ingest(report("app.mode", Kind::State, Severity::Info), kT0, behind).accepted);
+  EXPECT_TRUE(hub.ingest(report("app.broke"), kT0, behind).accepted) << "faults are never shed";
+  EXPECT_TRUE(
+    hub.ingest(report("app.chatty", Kind::Log, Severity::Info), kT0, kSecond / 2).accepted)
+    << "not behind enough";
+  EXPECT_TRUE(hub.ingest(report("app.chatty2", Kind::Log, Severity::Info), kT0).accepted)
+    << "queued unknown";
+  EXPECT_EQ(hub.stats().shed, 2u);
+
+  EXPECT_TRUE(hub.advance_to(kT0 + kSecond).empty()) << "summaries come once a window";
+  const auto out = hub.advance_to(kT0 + 2 * kSecond);
+  ASSERT_EQ(out.size(), 1u);
+  EXPECT_EQ(out[0].code, "jarvis.ingest.shed");
+  EXPECT_EQ(attr_int(out[0].attrs, "count"), 2);
+  EXPECT_EQ(*attr_string(out[0].attrs, "below"), "WARN");
+  EXPECT_TRUE(hub.advance_to(kT0 + 10 * kSecond).empty()) << "nothing shed since";
+
+  EventHubConfig off = small_config();
+  off.shed_after = 0;
+  EventHub never(off, 1);
+  EXPECT_TRUE(
+    never.ingest(report("app.chatty", Kind::Log, Severity::Info), kT0, 60 * kSecond).accepted);
+}

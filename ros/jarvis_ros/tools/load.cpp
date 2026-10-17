@@ -11,7 +11,7 @@
 // logs, some warnings and states, `--faults` % faults raised and cleared), reads them back on
 // /jarvis/events (then, with --burst N, N more as fast as it can: a burst to buffer),
 // and reports the rate it got through, the ingest -> publish -> delivery latency, what was lost
-// (sent, not delivered and not counted in a suppression summary), and the RSS and CPU of the
+// (sent, not delivered and not counted in a suppression or shedding summary), and the RSS and CPU of the
 // Jarvis processes (those whose executable's name has `--process`, by default the containers).
 // With --check it exits 1 when something was lost, p99 is over --max-p99-ms, less than 99 % of the
 // rate got through, or the RSS is over --max-rss-mb (0: not checked).
@@ -309,7 +309,16 @@ int main(int argc, char ** argv)
   latency_ms.reserve(static_cast<std::size_t>(o.rate * o.seconds) + 16);
   std::atomic<std::uint64_t> received{0};
   std::atomic<std::uint64_t> suppressed{0};
+  std::atomic<std::uint64_t> shed{0};
   auto sub = node->create_subscription<Event>("/jarvis/events", qos, [&](Event::UniquePtr e) {
+    if (e->code == "jarvis.ingest.shed") {  // the hub was behind: routine logs dropped
+      for (const auto & a : e->attrs) {
+        if (a.key == "count") {
+          shed += static_cast<std::uint64_t>(a.int_value);
+        }
+      }
+      return;
+    }
     if (e->code == "jarvis.ingest.suppressed") {
       for (const auto & a : e->attrs) {
         if (a.key == "producer" && a.string_value.rfind("/load/", 0) != 0) {
@@ -393,7 +402,7 @@ int main(int argc, char ** argv)
   // Drain: what is in flight, and a suppression summary window (10 s by default) if needed.
   const auto drain_until =
     SteadyClock::now() + std::chrono::seconds(12 + static_cast<int>(o.burst / 2000));
-  while (received + suppressed < sent && SteadyClock::now() < drain_until) {
+  while (received + suppressed + shed < sent && SteadyClock::now() < drain_until) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
   sending = false;
@@ -407,8 +416,9 @@ int main(int argc, char ** argv)
     const auto steady = static_cast<std::ptrdiff_t>(std::min(steady_received, latency_ms.size()));
     lat.assign(latency_ms.begin(), latency_ms.begin() + steady);
   }
-  const std::uint64_t got = received, shed = suppressed;
-  const std::uint64_t lost = sent > got + shed ? sent - got - shed : 0;
+  const std::uint64_t got = received, limited = suppressed, dropped = shed;
+  const std::uint64_t accounted = got + limited + dropped;
+  const std::uint64_t lost = sent > accounted ? sent - accounted : 0;
   double rss_start = 0, rss_end = 0, rss_max = 0, cpu = 0;
   if (!samples.empty()) {
     rss_start = samples.front().rss_mb;
@@ -428,7 +438,8 @@ int main(int argc, char ** argv)
     {"sent", sent},
     {"sent_per_s", send_s > 0 ? static_cast<double>(sent - o.burst) / send_s : 0.0},
     {"delivered", got},
-    {"suppressed", shed},
+    {"suppressed", limited},
+    {"shed", dropped},
     {"lost", lost},
     {"latency_ms",
      {{"p50", percentile(lat, 0.5)},
@@ -448,7 +459,7 @@ int main(int argc, char ** argv)
     {"p99 <= " + std::to_string(static_cast<int>(o.max_p99_ms)) + " ms (NFR-2)",
      r["latency_ms"]["p99"].get<double>() <= o.max_p99_ms},
     {">= 99 % of the rate got through (NFR-1 at 10000/s)",
-     static_cast<double>(got + shed) >= 0.99 * static_cast<double>(sent) &&
+     static_cast<double>(got + limited) >= 0.99 * static_cast<double>(sent) &&
        r["sent_per_s"].get<double>() >= 0.99 * o.rate},
   };
   if (o.max_rss_mb > 0) {
@@ -462,7 +473,8 @@ int main(int argc, char ** argv)
 
   std::cout << std::fixed << std::setprecision(1) << "sent " << sent << " at "
             << r["sent_per_s"].get<double>() << "/s from " << o.sources << " sources; delivered "
-            << got << ", suppressed " << shed << ", lost " << lost << "\n"
+            << got << ", suppressed " << limited << ", shed " << dropped << ", lost " << lost
+            << "\n"
             << "latency ms: p50 " << r["latency_ms"]["p50"].get<double>() << ", p99 "
             << r["latency_ms"]["p99"].get<double>() << ", max "
             << r["latency_ms"]["max"].get<double>() << "\n";

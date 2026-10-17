@@ -40,6 +40,13 @@ struct EventHubConfig
   /// How long suppressed events are counted before one `jarvis.ingest.suppressed` summary.
   Duration suppression_window{10 * kSecond};
 
+  /// Load shedding: when an event waited longer than this in the ingest queue (the hub is behind),
+  /// a LOG below `shed_below` is dropped, so that faults, states and warnings get through and the
+  /// hub catches up. 0 disables it. Counted, and summarized as `jarvis.ingest.shed` every
+  /// `suppression_window`.
+  Duration shed_after{1 * kSecond};
+  Severity shed_below{Severity::Warn};
+
   std::size_t dedupe_capacity{8192};
   int max_causal_depth{16};
 
@@ -84,6 +91,7 @@ struct HubStats
   std::uint64_t rejected{0};
   std::uint64_t duplicates{0};
   std::uint64_t suppressed{0};
+  std::uint64_t shed{0};
   std::uint64_t evicted{0};
   std::size_t buffered_events{0};
   std::size_t buffered_bytes{0};
@@ -95,7 +103,8 @@ public:
   /// `boot_count` goes into the high 16 bits of every seq so seq stays monotonic across restarts.
   EventHub(EventHubConfig config, std::uint16_t boot_count, std::uint64_t id_seed = 0);
 
-  IngestResult ingest(Event event, Timestamp now);
+  /// `queued`: how long the event waited before the hub got it (0: not known), for load shedding.
+  IngestResult ingest(Event event, Timestamp now, Duration queued = 0);
 
   /// Emits suppression summaries that are due. Call periodically (e.g. 1 Hz) and before queries.
   std::vector<Event> advance_to(Timestamp now);
@@ -142,6 +151,8 @@ private:
   std::deque<Event> low_;   // DEBUG and INFO
   std::deque<Event> high_;  // WARN and above
   std::size_t buffered_bytes_{0};
+  std::uint64_t shed_pending_{0};
+  Timestamp shed_since_{0};
   std::uint64_t evicted_max_seq_{0};
   Timestamp evicted_max_recv_{0};
 };

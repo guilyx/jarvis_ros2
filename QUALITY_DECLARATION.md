@@ -71,8 +71,13 @@ and summarized at the end. A package moves up once its gaps close.
 - [x] **Public API testing.** The interfaces, the API (every endpoint, roles included), the
   languages (parser, linter, the design document's and the cookbook's examples) and the CLIs are
   tested.
-- [ ] **Coverage.** Not measured yet. Target: line coverage reported in CI for the core and the
-  Python services, then a threshold.
+- [x] **Coverage, measured.** CI reports line coverage on every change, in each job's summary:
+  the core (gcov, over its unit tests) and the lake, the gateway and the agent (pytest-cov, over
+  their ROS-free tests). When it was first measured: core 92 %, lake 80 %, gateway 81 %, agent
+  89 %. The Python services' ROS adapters count as uncovered there: the ROS job's tests exercise
+  them, and that job is not measured.
+- [ ] **A coverage threshold.** Not enforced yet: the next step is to fail CI below the figures
+  above.
 - [x] **Performance.** `jarvis-bench` (the core) and `jarvis_load` (the stack) check the targets
   of 01-requirements §5 in CI; the nightly soak checks memory and latency over time; the results
   are in 01-requirements ("Measured").
@@ -113,7 +118,7 @@ and summarized at the end. A package moves up once its gaps close.
 
 1. Required peer review on `main`.
 2. A generated C++ API reference.
-3. Coverage measured in CI, with a threshold.
+3. A coverage threshold in CI (coverage is measured).
 4. clang-tidy or CodeQL in CI.
 5. rosdep keys (or vendored packages) for the Python services' dependencies.
 6. arm64 and a second RMW in CI.

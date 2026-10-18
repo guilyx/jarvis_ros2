@@ -84,7 +84,7 @@ Where the field is going (October 2026): diagnostics converging on SOVD (ISO 179
 | PR | Content |
 |----|---------|
 | 6.1 ✔ | Four-eyes approvals: nobody approves a run they asked for, nor its sub-plans or `on_failure` ladder (`on_behalf_of`); the dashboard offers *Withdraw* instead; `separate_approver: false` for a team of one |
-| 6.2 | MCP server (`jarvis_mcp`): AI assistants read faults, incidents, runbooks, events, recoveries and analytics through the gateway (its tokens, roles and audit), ask the agent, and, if allowed, request a recovery through the gates |
+| 6.2 ✔ | MCP server (`jarvis_mcp`, [guide](../guides/ai-assistants.md)): AI assistants read faults, incidents, runbooks, events, recoveries and analytics through the gateway (its tokens, roles and audit), ask the agent, and, if allowed, request a recovery through the gates |
 | 6.3 | ros2_medkit / SOVD interop: medkit faults into Jarvis (rules, recovery, agent on top), and Jarvis faults on a SOVD-style surface for SOVD clients |
 
 ### Later (v2+)

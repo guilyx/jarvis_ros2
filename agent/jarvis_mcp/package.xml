@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>jarvis_mcp</name>
+  <version>0.1.0</version>
+  <description>Jarvis for AI assistants: a Model Context Protocol server (stdio) through which Claude Code, Claude Desktop, Cursor and other MCP clients read the robot's faults, incidents, runbooks, events, recoveries and analytics from the Jarvis gateway, ask its agent, and (if allowed) request a recovery through the gates. Standard library only; it needs no ROS where it runs.</description>
+  <maintainer email="erwin.lejeune15@gmail.com">Erwin L.</maintainer>
+  <license>Apache-2.0</license>
+  <url type="website">https://github.com/guilyx/jarvis_ros2</url>
+  <url type="repository">https://github.com/guilyx/jarvis_ros2</url>
+  <url type="bugtracker">https://github.com/guilyx/jarvis_ros2/issues</url>
+
+  <!-- A client of the gateway's REST API: no ROS or Python dependency at run time. -->
+  <test_depend>jarvis_gateway</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

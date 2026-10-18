@@ -33,6 +33,7 @@
     approval_ttl_s: 300.0         # PENDING_APPROVAL expires after
     agent_autonomy: supervised    # ceiling for the agent: never, advise, supervised, autonomous
     min_confidence: 0.8           # autonomous agent runs need this confidence
+    separate_approver: true       # four-eyes: nobody approves a run they asked for
     max_depth: 3                  # nesting of `run` steps
     recent_executions: 20         # settled executions kept on /jarvis/executions
     actuators:                    # pluginlib, base class jarvis_ros::Actuator; add

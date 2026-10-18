@@ -41,6 +41,7 @@ def generate_launch_description():
             "data_dir": arg("data_dir"),
             "catalog": str(DEMO / "config" / "demo_faults.yaml"),
             "rules": str(DEMO / "config" / "rules"),
+            "plans": arg("plans"),
             "recovery_mode": arg("recovery_mode"),
             "blackbox_topics": "/scan /jarvis/events",
             "split_duration_s": "60",  # history (jarvis_lake) shows up within a minute
@@ -58,6 +59,11 @@ def generate_launch_description():
                 "data_dir", default_value=os.environ.get("JARVIS_DATA", "~/.local/share/jarvis/demo")
             ),
             DeclareLaunchArgument("fake_lidar", default_value="true", description="Publish /scan_raw"),
+            DeclareLaunchArgument(
+                "plans",
+                default_value=str(BRINGUP / "config" / "plans"),
+                description="Directory of recovery plans (jarvis.plans/v1)",
+            ),
             DeclareLaunchArgument(
                 "recovery_mode", default_value="ENABLED", description="ENABLED, DRY_RUN or DISABLED"
             ),

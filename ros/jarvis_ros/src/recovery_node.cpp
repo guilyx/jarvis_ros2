@@ -72,6 +72,9 @@ public:
       *this, "agent_autonomy", "supervised",
       "Ceiling for agent requests: never, advise, supervised, autonomous");
     declare<double>(*this, "min_confidence", 0.8, "Autonomous agent runs need this confidence");
+    declare<bool>(
+      *this, "separate_approver", true,
+      "Four-eyes: an operator may not approve a run they requested");
     declare<int>(*this, "max_depth", 3, "Nesting limit of `run` steps");
     declare<int>(*this, "recent_executions", 20, "Settled executions kept on /jarvis/executions");
     declare<std::vector<std::string>>(
@@ -122,6 +125,7 @@ public:
     config.approval_ttl =
       static_cast<jarvis_core::Duration>(get_parameter("approval_ttl_s").as_double() * 1e9);
     config.min_confidence = get_parameter("min_confidence").as_double();
+    config.separate_approver = get_parameter("separate_approver").as_bool();
     config.max_depth = static_cast<int>(get_parameter("max_depth").as_int());
     orch_ = std::make_unique<jarvis_core::Orchestrator>(config, std::move(plans));
     RCLCPP_INFO(

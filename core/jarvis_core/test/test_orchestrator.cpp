@@ -617,6 +617,82 @@ TEST_F(OrchestratorTest, ApprovalsWaitDecideAndExpire)
   EXPECT_NE(exec(e.execution_id).reason.find("lock 'arm' is held by holder"), std::string::npos);
 }
 
+TEST_F(OrchestratorTest, AnOperatorCannotApproveTheirOwnRun)
+{
+  load(R"(
+  - id: gated
+    requires_approval: [OPERATOR, RULE]
+    steps: [{ id: s, action: x.y }]
+  - id: risky
+    steps: [{ id: s, action: x.risky }]
+    on_failure: [{ run: { plan: fallback } }]
+  - id: fallback
+    requires_approval: [PLAN]
+    steps: [{ id: s, action: x.fallback }]
+)");
+  // alice asks (the fixture's requester); alice may not approve, "ALICE " neither; bob may.
+  const auto a = submit("gated");
+  ASSERT_EQ(a.state, ExecState::PendingApproval);
+  EXPECT_EQ(exec(a.execution_id).on_behalf_of, "alice");
+  auto d = o_->decide(a.execution_id, true, "alice", "", now_);
+  EXPECT_FALSE(d.success);
+  EXPECT_EQ(d.message, "alice requested this run: another operator must approve it");
+  EXPECT_EQ(exec(a.execution_id).state, ExecState::PendingApproval) << "still waiting";
+  EXPECT_FALSE(o_->decide(a.execution_id, true, "ALICE ", "", now_).success);
+  d = o_->decide(a.execution_id, true, "bob", "checked", now_);
+  log(d.effects);
+  EXPECT_TRUE(d.success);
+  EXPECT_EQ(exec(a.execution_id).approved_by, "bob");
+  result(starts_.back(), true);
+
+  // Withdrawing one's own request is fine.
+  const auto w = submit("gated");
+  EXPECT_TRUE(o_->decide(w.execution_id, false, "alice", "never mind", now_).success);
+  EXPECT_EQ(exec(w.execution_id).state, ExecState::Rejected);
+
+  // The on_failure ladder acts for whoever started the chain.
+  const auto r = submit("risky");
+  result(starts_.back(), false);
+  const auto & entry = exec(exec(r.execution_id).ladder_child);
+  ASSERT_EQ(entry.state, ExecState::PendingApproval);
+  EXPECT_EQ(entry.requester, Requester::Plan);
+  EXPECT_EQ(entry.on_behalf_of, "alice");
+  EXPECT_FALSE(o_->decide(entry.execution_id, true, "alice", "", now_).success);
+  EXPECT_TRUE(o_->decide(entry.execution_id, true, "bob", "", now_).success);
+  result(starts_.back(), true);
+
+  // A rule's request is nobody's: any operator approves it.
+  const auto rule = submit("gated", {}, Requester::Rule);
+  EXPECT_EQ(exec(rule.execution_id).on_behalf_of, "");
+  EXPECT_TRUE(o_->decide(rule.execution_id, true, "alice", "", now_).success);
+  result(starts_.back(), true);
+
+  // It survives a restart: the record carries who asked.
+  const auto p = submit("gated");
+  nlohmann::json j;
+  to_json(j, exec(p.execution_id));
+  EXPECT_EQ(j["on_behalf_of"], "alice");
+  Execution back;
+  from_json(j, back);
+  EXPECT_EQ(back.on_behalf_of, "alice");
+}
+
+TEST_F(OrchestratorTest, FourEyesCanBeTurnedOff)
+{
+  OrchestratorConfig c;
+  c.separate_approver = false;
+  load(
+    R"(
+  - id: gated
+    requires_approval: [OPERATOR]
+    steps: [{ id: s, action: x.y }]
+)",
+    c);
+  const auto a = submit("gated");
+  EXPECT_TRUE(o_->decide(a.execution_id, true, "alice", "", now_).success)
+    << "a one-person team can run with separate_approver: false";
+}
+
 TEST_F(OrchestratorTest, DryRunSimulatesEveryStepAndTouchesNothing)
 {
   OrchestratorConfig config;

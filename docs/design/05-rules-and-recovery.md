@@ -349,7 +349,7 @@ stateDiagram-v2
   [*] --> QUEUED : lock held, queue
   [*] --> RUNNING : gates passed
   [*] --> REJECTED : a gate failed
-  PENDING_APPROVAL --> RUNNING : approved
+  PENDING_APPROVAL --> RUNNING : approved (not by its requester)
   PENDING_APPROVAL --> REJECTED : rejected by operator
   PENDING_APPROVAL --> EXPIRED : TTL elapsed
   QUEUED --> RUNNING : lock acquired
@@ -373,6 +373,7 @@ stateDiagram-v2
 5. **Kill switch.** `~/set_mode DISABLED` from the dashboard, CLI or ROS. It takes effect immediately and cancels running executions when `cancel_running: true`.
 6. **Safe rollout.** `dry_run` (shadow) per rule, `DRY_RUN` mode globally, and `jarvis backtest` against recorded incidents before enabling.
 7. **Full audit.** Who requested, why (`rationale`), which gates passed, each step, outcome, and who approved.
+8. **Four-eyes.** An operator may not approve a run they requested, nor its sub-plans or `on_failure` ladder: each execution records who started its chain (`on_behalf_of`), and `decide` refuses that operator ("alice requested this run: another operator must approve it"). Withdrawing (rejecting) one's own request is allowed. Names compare without case or surrounding blanks. A rule's or the agent's request is nobody's: any operator approves it. `separate_approver: false` on the recovery component turns it off, for a team of one.
 
 ## 12. Tooling
 

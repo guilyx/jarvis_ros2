@@ -1,5 +1,6 @@
 {
   "approved_by": "",
+  "on_behalf_of": "",
   "args": {
     "component": "scan_relay",
     "node": "/demo/scan_relay"

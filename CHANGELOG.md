@@ -25,7 +25,7 @@ a dashboard and an agent that explains what happened.
 - Rules over the stream: events, counts, sequences with absence, combinations; partitions,
   guards, cooldowns, rate limits and shadow mode.
 - Recovery plans behind seven gates (mode, requester, preconditions, rate limits, locks,
-  approvals) with verification steps and escalation ladders; a kill switch.
+  approvals, four-eyes by default) with verification steps and escalation ladders; a kill switch.
 - Actuators for lifecycle nodes, services, parameters, black-box snapshots and Nav2.
 - `ros2 jarvis lint` and `backtest`: check rules before they ship, replay recordings through them.
 

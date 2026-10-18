@@ -120,7 +120,8 @@ oauth2-proxy \
   ignored, or anyone could send `X-Forwarded-Email: admin@...` themselves. Keep the gateway bound
   to `127.0.0.1` behind the proxy, so nothing reaches it any other way.
 - **Attribution**: what a signed-in person does (ack, clear, recover, approve) is recorded in the
-  audit trail under their e-mail.
+  audit trail under their e-mail. The same name decides **four-eyes**: nobody approves a run they
+  asked for (`separate_approver` on the recovery component, on by default).
 - **Scripts and CI** keep using tokens (`Authorization: Bearer ...`), which take precedence over
   the proxy's headers. Keep tokens out of files: `$JARVIS_GATEWAY_TOKENS="token:name:role,..."`.
 

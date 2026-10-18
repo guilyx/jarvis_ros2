@@ -122,6 +122,8 @@ oauth2-proxy \
 - **Attribution**: what a signed-in person does (ack, clear, recover, approve) is recorded in the
   audit trail under their e-mail. The same name decides **four-eyes**: nobody approves a run they
   asked for (`separate_approver` on the recovery component, on by default).
+- **AI assistants** get a token of their own, read-only unless you say otherwise
+  ([AI assistants guide](ai-assistants.md#5-safety)).
 - **Scripts and CI** keep using tokens (`Authorization: Bearer ...`), which take precedence over
   the proxy's headers. Keep tokens out of files: `$JARVIS_GATEWAY_TOKENS="token:name:role,..."`.
 

@@ -118,6 +118,10 @@ jobs:
       - name: Coverage (in the job summary)
         if: ${{ !cancelled() }} # also when the tests fail the coverage floor
         run: '{ echo "### Gateway coverage"; coverage report --format=markdown; } >>"$GITHUB_STEP_SUMMARY"'
+      - name: MCP server (jarvis_mcp, against this gateway; the official MCP client for interop)
+        run: |
+          pip install mcp==2.3.0
+          pytest -q agent/jarvis_mcp/test
 
   agent:
     name: Agent (ROS-free)

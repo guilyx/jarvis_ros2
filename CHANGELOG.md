@@ -43,6 +43,9 @@ a dashboard and an agent that explains what happened.
 - Proposes recoveries through the same gates as everyone (an operator approves by default);
   answers questions from the dashboard; scored on labelled incidents.
 - Redaction where it reads, and secrets scrubbed from every message to a model.
+- AI assistants (Claude Code, Claude Desktop, Cursor) ask the robot what is wrong over MCP:
+  `jarvis-mcp` reads faults, runbooks, incidents, events and history through the gateway, with
+  its tokens and audit trail, and requests recoveries through the gates only if allowed.
 
 ### Production
 - Measured against the requirements: load, soak, crash and disk-pressure tests in CI.

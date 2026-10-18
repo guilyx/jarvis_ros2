@@ -11,6 +11,7 @@ This declares the quality of the Jarvis packages against the ROS 2 quality categ
 | `jarvis_reporter` | C++ header and Python client library |
 | `jarvis_cli`, `jarvis_bringup`, `jarvis_demo` | `ros2 jarvis`, launch and configuration, the demo |
 | `jarvis_lake`, `jarvis_gateway`, `jarvis_agent` | Python services |
+| `jarvis_mcp` | Python client of the gateway (MCP server for AI assistants), standard library only |
 
 **Claimed level: 3.** Most Level 1 requirements are met; the gaps are listed under each section
 and summarized at the end. A package moves up once its gaps close.

@@ -79,7 +79,8 @@ public:
     declare<int>(*this, "recent_executions", 20, "Settled executions kept on /jarvis/executions");
     declare<std::vector<std::string>>(
       *this, "actuators", kBuiltinActuators, "Actuator plugins (pluginlib, jarvis_ros::Actuator)");
-    declare<int>(*this, "queue_depth", 1000, "History depth of /jarvis/events and /jarvis/ingest");
+    declare<int>(
+      *this, "queue_depth", 1000, "History depth of /jarvis/event_batches and /jarvis/ingest");
     if (declare<bool>(*this, "autostart", false, "Configure and activate on startup")) {
       autostart_timer_ = create_wall_timer(std::chrono::milliseconds(1), [this]() {
         autostart_timer_->cancel();
@@ -218,9 +219,12 @@ public:
   {
     executions_pub_->on_activate();
     active_ = true;
-    events_sub_ = create_subscription<AdaptedEvent>(
-      "events", stream_qos(depth_),
-      [this](const jarvis_core::Event & e) { apply(orch_->on_event(e, now_ns(*this))); });
+    events_sub_ = create_subscription<AdaptedBatch>(
+      "event_batches", stream_qos(depth_), [this](const std::vector<jarvis_core::Event> & batch) {
+        for (const auto & e : batch) {
+          apply(orch_->on_event(e, now_ns(*this)));
+        }
+      });
     faults_sub_ =
       create_subscription<FaultArray>("faults", latched_qos(), [this](const FaultArray & msg) {
         std::map<std::string, jarvis_core::FaultView> faults;
@@ -706,7 +710,7 @@ private:
 
   EventPublisher::SharedPtr ingest_pub_;
   rclcpp_lifecycle::LifecyclePublisher<ExecutionArray>::SharedPtr executions_pub_;
-  rclcpp::Subscription<AdaptedEvent>::SharedPtr events_sub_;
+  rclcpp::Subscription<AdaptedBatch>::SharedPtr events_sub_;
   rclcpp::Subscription<FaultArray>::SharedPtr faults_sub_;
   rclcpp_action::Server<ExecuteRecovery>::SharedPtr action_server_;
   rclcpp::Service<SetRecoveryMode>::SharedPtr mode_srv_;

@@ -276,7 +276,7 @@ The arguments people change (`ros2 launch jarvis_bringup jarvis.launch.py --show
 | `use_sim_time` | `false` | In simulation |
 | `bridges`, `record`, `blackbox`, `lake`, `gateway`, `agent`, `recovery` | `true` | Turn a part off |
 | `record_extra_topics` | `/diagnostics /rosout` | Recorded with Jarvis' own topics |
-| `blackbox_topics`, `blackbox_cache_mb` | `/tf /tf_static /odom /scan /cmd_vel /jarvis/events`, 256 | What the black box keeps, how much |
+| `blackbox_topics`, `blackbox_cache_mb` | `/tf /tf_static /odom /scan /cmd_vel /jarvis/event_batches`, 256 | What the black box keeps, how much |
 | `split_duration_s` | 300 | Length of a recording file |
 | `lake_min_free_gib` | 1 | Free disk the lake keeps |
 | `gateway_host`, `gateway_port`, `gateway_config` | `127.0.0.1`, 8080 | Where the API and the dashboard listen; tokens, webhooks |
@@ -341,7 +341,7 @@ in `agent.yaml` (`agent_config:=`) and put the key in the environment:
 
 ```bash
 ros2 jarvis faults                              # open faults (empty on a healthy robot)
-ros2 topic echo /jarvis/events --once           # the stream flows
+ros2 topic echo /jarvis/events --once           # the stream flows (one message per event)
 ros2 jarvis rules && ros2 jarvis plans          # what is loaded, and the recovery mode
 curl -s localhost:8080/api/v1/health            # the gateway sees Jarvis
 ```

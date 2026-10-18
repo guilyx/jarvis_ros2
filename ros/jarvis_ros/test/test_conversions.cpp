@@ -51,6 +51,25 @@ TEST(Conversions, EventRoundTripsWithTypedAttributes)
   EXPECT_EQ(back, e);
 }
 
+TEST(Conversions, BatchRoundTripsInOrder)
+{
+  std::vector<Event> batch(3);
+  for (std::size_t i = 0; i < batch.size(); ++i) {
+    batch[i].id = "e" + std::to_string(i);
+    batch[i].seq = i + 1;
+    batch[i].kind = Kind::Log;
+    batch[i].code = "x.y";
+    batch[i].attrs = {{"n", static_cast<std::int64_t>(i)}};
+  }
+  jarvis_interfaces::msg::EventBatch msg;
+  jarvis_ros::AdaptedBatch::convert_to_ros_message(batch, msg);
+  ASSERT_EQ(msg.events.size(), 3u);
+  EXPECT_EQ(msg.events[2].id, "e2");
+  std::vector<Event> back{Event{}};  // replaced, not appended to
+  jarvis_ros::AdaptedBatch::convert_to_custom(msg, back);
+  EXPECT_EQ(back, batch);
+}
+
 TEST(Conversions, KindAndSeverityConstantsMatchTheCore)
 {
   using M = jarvis_interfaces::msg::Event;

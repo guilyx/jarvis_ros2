@@ -104,10 +104,10 @@
 
 | Target | Measured | |
 |--------|----------|---|
-| NFR-1 throughput | Core: 110–150 k events/s through the event hub. Stack: 1 000/s plus a 20 000-event burst, nothing lost (the burst's routine logs shed once the hub is 1 s behind); 5 000/s, nothing lost, a third shed; 10 000/s, most lost | bursts ✔, 10 000/s ✘ (5.2) |
-| NFR-2 latency | p99 12–21 ms at 500/s, 20 ms at 1 000/s with a burst (publish → `/jarvis/events` → a reader); about 1 s when shedding | ✔ below ~4 000/s |
+| NFR-1 throughput | Core: 110–150 k events/s through the event hub. Stack: 10 000/s for 60 s, nothing lost; 20 000/s from 1 000 sources, nothing lost; 1 000/s and 5 000/s plus a 20 000-event burst, nothing lost (the burst's routine logs shed once the hub is 1 s behind) | ✔ |
+| NFR-2 latency | p99 10–13 ms from 500/s to 10 000/s, 23–29 ms at 20 000/s (publish → `/jarvis/event_batches` → a reader); about 1 s when shedding | ✔ |
 | NFR-3 rules | p99 37 µs per event with 200 rules (event, count and sequence patterns) | ✔ |
-| NFR-5 footprint | Container: 80–90 MB RSS with nothing buffered, growing to the buffers' budgets (event buffer 128 MB, black box 256 MB by default); 45–48 % of one core at 500/s with the recorder and the black box | ✘ (5.2) |
+| NFR-5 footprint | Container: 80–93 MB RSS with nothing buffered, growing to the buffers' budgets (event buffer 128 MB, black box 256 MB by default); 19–22 % of one core at 500/s with the recorder and the black box (4 % idle), 64 % at 10 000/s | ✘ CPU (a fifth of a core, not 5 %); RSS is the buffers' budgets |
 
 What it took:
 - **Bounded incidents.** A fault that flaps opened a new incident each time, and every resolved one
@@ -124,17 +124,38 @@ What it took:
   bringup applies `config/fastdds.xml` to its processes to lift that cap. The stream's writer stays
   1 000 deep: a deep reliable writer slows down for its slowest reader, and at 5 000 events/s that
   lost half the stream.
+- **A batched stream (5.2).** One ROS message per event cost more in the executor and Fast DDS
+  than Jarvis spends on the event: at 10 000/s the hub published 5 % of the stream, with a p99 of
+  17 s. The hub now publishes `/jarvis/event_batches`: a message when 500 events wait or 5 ms after
+  a batch's first one (`batch_max_events`, `batch_period_ms`), and Jarvis's components, the
+  recorder, the black box and the gateway read that. A batch's effects are applied together (one
+  fault snapshot per batch). `/jarvis/events` still carries one message per event, only while
+  someone subscribes. At 10 000/s everything is delivered, p99 13 ms, and at 500/s the container
+  uses 19–22 % of a core instead of 45–48 %. A 10 ms period had a p99 of 40–53 ms at 10 000/s for
+  the same CPU; 2 ms took 15 % more CPU for no better p99. Producers can batch too
+  (`/jarvis/ingest_batches`, `jarvis_load --batch N`): at 10 000/s that takes the container from
+  64 % to 51 %.
+- **A gateway that keeps up.** Once full (20 000 events), its store of recent events sorted every
+  event it held on each new one: from a few thousand events/s it stopped answering, then ran out of
+  memory. It now evicts a tenth of its capacity at a time and makes lake rows only for a query: 0.7
+  µs per event instead of 80, and at 10 000/s the gateway answers in 5–200 ms with 40 % of a core.
+  Past 50 000 events behind, it drops batches and counts them (`events_dropped` in
+  `/api/v1/system`) instead of queuing them: the recorder and the lake still have them.
 - **Load shedding.** When an event waited more than `shed_after_s` (1 s) in the ingest queue, the
   hub drops it if it is a LOG below `shed_below` (WARN), and reports the count as a
   `jarvis.ingest.shed` event every 10 s. Faults, states, warnings and Jarvis's own events are never
   shed. The wait is the middleware's receive time on the hub's host, so a producer's clock can't
   trigger it. Without shedding, 5 000 events/s lost a quarter of everything, faults included.
 
-The rest is the cost of one ROS message per event. In the profiles, the executor and Fast DDS
-spend more than Jarvis does: wait-set rebuilds, waking readers, locks. Past about twice the hub's
-rate, even taking a message to shed it costs too much: the ingest queue fills and most events are
-lost. 5.2 batches the stream (one message per group of events, the "group commit" of NFR-2) to
-reach NFR-1 and NFR-5.
+What is left of NFR-5 is the cost of waking up, not of events: at 500/s the container spends
+about a fifth of a core, 4 % of it idle, against 64 % at 10 000/s. By part, at 500/s: the event
+hub 6 %, the fault manager 3 %, the recorder and the black box about 5 % each, the bridges 1–2 %;
+the rest is Fast DDS. Each component has its own thread (the isolated container), woken for every
+message it gets. Without the recorder, the black box, the bridges, rules and recovery, the hub and
+the fault manager alone take 11.5 %. Producers that batch save a little (16 % instead of 19 % at
+500/s); the events executor container saves nothing at 500/s and a fifth at 10 000/s. Reaching 5 %
+needs fewer wake-ups per message: fewer threads, or the recorders writing batches the hub hands
+them directly.
 
 ### Measured (5.3)
 

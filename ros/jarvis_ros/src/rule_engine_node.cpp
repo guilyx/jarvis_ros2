@@ -1,13 +1,14 @@
 // Copyright 2026 Erwin L.
 // SPDX-License-Identifier: Apache-2.0
 //
-// /jarvis/rule_engine: complex event processing over /jarvis/events (docs/design/05-rules-and-recovery.md
+// /jarvis/rule_engine: complex event processing over the event stream (docs/design/05-rules-and-recovery.md
 // §1-7). It runs jarvis_core::RuleEngine, publishes matches and rule actions to /jarvis/ingest, sends
 // `recover` actions to /jarvis/recovery as ExecuteRecovery goals, and saves fire history to disk so
 // a restart cannot cause a recovery storm.
 
 #include <algorithm>
 #include <diagnostic_updater/diagnostic_updater.hpp>
+#include <iterator>
 #include <jarvis_core/rule_engine.hpp>
 #include <jarvis_core/util.hpp>
 #include <jarvis_interfaces/action/execute_recovery.hpp>
@@ -54,7 +55,8 @@ public:
       *this, "recovery_wait_s", 5.0,
       "How long a recover action waits for the recovery server (e.g. at startup) before giving up");
     declare<int>(*this, "max_partitions", 1000, "Partitions kept per rule");
-    declare<int>(*this, "queue_depth", 1000, "History depth of /jarvis/events and /jarvis/ingest");
+    declare<int>(
+      *this, "queue_depth", 1000, "History depth of /jarvis/event_batches and /jarvis/ingest");
     if (declare<bool>(*this, "autostart", false, "Configure and activate on startup")) {
       autostart_timer_ = create_wall_timer(std::chrono::milliseconds(1), [this]() {
         autostart_timer_->cancel();
@@ -167,9 +169,16 @@ public:
   CallbackReturn on_activate(const rclcpp_lifecycle::State &) override
   {
     active_ = true;
-    events_sub_ = create_subscription<AdaptedEvent>(
-      "events", stream_qos(depth_),
-      [this](const jarvis_core::Event & e) { apply(engine_->on_event(e, now_ns(*this))); });
+    events_sub_ = create_subscription<AdaptedBatch>(
+      "event_batches", stream_qos(depth_), [this](const std::vector<jarvis_core::Event> & batch) {
+        jarvis_core::Effects effects;
+        const auto now = now_ns(*this);
+        for (const auto & e : batch) {
+          auto fx = engine_->on_event(e, now);
+          std::move(fx.begin(), fx.end(), std::back_inserter(effects));
+        }
+        apply(std::move(effects));
+      });
     faults_sub_ =
       create_subscription<FaultArray>("faults", latched_qos(), [this](const FaultArray & msg) {
         std::map<std::string, std::string> active;
@@ -431,7 +440,7 @@ private:
   std::vector<Waiting> waiting_;
 
   EventPublisher::SharedPtr ingest_pub_;
-  rclcpp::Subscription<AdaptedEvent>::SharedPtr events_sub_;
+  rclcpp::Subscription<AdaptedBatch>::SharedPtr events_sub_;
   rclcpp::Subscription<FaultArray>::SharedPtr faults_sub_;
   rclcpp_action::Client<ExecuteRecovery>::SharedPtr recovery_;
   rclcpp::Service<ReloadConfig>::SharedPtr reload_srv_;

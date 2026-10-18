@@ -1,7 +1,8 @@
 # 04 — Data Flow
 
 > **TL;DR** — Producers publish to `/jarvis/ingest`. The event hub validates, sequences and republishes on
-> `/jarvis/events`. Every decision Jarvis makes (fault transitions, rule matches, recovery steps, insights)
+> `/jarvis/event_batches`, in batches (and on `/jarvis/events`, one message per event, for whoever reads
+> it). Every decision Jarvis makes (fault transitions, rule matches, recovery steps, insights)
 > loops back through the hub as a new event, with `causation_id` pointing at its cause. rosbag2 records the
 > stream, and the lake turns recordings into queryable Parquet.
 
@@ -12,7 +13,7 @@
 ```mermaid
 flowchart LR
   P["Producers<br/>reporter libs · bridges"] -->|"/jarvis/ingest"| HUB["/jarvis/event_hub<br/>validate · dedupe · shed · seq"]
-  HUB -->|"/jarvis/events"| EV{{"canonical stream"}}
+  HUB -->|"/jarvis/event_batches"| EV{{"canonical stream"}}
 
   EV --> FM["/jarvis/fault_manager"]
   FM -->|"FAULT_STATE"| P1["→ /jarvis/ingest"]
@@ -52,7 +53,7 @@ sequenceDiagram
   participant In as /jarvis/ingest
   participant H as EventHub
   participant RB as Ring buffer
-  participant Out as /jarvis/events
+  participant Out as /jarvis/event_batches
   participant R as rosbag2 recorder
 
   App->>App: client-side debounce and rate limit
@@ -62,12 +63,13 @@ sequenceDiagram
   H->>H: dedupe by id, rate-limit per (source, code)
   H->>H: fill recv_stamp and catalog defaults, assign seq
   H->>RB: append (severity-aware eviction)
-  H->>Out: publish
+  H->>Out: publish, batched (≤ 5 ms, ≤ 500 events)
   Out-->>R: recorded to the current MCAP split
 ```
 
 - **Rejections** (bad schema, oversize, causal depth > 16) produce a rate-limited `jarvis.ingest.rejected` event with the reason.
 - **Suppression**: once the token bucket is empty, the hub counts instead of forwarding, then emits one `jarvis.ingest.suppressed` event (`attrs.code`, `attrs.count`, `attrs.window_s`).
+- **Batching** (group commit): one ROS message per event costs more in the middleware (serializing, waking each reader, acknowledging) than Jarvis spends on the event, so the hub publishes the stream in batches on `/jarvis/event_batches` (`EventBatch`): a batch leaves when it holds `batch_max_events` (500) or `batch_period_ms` (5 ms) after its first event, so an event waits at most 5 ms, and an idle hub doesn't wake up. Jarvis's readers (fault manager, rule engine, recovery, recorder, black box, gateway) read the batches; one batch's effects are applied together (one fault snapshot per batch). `/jarvis/events` carries the same events one message per event, published only while someone subscribes (`ros2 topic echo`, tools, tests). A producer that sends many events can batch too, on `/jarvis/ingest_batches`.
 - **Load shedding**: when the hub is behind (an event waited more than `shed_after_s`, 1 s, in the ingest queue, by the middleware's receive time), LOG events below `shed_below` (WARN) are dropped and counted, then summarized as one `jarvis.ingest.shed` event (`attrs.count`, `attrs.window_s`) every 10 s. Faults, states, warnings and Jarvis's own events are never shed. The ingest queue holds a burst of 20 000 events (NFR-1).
 
 ## 2. Fault confirmation, incident & black box
@@ -244,7 +246,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-  BAG[("Recorded MCAP<br/>/jarvis/events")] --> RR["Replay reader<br/>(ordered by seq)"]
+  BAG[("Recorded MCAP<br/>/jarvis/event_batches")] --> RR["Replay reader<br/>(ordered by seq)"]
   RR --> CORE["jarvis_core<br/>FaultManager · RuleEngine · Orchestrator"]
   CK["FakeClock<br/>driven by recv_stamp"] --> CORE
   CORE --> FX["Effects log"]
@@ -260,9 +262,9 @@ flowchart LR
 | Path | Guarantee | Mechanism |
 |------|-----------|-----------|
 | Producer → hub | At-least-once while the hub is up | RELIABLE QoS, KEEP_LAST 1000, de-dupe by `id` |
-| Hub → `/jarvis/events` | In-order, sequenced | Single publisher, monotonic `seq` |
-| `/jarvis/events` → consumers | Gap-detectable | Consumers track `seq` and backfill via `query_events` / lake |
-| `/jarvis/events` → bag | Recorded unless the process dies (last chunk ≤ ~1 s at risk) | Recorder in the same container, RELIABLE, MCAP recovery |
+| Hub → `/jarvis/event_batches` (and `/jarvis/events`) | In-order, sequenced; a batch within 5 ms | Single publisher, monotonic `seq` |
+| Stream → consumers | Gap-detectable | Consumers track `seq` and backfill via `query_events` / lake |
+| Stream → bag | Recorded unless the process dies (last chunk ≤ ~1 s at risk) | Recorder in the same container, RELIABLE, MCAP recovery |
 | Open faults / executions | Survive restarts and power cuts | fsynced atomic state snapshots |
 | Orchestrator actions | At-most-once per step attempt | No automatic resume after a crash (`jarvis.recovery.interrupted`) |
 | Gateway WS | Gap-free on reconnect | `since_seq` resume across ring buffer and lake |

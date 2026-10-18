@@ -65,7 +65,7 @@ class TestBringup(unittest.TestCase):
         deadline = time.time() + 60.0
         while time.time() < deadline and not any(
             info.node_name == "blackbox"
-            for info in cls.node.get_subscriptions_info_by_topic("/jarvis/events")
+            for info in cls.node.get_subscriptions_info_by_topic("/jarvis/event_batches")
         ):
             rclpy.spin_once(cls.node, timeout_sec=0.1)
 
@@ -159,16 +159,17 @@ class TestRecorded(unittest.TestCase):
         (bag,) = (DATA_DIR / "bags").iterdir()
         self.assertTrue(list(bag.glob("*.mcap")))
         topics = bag_topics(bag)
-        self.assertGreater(topics.get("/jarvis/events", 0), 10)
+        self.assertGreater(topics.get("/jarvis/event_batches", 0), 3)
         self.assertGreater(topics.get("/jarvis/faults", 0), 0)
         self.assertIn("/diagnostics", topics)
         self.assertIn("/rosout", topics)
-        self.assertNotIn("/jarvis/ingest", topics, "only the canonical stream is recorded")
+        for other in ("/jarvis/ingest", "/jarvis/ingest_batches", "/jarvis/events"):
+            self.assertNotIn(other, topics, "only the canonical stream is recorded")
         self.assertFalse([t for t in topics if "write_split" in t], "recorder notices are not recorded")
 
     def test_black_box_snapshot_was_written(self):
         (box,) = (DATA_DIR / "blackbox").iterdir()
-        self.assertGreater(bag_topics(box).get("/jarvis/events", 0), 0)
+        self.assertGreater(bag_topics(box).get("/jarvis/event_batches", 0), 0)
 
     def test_state_survives_on_disk(self):
         self.assertTrue((DATA_DIR / "state" / "fault_manager.json").exists())

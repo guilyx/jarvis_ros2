@@ -58,7 +58,7 @@ kill switch, rules and analytics.
   Restart it yourself, through the same gates: `./demo jarvis recover restart-lifecycle-node -a
   node=/demo/scan_relay -a component=lidar`.
 
-- **Foxglove**: connect to `ws://localhost:8765` to browse `/jarvis/events`, `/jarvis/faults`, `/scan` and
+- **Foxglove**: connect to `ws://localhost:8765` to browse `/jarvis/event_batches`, `/jarvis/faults`, `/scan` and
   `/diagnostics` live. The MCAP recordings in `./demo-data/bags/` open in Foxglove too.
 - **Restarts keep open faults**: that's the persistence at work. `./demo clear --all` clears every open
   fault; `rm -rf demo-data` (with `sudo` on Linux: the container writes as root) starts from scratch.
@@ -266,7 +266,7 @@ ros2 run jarvis_ros jarvis_load --rate 1000 --burst 20000 --check   # the runnin
 ```
 
 `jarvis_load` publishes on `/jarvis/ingest` as a fleet of nodes would, reads the events back on
-`/jarvis/events`, and reports what got through, the latency, and the container's RSS and CPU. CI runs
+`/jarvis/event_batches`, and reports what got through, the latency, and the container's RSS and CPU. CI runs
 both. A nightly soak runs the stack for 15 minutes at 500 events/s
 ([`scripts/soak.sh`](scripts/soak.sh)). What they measure against the targets is in
 [docs/design/01-requirements.md §5](docs/design/01-requirements.md#measured-51).

@@ -111,3 +111,18 @@ def test_bags_are_listed_with_their_time_range_and_incidents(make_gateway, tmp_p
         "recording/b/y.txt",
     ):
         assert h.client.get(f"/api/v1/bags/{bad}").status_code == 404
+
+
+def test_the_recent_store_keeps_the_newest_and_adding_stays_cheap():
+    from jarvis_gateway.state import RecentStore
+
+    store = RecentStore(capacity=100)
+    ev = lambda n: {"seq": str(n), "id": f"e{n}", "kind": "LOG", "code": "x.y", "severity": "INFO"}  # noqa: E731
+    for n in range(1, 1001):
+        assert store.add(ev(n))
+    assert not store.add(ev(1000)), "already there"
+    assert len(store) == 100 and len(store._events) <= 110, "evicted a tenth at a time"
+    assert store.max_seq() == 1000
+    seqs = store.table().column("seq").to_pylist()
+    assert seqs == list(range(901, 1001)), "the newest 100, in order"
+    assert store.trim_below(950) == 50 and len(store) == 50

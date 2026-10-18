@@ -32,6 +32,8 @@ class Sink(abc.ABC):
 
 
 class JarvisPort(abc.ABC):
+    dropped = 0  # events Jarvis published that the gateway could not keep up with
+
     @abc.abstractmethod
     async def start(self, sink):
         """Starts receiving: events, the faults snapshot and the executions snapshot go to `sink`."""

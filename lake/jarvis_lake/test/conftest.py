@@ -29,13 +29,16 @@ SEVERITY = {"DEBUG": 10, "INFO": 20, "WARN": 30, "ERROR": 40, "CRITICAL": 50}
 T0 = datetime.datetime(2026, 10, 14, 23, 50, tzinfo=datetime.UTC)  # ten minutes before midnight
 
 
-def event_msgdef():
+def event_msgdef(batch=False):
     deps = [
         ("builtin_interfaces/Time", "int32 sec\nuint32 nanosec\n"),
         ("jarvis_interfaces/Attribute", (MSG / "Attribute.msg").read_text()),
         ("jarvis_interfaces/Source", (MSG / "Source.msg").read_text()),
     ]
     text = (MSG / "Event.msg").read_text()
+    if batch:
+        deps.insert(0, ("jarvis_interfaces/Event", text))
+        text = (MSG / "EventBatch.msg").read_text()
     for name, body in deps:
         text += f"\n{SEPARATOR}\nMSG: {name}\n{body}"
     return text
@@ -94,17 +97,26 @@ class Events:
         }
 
 
-def write_split(path, events, chunk_size=1 << 20, finalize=True, other_topic=False):
-    """An MCAP split with /jarvis/events (and optionally another topic, which the lake ignores)."""
+def write_split(path, events, chunk_size=1 << 20, finalize=True, other_topic=False, batch=0):
+    """An MCAP split with /jarvis/events (and optionally another topic, which the lake ignores), or
+    with `batch`, /jarvis/event_batches: messages of up to `batch` events, as the recorder writes."""
     path = pathlib.Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     f = open(path, "wb")  # noqa: SIM115 - an unfinalized split leaves the file as the crash would
     writer = Writer(f, chunk_size=chunk_size)
     schema = writer.register_msgdef("jarvis_interfaces/msg/Event", event_msgdef())
+    batches = writer.register_msgdef("jarvis_interfaces/msg/EventBatch", event_msgdef(batch=True))
     clock = writer.register_msgdef("builtin_interfaces/msg/Time", "int32 sec\nuint32 nanosec\n")
-    for e in events:
+    groups = [events[i : i + batch] for i in range(0, len(events), batch)] if batch else [[e] for e in events]
+    for group in groups:
+        e = group[-1]
         t = e["recv_stamp"]["sec"] * 1_000_000_000 + e["recv_stamp"]["nanosec"]
-        writer.write_message("/jarvis/events", schema, e, log_time=t, publish_time=t)
+        if batch:
+            writer.write_message(
+                "/jarvis/event_batches", batches, {"events": group}, log_time=t, publish_time=t
+            )
+        else:
+            writer.write_message("/jarvis/events", schema, e, log_time=t, publish_time=t)
         if other_topic:
             writer.write_message("/clock", clock, e["stamp"], log_time=t, publish_time=t)
     if finalize:

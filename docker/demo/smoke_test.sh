@@ -107,7 +107,7 @@ expect "SUCCEEDED +restart-lifecycle-node +operator smoke-test" "$(screen)" "ope
 
 docker compose stop
 compgen -G "demo-data/bags/*/metadata.yaml" >/dev/null || fail "recording not finalized"
-grep -q "/jarvis/events" demo-data/bags/*/metadata.yaml || fail "/jarvis/events not recorded"
+grep -q "/jarvis/event_batches" demo-data/bags/*/metadata.yaml || fail "/jarvis/event_batches not recorded"
 compgen -G "demo-data/blackbox/*/*.mcap" >/dev/null || fail "no black-box file"
 
 # Same decisions when the recording is replayed through the rules (the container is stopped: run one).

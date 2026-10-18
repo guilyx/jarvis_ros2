@@ -11,8 +11,10 @@ The first release: record, manage and recover from faults on ROS 2 Jazzy robots,
 a dashboard and an agent that explains what happened.
 
 ### Record and manage faults
-- One event stream (`/jarvis/events`) for everything Jarvis knows: faults, rule matches, recovery
-  steps, insights, operator actions. Validated, sequenced, rate-limited, and recorded to MCAP.
+- One event stream for everything Jarvis knows: faults, rule matches, recovery steps, insights,
+  operator actions. Validated, sequenced, rate-limited, and recorded to MCAP. It goes out in
+  batches (`/jarvis/event_batches`, each within 5 ms), and one message per event on
+  `/jarvis/events` for whoever reads it.
 - Faults from your nodes (`jarvis_reporter`, C++ and Python) and, without any code, from
   `/diagnostics`, `/rosout`, action status, lifecycle transitions, silent or slow topics and
   missing nodes.

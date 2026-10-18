@@ -3,9 +3,11 @@
   SROS2 policy for Jarvis (milestone 5.4, NFR-13): one enclave per Jarvis process, so DDS security
   authenticates every participant, encrypts the traffic and enforces who may do what:
 
-  - only the Jarvis core (/jarvis/container) publishes the stream and its state (/jarvis/events,
-    /jarvis/faults, /jarvis/executions) and serves Jarvis' services and actions;
-  - producers (robot nodes reporting through jarvis_reporter) and Jarvis itself publish /jarvis/ingest;
+  - only the Jarvis core (/jarvis/container) publishes the stream and its state
+    (/jarvis/event_batches, /jarvis/events, /jarvis/faults, /jarvis/executions) and serves Jarvis'
+    services and actions;
+  - producers (robot nodes reporting through jarvis_reporter) and Jarvis itself publish /jarvis/ingest
+    (high-rate producers: /jarvis/ingest_batches);
   - only operators, the gateway and the agent ask for recoveries, acknowledge or clear faults.
 
   The core records, bridges and watches what the robot publishes, and recoveries act on robot nodes,
@@ -19,7 +21,7 @@
   - /jarvis/agent      reads through the gateway, publishes insights, may propose recoveries;
   - /jarvis/operator   people: ros2 jarvis, ros2 run jarvis_demo monitor, ros2 topic/node/service;
   - /jarvis/producer   a robot node that reports to Jarvis (jarvis_reporter): it may publish
-                       /jarvis/ingest. Copy its profile into the robot's own policy, under each
+                       /jarvis/ingest(_batches). Copy its profile into the robot's own policy, under each
                        node's enclave.
 
   Keystore: ros2 run jarvis_bringup jarvis_keystore KEYSTORE [your_policy.xml ...]
@@ -104,7 +106,7 @@
             <topic>/parameter_events</topic>
           </topics>
           <topics subscribe="ALLOW">
-            <topic>/jarvis/events</topic>
+            <topic>/jarvis/event_batches</topic>
             <topic>/jarvis/faults</topic>
             <topic>/jarvis/executions</topic>
             <topic>/parameter_events</topic>
@@ -168,6 +170,7 @@
           </topics>
           <topics subscribe="ALLOW">
             <topic>/jarvis/events</topic>
+            <topic>/jarvis/event_batches</topic>
             <topic>/jarvis/faults</topic>
             <topic>/jarvis/executions</topic>
             <topic>/diagnostics</topic>
@@ -195,6 +198,7 @@
         <profile ns="/" node="producer">
           <topics publish="ALLOW">
             <topic>/jarvis/ingest</topic>
+            <topic>/jarvis/ingest_batches</topic>
             <topic>/rosout</topic>
             <topic>/parameter_events</topic>
           </topics>

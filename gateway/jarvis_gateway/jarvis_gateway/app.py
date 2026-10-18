@@ -190,6 +190,7 @@ def create_app(settings, port, notifier=None):
             "uptime_s": round(time.time() - gw.started_at, 1),
             "connected": gw.port.connected,
             "events_received": gw.state.events_received,
+            "events_dropped": gw.port.dropped,
             "recent_events": len(gw.state.recent),
             "stream_clients": len(gw.clients),
             "components": components,

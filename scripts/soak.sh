@@ -26,6 +26,6 @@ sleep 15
 status=0
 ros2 run jarvis_ros jarvis_load --rate "$rate" --seconds "$soak_s" --check --max-p99-ms 100 \
   --max-rss-mb "$max_rss_mb" --json "$out/soak.json" | tee "$out/soak.txt" || status=1
-ros2 run jarvis_ros jarvis_load --rate 5000 --seconds 30 --burst 20000 --sources 500 \
+ros2 run jarvis_ros jarvis_load --rate 10000 --seconds 30 --burst 20000 --sources 500 \
   --json "$out/peak.json" | tee "$out/peak.txt" || true
 exit "$status"

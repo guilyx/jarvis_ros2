@@ -43,7 +43,7 @@ def generate_launch_description():
             "rules": str(DEMO / "config" / "rules"),
             "plans": arg("plans"),
             "recovery_mode": arg("recovery_mode"),
-            "blackbox_topics": "/scan /jarvis/events",
+            "blackbox_topics": "/scan /jarvis/event_batches",
             "split_duration_s": "60",  # history (jarvis_lake) shows up within a minute
             "gateway": arg("gateway"),
             "gateway_host": arg("gateway_host"),

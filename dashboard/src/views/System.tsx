@@ -1,4 +1,5 @@
 import { Download } from "lucide-react";
+import type { ReactNode } from "react";
 import { getToken } from "@/api/client";
 import { useAudit, useBags, useSystem } from "@/api/queries";
 import {
@@ -54,6 +55,16 @@ export function System() {
                 ],
                 ["live stream", status],
                 ["events received", s?.events_received.toLocaleString()],
+                ...((s?.events_dropped
+                  ? [
+                      [
+                        "dropped",
+                        <span key="d" className="text-amber-400">
+                          {s.events_dropped.toLocaleString()} (the gateway fell behind; the lake has them)
+                        </span>,
+                      ],
+                    ]
+                  : []) as [ReactNode, ReactNode][]),
                 ["held in memory", `${s?.recent_events.toLocaleString()} (until the lake has them)`],
                 ["stream clients", s?.stream_clients],
               ]}

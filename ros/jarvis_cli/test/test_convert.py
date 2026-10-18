@@ -12,7 +12,7 @@ import rosbag2_py
 from builtin_interfaces.msg import Time
 from jarvis_cli.convert import event_to_dict, iso8601, make_attrs, parse_assignments
 from jarvis_cli.verb.export import export
-from jarvis_interfaces.msg import Attribute, Event
+from jarvis_interfaces.msg import Attribute, Event, EventBatch
 from rclpy.serialization import serialize_message
 
 
@@ -60,21 +60,35 @@ def test_helpers():
     assert types == [Attribute.TYPE_STRING, Attribute.TYPE_INT, Attribute.TYPE_DOUBLE, Attribute.TYPE_BOOL]
 
 
-@pytest.mark.skipif(shutil.which("jarvis") is None, reason="the jarvis tool is not on PATH")
-def test_an_exported_bag_backtests(tmp_path):
-    bag = tmp_path / "bag"
+def write_bag(bag, events, batched):
+    """A bag as the recorder writes it (/jarvis/event_batches), or as it did before 1.0."""
     writer = rosbag2_py.SequentialWriter()
     writer.open(
         rosbag2_py.StorageOptions(uri=str(bag), storage_id="mcap"), rosbag2_py.ConverterOptions("", "")
     )
+    topic, kind = ("/jarvis/event_batches", "EventBatch") if batched else ("/jarvis/events", "Event")
     writer.create_topic(
         rosbag2_py.TopicMetadata(
-            id=0, name="/jarvis/events", type="jarvis_interfaces/msg/Event", serialization_format="cdr"
+            id=0, name=topic, type=f"jarvis_interfaces/msg/{kind}", serialization_format="cdr"
         )
     )
-    for n, (state, t) in enumerate([("ACTIVE", 100), ("CLEARED", 105), ("ACTIVE", 200)], start=1):
-        writer.write("/jarvis/events", serialize_message(fault_state(n, state, t)), t * 1_000_000_000)
+    if batched:  # the first two together, the last alone
+        groups = [events[:2], events[2:]]
+        for group in groups:
+            t = group[-1].recv_stamp.sec * 1_000_000_000
+            writer.write(topic, serialize_message(EventBatch(events=group)), t)
+    else:
+        for e in events:
+            writer.write(topic, serialize_message(e), e.recv_stamp.sec * 1_000_000_000)
     del writer  # closes the bag
+
+
+@pytest.mark.skipif(shutil.which("jarvis") is None, reason="the jarvis tool is not on PATH")
+@pytest.mark.parametrize("batched", [True, False], ids=["batched", "before-1.0"])
+def test_an_exported_bag_backtests(tmp_path, batched):
+    bag = tmp_path / "bag"
+    states = [("ACTIVE", 100), ("CLEARED", 105), ("ACTIVE", 200)]
+    write_bag(bag, [fault_state(n, s, t) for n, (s, t) in enumerate(states, start=1)], batched)
 
     events = tmp_path / "events.jsonl"
     with open(events, "w") as out:

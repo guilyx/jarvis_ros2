@@ -16,19 +16,21 @@ from jarvis_gateway.port import Sink
 
 
 class RecentStore:
-    """Events by seq, bounded: the newest `capacity` are kept. Thread-safe."""
+    """Events by seq, bounded: the newest `capacity` are kept. Thread-safe. Adding is O(1): the
+    oldest are evicted a tenth of the capacity at a time, and lake rows are only made for a query."""
 
     def __init__(self, capacity=20000):
         self.capacity = capacity
+        self._slack = max(1, capacity // 10)
         self._events = {}  # seq -> schema JSON
-        self._rows = {}  # seq -> lake row
+        self._rows = {}  # seq -> lake row, made by table()
         self._lock = threading.Lock()
         self.version = 0
         self._table = None
         self._table_version = -1
 
     def __len__(self):
-        return len(self._events)
+        return min(len(self._events), self.capacity)
 
     def add(self, event):
         """Adds an event; False if it was already there (live and backfill overlap)."""
@@ -39,13 +41,15 @@ class RecentStore:
             if seq in self._events:
                 return False
             self._events[seq] = event
-            self._rows[seq] = model.row_from_event(event)
-            if len(self._events) > self.capacity:
-                for old in sorted(self._events)[: len(self._events) - self.capacity]:
-                    del self._events[old]
-                    del self._rows[old]
+            if len(self._events) > self.capacity + self._slack:
+                self._evict()
             self.version += 1
             return True
+
+    def _evict(self):
+        for old in sorted(self._events)[: len(self._events) - self.capacity]:
+            del self._events[old]
+            self._rows.pop(old, None)
 
     def trim_below(self, seq):
         """Drops what the lake has (seq <= its newest), keeping the rest."""
@@ -53,7 +57,7 @@ class RecentStore:
             old = [s for s in self._events if s <= seq]
             for s in old:
                 del self._events[s]
-                del self._rows[s]
+                self._rows.pop(s, None)
             if old:
                 self.version += 1
             return len(old)
@@ -62,7 +66,12 @@ class RecentStore:
         """The events as an Arrow table (lake schema), rebuilt only when they changed."""
         with self._lock:
             if self._table_version != self.version:
-                self._table = model.table([self._rows[s] for s in sorted(self._rows)])
+                if len(self._events) > self.capacity:
+                    self._evict()
+                for s, e in self._events.items():
+                    if s not in self._rows:
+                        self._rows[s] = model.row_from_event(e)
+                self._table = model.table([self._rows[s] for s in sorted(self._events)])
                 self._table_version = self.version
             return self._table
 

@@ -55,7 +55,9 @@ def read_split(path):
         source = f if result.finalized else _Stream(f)
         reader = make_reader(source, decoder_factories=[DecoderFactory()])
         # File order: sorting by log time would buffer everything, and a torn end would lose it all.
-        messages = reader.iter_decoded_messages(topics=[model.EVENTS_TOPIC], log_time_order=False)
+        messages = reader.iter_decoded_messages(
+            topics=[model.BATCHES_TOPIC, model.EVENTS_TOPIC], log_time_order=False
+        )
         while True:
             try:
                 schema, _, _, msg = next(messages)
@@ -67,13 +69,18 @@ def read_split(path):
                 result.truncated = True
                 result.error = f"{type(e).__name__}: {e}"
                 break
-            if schema is None or schema.name != model.EVENT_TYPE:
+            if schema is not None and schema.name == model.BATCH_TYPE:
+                events = msg.events
+            elif schema is not None and schema.name == model.EVENT_TYPE:
+                events = [msg]
+            else:
                 result.skipped += 1
                 continue
-            try:
-                rows.append(model.row(msg, split=name))
-            except (AttributeError, KeyError, TypeError, ValueError):
-                result.skipped += 1
+            for event in events:
+                try:
+                    rows.append(model.row(event, split=name))
+                except (AttributeError, KeyError, TypeError, ValueError):
+                    result.skipped += 1
     result.rows = len(rows)
     return rows, result
 

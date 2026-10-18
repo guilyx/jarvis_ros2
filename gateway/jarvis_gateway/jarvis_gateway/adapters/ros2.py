@@ -16,7 +16,7 @@ import threading
 import rclpy
 from jarvis_cli import convert
 from jarvis_interfaces.action import Analyze, ExecuteRecovery
-from jarvis_interfaces.msg import Event, ExecutionArray, FaultArray
+from jarvis_interfaces.msg import EventBatch, ExecutionArray, FaultArray
 from jarvis_interfaces.srv import (
     AcknowledgeFault,
     CancelExecution,
@@ -37,11 +37,15 @@ from rclpy.signals import SignalHandlerOptions
 
 from jarvis_gateway.port import CommandResult, JarvisPort
 
-# Deep as the event hub's: a burst (NFR-1) waits here while the gateway catches up.
-STREAM = QoSProfile(depth=20000, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.VOLATILE)
+# Batches of the stream, deep: a burst (NFR-1) waits here while the gateway catches up.
+STREAM = QoSProfile(depth=1000, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.VOLATILE)
 LATCHED = QoSProfile(
     depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL
 )
+# Events handed to the event loop and not handled yet. Past it, batches are dropped and counted
+# (`dropped`, /api/v1/system) instead of queued: a gateway behind the stream must not run out of
+# memory. The recorder and the lake still have them.
+MAX_BACKLOG = 50000
 WAIT_S = 2.0  # how long a command waits for a service to show up before it is "unavailable"
 ASK_TIMEOUT_S = 300.0  # an answer from the agent (a model may take a while)
 
@@ -82,6 +86,9 @@ class RosPort(JarvisPort):
         self._clients = {}
         self._action = None
         self._goals = {}  # goal id -> handle in flight: kept alive until its result
+        self._backlog = 0  # events posted to the loop, not handled yet
+        self._backlog_lock = threading.Lock()
+        self.dropped = 0
 
     # -- lifecycle ---------------------------------------------------------------------------------
 
@@ -92,7 +99,7 @@ class RosPort(JarvisPort):
         # uvicorn handles SIGINT/SIGTERM and stops the port: rclpy must not shut down on its own.
         rclpy.init(context=self._context, signal_handler_options=SignalHandlerOptions.NO)
         n = self._node = rclpy.create_node(self.node_name, namespace=self.ns, context=self._context)
-        n.create_subscription(Event, f"{self.ns}/events", self._on_event, STREAM)
+        n.create_subscription(EventBatch, f"{self.ns}/event_batches", self._on_batch, STREAM)
         n.create_subscription(FaultArray, f"{self.ns}/faults", self._on_faults, LATCHED)
         n.create_subscription(ExecutionArray, f"{self.ns}/executions", self._on_executions, LATCHED)
         for key, (srv_type, name) in SERVICES.items():
@@ -127,8 +134,26 @@ class RosPort(JarvisPort):
         with contextlib.suppress(RuntimeError):  # the loop is closing
             self._loop.call_soon_threadsafe(fn, *args)
 
-    def _on_event(self, msg):
-        self._post(self._sink.on_event, convert.event_to_dict(msg))
+    def _on_batch(self, msg):
+        n = len(msg.events)
+        with self._backlog_lock:
+            behind = self._backlog + n > MAX_BACKLOG
+            if behind:
+                self.dropped += n
+            else:
+                self._backlog += n
+        if behind:
+            self._node.get_logger().warn(
+                f"behind the event stream: {self.dropped} events dropped so far", throttle_duration_sec=10.0
+            )
+            return
+        self._post(self._on_events, [convert.event_to_dict(e) for e in msg.events])
+
+    def _on_events(self, events):
+        with self._backlog_lock:
+            self._backlog -= len(events)
+        for e in events:
+            self._sink.on_event(e)
 
     def _on_faults(self, msg):
         self._post(self._sink.on_faults, [convert.fault_to_dict(f) for f in msg.faults])

@@ -9,6 +9,8 @@
     shed_below: WARN
     buffer_capacity_mb: 128       # recent-events ring buffer, must cover one recorder split
     max_causal_depth: 16
+    batch_max_events: 500         # the stream goes out in batches (/jarvis/event_batches): this many
+    batch_period_ms: 5            # at most, or this long after a batch's first event
 
 /jarvis/fault_manager:
   ros__parameters:

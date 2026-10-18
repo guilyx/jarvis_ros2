@@ -8,6 +8,9 @@ cd "$(dirname "$0")/../.."
 
 fail() {
   echo "SMOKE TEST FAILED: $*" >&2
+  echo "--- what Jarvis saw:" >&2
+  screen >&2 || true # the container may be stopped already
+  echo "--- the container's log:" >&2
   docker compose logs --tail 100 demo >&2 || true
   exit 1
 }

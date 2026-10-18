@@ -1,0 +1,110 @@
+name: Release
+
+# Pushing a tag vX.Y.Z (RELEASING.md) publishes that version: the Docker images on GitHub's
+# container registry, and a GitHub release with the notes from CHANGELOG.md. The tag must match
+# the version of every package (scripts/version.py), and CHANGELOG.md must have its section.
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify the tag
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        name: The tag is the packages' version
+        run: |
+          version="$(python3 scripts/version.py)"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} but the packages are at ${version} (scripts/version.py ${GITHUB_REF_NAME#v})"
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+      - name: CHANGELOG.md has its section
+        run: |
+          grep -q "^## ${{ steps.version.outputs.version }} (" CHANGELOG.md \
+            || { echo "::error::CHANGELOG.md has no '## ${{ steps.version.outputs.version }} (date)' section"; exit 1; }
+
+  images:
+    name: Docker images
+    needs: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - { target: runtime, image: jarvis }
+          - { target: demo, image: jarvis-demo }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.title=${{ matrix.image }}
+            org.opencontainers.image.licenses=Apache-2.0
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: ${{ matrix.target }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    name: GitHub release
+    needs: [verify, images]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v v="${{ needs.verify.outputs.version }}" '
+            $0 ~ "^## " v " \\(" { on = 1; next }
+            on && /^## / { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          {
+            cat notes.md
+            echo
+            echo "### Docker images"
+            echo
+            echo '```bash'
+            echo "docker pull ghcr.io/${owner}/jarvis:${{ needs.verify.outputs.version }}        # Jarvis"
+            echo "docker pull ghcr.io/${owner}/jarvis-demo:${{ needs.verify.outputs.version }}   # with the demo robot"
+            echo '```'
+          } > body.md
+          gh release create "${GITHUB_REF_NAME}" --title "Jarvis ${GITHUB_REF_NAME}" --notes-file body.md --verify-tag

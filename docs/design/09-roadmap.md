@@ -76,7 +76,7 @@ flowchart LR
 | 5.3 ✔ | Crash durability and disk pressure: unchunked recording, a SIGKILL test (faults, `seq` and recordings survive), a free-disk floor in the lake and `jarvis.storage.low`. Measured in [01-requirements §5](01-requirements.md#measured-53) |
 | 5.4 ✔ | Security: an SROS2 profile (one enclave per process, tested enforced), gateway TLS and single sign-on through an authenticating proxy, a redaction audit of the agent (redaction where it reads, secrets scrubbed from every message). [Security guide](../guides/security.md) |
 | 5.5 ✔ | Docs: [integration guide](../guides/integration.md), [rules cookbook](../guides/rules-cookbook.md) (every recipe linted in CI), [operator guide](../guides/operator.md), runbooks: a template and one per shipped fault code, served from the catalog to the dashboard and the agent (`get_runbook`) |
-| 5.6 | Release: versioned Docker images, bloom-ready packages, CHANGELOGs, quality declaration |
+| 5.6 (prepared) | Release: one version for every package (`scripts/version.py`, checked in CI), changelogs (`CHANGELOG.md`, a `CHANGELOG.rst` per package), a tag-triggered workflow publishing versioned Docker images and the GitHub release, bloom-ready package metadata, a [quality declaration](../../QUALITY_DECLARATION.md) and a [security policy](../../SECURITY.md). The release itself is a tag: [RELEASING.md](../../RELEASING.md) |
 
 ### Later (v2+)
 Fleet (Parquet to object storage) & fleet dashboard · real-robot bring-up (ARM64) · ros2_medkit interop bridge · MCP server exposing Jarvis queries to AI assistants · visual rule editor with live backtest · generic `action.goal` / `service.call` actuators · BehaviorTree.CPP actuator · Foxglove panel · Zenoh/MQTT transports for non-ROS producers.

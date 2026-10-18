@@ -74,3 +74,16 @@ coalesced writes take a variable time, and fixed sleeps are what made the first 
 - [ ] Docs and ADRs updated if behavior or contracts changed
 - [ ] No `rclcpp` / `rclpy` in `core/`
 - [ ] Schema, C++ codec and `.msg` stay in sync (contract tests pass)
+
+## License
+
+Jarvis is under the [Apache License 2.0](LICENSE). By opening a pull request you agree that your
+contribution is licensed under it too. New source files start with the two header lines the
+others have (`Copyright 2026 <you>`, `SPDX-License-Identifier: Apache-2.0`).
+
+## Releases and changelogs
+
+Every package has one version (`scripts/version.py` prints it; CI checks they agree). A change
+worth telling users about adds a line under `Forthcoming` in [CHANGELOG.md](CHANGELOG.md) and in
+the `CHANGELOG.rst` of the packages it touches. How a release is cut: [RELEASING.md](RELEASING.md).
+Security issues: [SECURITY.md](SECURITY.md), not a public issue.

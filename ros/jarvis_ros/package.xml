@@ -6,6 +6,9 @@
   <description>ROS 2 layer of Jarvis: type adapters, the event hub, fault manager, rule engine and recovery lifecycle components, and the built-in actuators.</description>
   <maintainer email="erwin.lejeune15@gmail.com">Erwin L.</maintainer>
   <license>Apache-2.0</license>
+  <url type="website">https://github.com/guilyx/jarvis_ros2</url>
+  <url type="repository">https://github.com/guilyx/jarvis_ros2</url>
+  <url type="bugtracker">https://github.com/guilyx/jarvis_ros2/issues</url>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

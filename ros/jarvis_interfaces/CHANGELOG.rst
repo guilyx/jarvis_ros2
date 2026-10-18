@@ -1,0 +1,7 @@
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Changelog for package jarvis_interfaces
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Forthcoming
+-----------
+* First release: Event, Fault, Execution and their arrays; the fault, rule and recovery services; the ExecuteRecovery and Analyze actions.

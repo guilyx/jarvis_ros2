@@ -197,6 +197,28 @@ TEST(LifecycleTranslator, StatesAndFaultsFollowTransitions)
                     "FAULT_CLEAR ros.lifecycle.inactive", "FAULT_CLEAR ros.lifecycle.failed"}));
 }
 
+TEST(LifecycleTranslator, TransitionsOlderThanTheBaselineAreSkipped)
+{
+  // The watch starts while the node configures and activates: GetState answers `active` before
+  // the two transitions that got it there arrive.
+  LifecycleTranslator t;
+  const std::string node = "/demo/scan_relay";
+  ASSERT_EQ(t.on_state(node, State::PRIMARY_STATE_ACTIVE, "active", kT0).size(), 1u);
+  EXPECT_TRUE(
+    t.on_transition(node, transition("", State::TRANSITION_STATE_CONFIGURING, 2, "inactive"), kT0)
+      .empty())
+    << "not the node leaving active";
+  EXPECT_TRUE(
+    t.on_transition(node, transition("", State::TRANSITION_STATE_ACTIVATING, 3, "active"), kT0)
+      .empty());
+  // A real deactivation still counts.
+  auto out = t.on_transition(
+    node, transition("", State::TRANSITION_STATE_DEACTIVATING, 2, "inactive"), kT0 + 1);
+  EXPECT_EQ(
+    codes(out),
+    (V{"STATE ros.lifecycle.demo.scan_relay.state", "FAULT_RAISE ros.lifecycle.inactive"}));
+}
+
 TEST(LifecycleTranslator, ABaselineNeverOverridesATransition)
 {
   LifecycleTranslator t;

@@ -32,6 +32,26 @@ std::string hz(double rate)
   return buf;
 }
 
+/// Whether a transition that starts in `start` can come after the node was seen in `known`.
+bool can_follow(std::uint8_t known, std::uint8_t start)
+{
+  switch (start) {
+    case State::TRANSITION_STATE_CONFIGURING:
+      return known == State::PRIMARY_STATE_UNCONFIGURED;
+    case State::TRANSITION_STATE_CLEANINGUP:
+    case State::TRANSITION_STATE_ACTIVATING:
+      return known == State::PRIMARY_STATE_INACTIVE;
+    case State::TRANSITION_STATE_DEACTIVATING:
+      return known == State::PRIMARY_STATE_ACTIVE;
+    case State::TRANSITION_STATE_SHUTTINGDOWN:
+      return known != State::PRIMARY_STATE_FINALIZED;
+    case State::TRANSITION_STATE_ERRORPROCESSING:
+      return true;
+    default:  // a primary state
+      return start == known;
+  }
+}
+
 }  // namespace
 
 std::string base_name(std::string_view name)
@@ -229,6 +249,12 @@ std::vector<Event> LifecycleTranslator::on_transition(
   }
   if (goal < State::PRIMARY_STATE_UNCONFIGURED || goal > State::PRIMARY_STATE_FINALIZED) {
     return out;  // intermediate states are not reported
+  }
+  // The GetState baseline, read when the watch starts, can be newer than transitions still on
+  // their way: one that cannot follow the state we know is older than it (configuring -> inactive
+  // when the node is known active), and is skipped rather than read as the node leaving active.
+  if (t.primary != 0 && !can_follow(t.primary, ev.start_state.id)) {
+    return out;
   }
   const auto previous = t.primary;
   t.primary = goal;

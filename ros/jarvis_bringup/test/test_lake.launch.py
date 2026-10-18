@@ -90,7 +90,14 @@ class TestLake(unittest.TestCase):
                 if seen:
                     break
         self.assertGreater(seen, 0, f"no converted tick in {DATA_DIR}/lake")
-        self.spin(1.0)
+        # It reports after each conversion pass: keep the recorder splitting until a report arrives.
+        deadline = time.time() + 30
+        while not self.diagnostics and time.time() < deadline:
+            e = Event(kind=Event.KIND_LOG, code="test.lake.tick", severity=Event.SEVERITY_INFO)
+            e.source.node, e.source.component = "/lake_test", "lake_test"
+            e.stamp = self.node.get_clock().now().to_msg()
+            self.ingest.publish(e)
+            self.spin(0.25)
         self.assertTrue(self.diagnostics, "the lake reports on /diagnostics")
         self.assertEqual(self.diagnostics[-1].hardware_id, "jarvis")
 

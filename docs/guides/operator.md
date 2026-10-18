@@ -103,7 +103,9 @@ what ran, with each gate's verdict.
 - **Approve or reject**: a plan that needs approval waits in *Pending approval* (and on Overview,
   in the bell, on the agent's card if the agent asked). Read who asked and why (the rationale,
   the confidence for the agent), then approve with a note, or reject. After 5 minutes without a
-  decision it expires. The gates are checked again after you approve.
+  decision it expires. The gates are checked again after you approve. **Four-eyes**: a run you
+  asked for needs someone else's approval (you may withdraw it); the dashboard shows "Another
+  operator approves" instead of the button.
 - **Run a plan yourself**: *Run plan…* lists the plans operators may run; fill in its parameters
   and a rationale. **Dry run** first when unsure: every gate runs, nothing moves, and you see what
   would have happened. A refused run says which gate refused it and why.

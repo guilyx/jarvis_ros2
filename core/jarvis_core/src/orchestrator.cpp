@@ -91,6 +91,25 @@ std::string with_note(std::string text, const std::string & note)
   return note.empty() ? text : text + ": " + note;
 }
 
+/// The name an operator's request or decision is recorded under.
+std::string operator_or_default(const std::string & name)
+{
+  return name.empty() ? "operator" : name;
+}
+
+/// Whether two operator names (from tokens or single sign-on) are one person: compared without
+/// case or surrounding blanks, so "Alice " cannot approve what "alice" asked for.
+bool same_person(const std::string & a, const std::string & b)
+{
+  const auto norm = [](const std::string & s) {
+    const auto first = s.find_first_not_of(" \t");
+    const auto last = s.find_last_not_of(" \t");
+    return first == std::string::npos ? std::string() : lower(s.substr(first, last - first + 1));
+  };
+  const auto nb = norm(b);
+  return !nb.empty() && norm(a) == nb;
+}
+
 }  // namespace
 
 // -- enums ----------------------------------------------------------------------------------------
@@ -227,6 +246,7 @@ void to_json(nlohmann::json & j, const Execution & x)
     {"gates", gates},
     {"needs_approval", x.needs_approval},
     {"approved_by", x.approved_by},
+    {"on_behalf_of", x.on_behalf_of},
     {"locks", x.locks},
     {"steps", steps},
     {"current_step", x.current_step},
@@ -278,6 +298,7 @@ void from_json(const nlohmann::json & j, Execution & x)
   }
   x.needs_approval = j.value("needs_approval", false);
   x.approved_by = j.value("approved_by", "");
+  x.on_behalf_of = j.value("on_behalf_of", "");
   x.locks = j.value("locks", std::vector<std::string>{});
   for (const auto & s : j.value("steps", nlohmann::json::array())) {
     StepRecord r;
@@ -594,6 +615,14 @@ Orchestrator::Live & Orchestrator::create(const RecoveryRequest & r, Timestamp a
   x.confidence = r.confidence;
   x.dry_run = r.dry_run;
   x.created = at;
+  if (r.requester == Requester::Operator) {
+    x.on_behalf_of = operator_or_default(r.requester_id);
+  } else if (r.requester == Requester::Plan) {
+    // A sub-plan or an on_failure entry acts for whoever started its chain.
+    if (const Live * p = get(r.requester_id)) {
+      x.on_behalf_of = p->x.on_behalf_of;
+    }
+  }
   l.order = serial_++;
   const auto id = x.execution_id;
   return live_.emplace(id, std::move(l)).first->second;
@@ -1377,11 +1406,14 @@ CommandResult Orchestrator::decide(
   CommandResult r;
   r.effects = advance_to(now);
   Live * l = get(execution_id);
-  const std::string who = operator_name.empty() ? "operator" : operator_name;
+  const std::string who = operator_or_default(operator_name);
   if (!l) {
     r.message = "unknown or finished execution '" + execution_id + "'";
   } else if (l->ended || l->x.state != ExecState::PendingApproval) {
     r.message = "execution is " + std::string(to_string(l->x.state)) + ", not waiting for approval";
+  } else if (approve && config_.separate_approver && same_person(who, l->x.on_behalf_of)) {
+    // Withdrawing one's own request (reject) is fine; approving it is not.
+    r.message = who + " requested this run: another operator must approve it";
   } else if (approve) {
     l->x.approved_by = who;
     emit(

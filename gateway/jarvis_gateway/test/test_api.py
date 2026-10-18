@@ -246,6 +246,20 @@ def test_approval_flow(gw):
     assert again.status_code == 409
 
 
+def test_four_eyes(gw):
+    """olga asks for a run that needs approval: she may withdraw it, not approve it; ada approves."""
+    gw.fake.plans[1]["requires_approval"] = ["OPERATOR"]
+    r = gw.client.post("/api/v1/recoveries", json={"plan_id": "safe-stop"}, headers=OPERATOR)
+    execution_id = r.json()["data"]["execution_id"]
+    own = gw.client.post(f"/api/v1/recoveries/{execution_id}:approve", json={"note": "me"}, headers=OPERATOR)
+    assert own.status_code == 409
+    assert own.json()["detail"] == "olga requested this run: another operator must approve it"
+    assert gw.get("/api/v1/recoveries")["live"][0]["state"] == "PENDING_APPROVAL"
+    ok = gw.client.post(f"/api/v1/recoveries/{execution_id}:approve", json={"note": "go"}, headers=ADMIN)
+    assert ok.status_code == 200
+    assert _settled(gw, execution_id)["approved_by"] == "ada"
+
+
 def test_reject_and_cancel(gw):
     gw.fake.plans[1]["requires_approval"] = ["OPERATOR"]
     a = gw.client.post("/api/v1/recoveries", json={"plan_id": "safe-stop"}, headers=OPERATOR).json()["data"]

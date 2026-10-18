@@ -103,6 +103,9 @@ struct Execution
   std::vector<GateResult> gates;
   bool needs_approval{false};
   std::string approved_by;
+  /// The operator whose request started this chain (its sub-plans and on_failure ladder
+  /// included); empty for a rule or the agent. They may not approve it (separate_approver).
+  std::string on_behalf_of;
   std::vector<std::string> locks;  ///< rendered
   std::vector<StepRecord> steps;
   std::size_t current_step{0};
@@ -145,6 +148,8 @@ struct OrchestratorConfig
   /// Deployment ceiling for agent requests; the plan's agent_policy can only lower it.
   AgentPolicy agent_autonomy{AgentPolicy::Supervised};
   double min_confidence{0.8};
+  /// Four-eyes: an operator may not approve a run they requested (05-rules-and-recovery §6).
+  bool separate_approver{true};
   int max_depth{3};
   std::size_t history_capacity{200};
   /// Events kept so a `wait_for` also sees what happened while the previous step ran.

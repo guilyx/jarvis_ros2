@@ -78,8 +78,17 @@ flowchart LR
 | 5.5 ✔ | Docs: [integration guide](../guides/integration.md), [rules cookbook](../guides/rules-cookbook.md) (every recipe linted in CI), [operator guide](../guides/operator.md), runbooks: a template and one per shipped fault code, served from the catalog to the dashboard and the agent (`get_runbook`) |
 | 5.6 (prepared) | Release: one version for every package (`scripts/version.py`, checked in CI), changelogs (`CHANGELOG.md`, a `CHANGELOG.rst` per package), a tag-triggered workflow publishing versioned Docker images and the GitHub release, bloom-ready package metadata, a [quality declaration](../../QUALITY_DECLARATION.md) and a [security policy](../../SECURITY.md). The release itself is a tag: [RELEASING.md](../../RELEASING.md) |
 
+### M6 — Interop & operations
+Where the field is going (October 2026): diagnostics converging on SOVD (ISO 17978: ros2_medkit, its Foxglove panel, VDA 5050 fleet managers), AI assistants reaching robots over MCP (servers so far expose the raw graph, not faults or incidents), and fleets run by small teams that need guardrails more than dashboards.
+
+| PR | Content |
+|----|---------|
+| 6.1 ✔ | Four-eyes approvals: nobody approves a run they asked for, nor its sub-plans or `on_failure` ladder (`on_behalf_of`); the dashboard offers *Withdraw* instead; `separate_approver: false` for a team of one |
+| 6.2 | MCP server (`jarvis_mcp`): AI assistants read faults, incidents, runbooks, events, recoveries and analytics through the gateway (its tokens, roles and audit), ask the agent, and, if allowed, request a recovery through the gates |
+| 6.3 | ros2_medkit / SOVD interop: medkit faults into Jarvis (rules, recovery, agent on top), and Jarvis faults on a SOVD-style surface for SOVD clients |
+
 ### Later (v2+)
-Fleet (Parquet to object storage) & fleet dashboard · real-robot bring-up (ARM64) · ros2_medkit interop bridge · MCP server exposing Jarvis queries to AI assistants · visual rule editor with live backtest · generic `action.goal` / `service.call` actuators · BehaviorTree.CPP actuator · Foxglove panel · Zenoh/MQTT transports for non-ROS producers.
+Fleet (Parquet to object storage) & fleet dashboard · real-robot bring-up (ARM64) · visual rule editor with live backtest · generic `action.goal` / `service.call` actuators · BehaviorTree.CPP actuator · Foxglove panel · Zenoh/MQTT transports for non-ROS producers.
 
 ## Demo scenarios (Nav2 simulation)
 

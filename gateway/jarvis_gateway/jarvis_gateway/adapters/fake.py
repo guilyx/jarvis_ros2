@@ -394,6 +394,10 @@ class FakeJarvis(JarvisPort):
         x = self.executions.get(execution_id)
         if not x or x["state"] != "PENDING_APPROVAL":
             return CommandResult(False, "not waiting for approval")
+        asker = x["requester"]["id"] if x["requester"]["type"] == "OPERATOR" else ""
+        if approve and asker and asker.strip().lower() == operator.strip().lower():
+            # As the orchestrator: an operator may not approve a run they asked for (four-eyes).
+            return CommandResult(False, f"{operator} requested this run: another operator must approve it")
         if approve:
             x["approved_by"] = operator
             self._recovery(x, "APPROVED", "INFO", f"approved by {operator}", approved_by=operator)

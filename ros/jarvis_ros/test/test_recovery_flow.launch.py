@@ -247,6 +247,12 @@ class TestRecoveryFlow(unittest.TestCase):
             lambda: feedback and feedback[-1].state == ExecuteRecovery.Feedback.STATE_PENDING_APPROVAL,
             what="PENDING_APPROVAL feedback",
         )
+        own = DecideApproval.Request(
+            execution_id=feedback[-1].execution_id, approve=True, operator_name="alice"
+        )
+        reply = self.call(self.decide, own)
+        self.assertFalse(reply.success, "four-eyes: alice asked, alice may not approve")
+        self.assertEqual(reply.message, "alice requested this run: another operator must approve it")
         request = DecideApproval.Request(
             execution_id=feedback[-1].execution_id, approve=True, operator_name="bob"
         )

@@ -124,6 +124,10 @@
     "approved_by": {
       "type": "string"
     },
+    "on_behalf_of": {
+      "type": "string",
+      "description": "The operator whose request started this chain (sub-plans and on_failure ladder included); empty for a rule or the agent. They may not approve it (separate_approver)."
+    },
     "locks": {
       "type": "array",
       "items": {

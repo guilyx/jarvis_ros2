@@ -20,6 +20,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Core stays ROS-free (ADR-0001)
         run: scripts/check_core_ros_free.sh
+      - name: One version for every package (RELEASING.md)
+        run: python3 scripts/version.py --check
       - name: shellcheck
         run: shellcheck demo docker/demo/bin/* docker/demo/smoke_test.sh scripts/soak.sh
       - name: clang-format

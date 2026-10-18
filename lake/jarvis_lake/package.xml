@@ -6,6 +6,9 @@
   <description>Jarvis history: converts recorded MCAP splits to Parquet, DuckDB views, KPIs, analytics and retention. Runs without ROS; the ROS adapter only listens for closed splits.</description>
   <maintainer email="erwin.lejeune15@gmail.com">Erwin L.</maintainer>
   <license>Apache-2.0</license>
+  <url type="website">https://github.com/guilyx/jarvis_ros2</url>
+  <url type="repository">https://github.com/guilyx/jarvis_ros2</url>
+  <url type="bugtracker">https://github.com/guilyx/jarvis_ros2/issues</url>
 
   <!-- Python dependencies are pinned in requirements.txt (pip): duckdb, mcap, mcap-ros2-support,
        pyarrow, pytz. The ROS ones below are only for the optional ROS adapter. -->

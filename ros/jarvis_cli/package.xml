@@ -6,6 +6,9 @@
   <description>`ros2 jarvis`: faults, rules, recovery, approvals, the kill switch, bag export and backtests.</description>
   <maintainer email="erwin.lejeune15@gmail.com">Erwin L.</maintainer>
   <license>Apache-2.0</license>
+  <url type="website">https://github.com/guilyx/jarvis_ros2</url>
+  <url type="repository">https://github.com/guilyx/jarvis_ros2</url>
+  <url type="bugtracker">https://github.com/guilyx/jarvis_ros2/issues</url>
 
   <exec_depend>jarvis_core</exec_depend>
   <exec_depend>jarvis_interfaces</exec_depend>

@@ -6,6 +6,9 @@
   <description>Jarvis gateway: the REST API and gap-free live WebSocket stream the dashboard uses, operator commands (attributed to the caller's token), webhooks for notify actions and Prometheus metrics. History and analytics come from jarvis_lake.</description>
   <maintainer email="erwin.lejeune15@gmail.com">Erwin L.</maintainer>
   <license>Apache-2.0</license>
+  <url type="website">https://github.com/guilyx/jarvis_ros2</url>
+  <url type="repository">https://github.com/guilyx/jarvis_ros2</url>
+  <url type="bugtracker">https://github.com/guilyx/jarvis_ros2/issues</url>
 
   <!-- Python dependencies are pinned in requirements.txt (pip): fastapi, uvicorn, websockets,
        httpx, prometheus-client. -->

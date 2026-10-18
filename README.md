@@ -303,6 +303,13 @@ Each fault code the bridges raise has a runbook ([`jarvis_bringup/config/runbook
 what it means, what to check, what fixes it. The dashboard shows it on the fault, the agent reads it. Yours
 go next to your catalog, from [`TEMPLATE.md`](ros/jarvis_bringup/config/runbooks/TEMPLATE.md).
 
+## Releases
+
+What changed, by release: [CHANGELOG.md](CHANGELOG.md). How one is cut (versions, the tag, the
+Docker images on GitHub's registry, bloom): [RELEASING.md](RELEASING.md). How good it is, against
+the ROS 2 quality levels: [QUALITY_DECLARATION.md](QUALITY_DECLARATION.md). Found a security issue?
+[SECURITY.md](SECURITY.md). Apache-2.0 ([LICENSE](LICENSE)).
+
 ## Design
 
 | Area | Doc |

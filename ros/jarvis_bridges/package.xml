@@ -3,7 +3,7 @@
 <package format="3">
   <name>jarvis_bridges</name>
   <version>0.1.0</version>
-  <description>Lifecycle components that turn /diagnostics, /rosout, action goal status, lifecycle transitions and topic and node watchdogs into Jarvis events.</description>
+  <description>Lifecycle components that turn /diagnostics, /rosout, action goal status, lifecycle transitions and topic, node and QoS watchdogs into Jarvis events.</description>
   <maintainer email="erwin.lejeune15@gmail.com">Erwin L.</maintainer>
   <license>Apache-2.0</license>
   <url type="website">https://github.com/guilyx/jarvis_ros2</url>
@@ -22,6 +22,8 @@
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>
   <depend>rclcpp_lifecycle</depend>
+  <depend>rmw</depend>
+  <depend>rmw_implementation</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>jarvis_interfaces</test_depend>

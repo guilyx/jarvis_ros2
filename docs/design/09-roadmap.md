@@ -88,6 +88,16 @@ Where the field is going (October 2026): diagnostics converging on SOVD (ISO 179
 | 6.3 ✔ | SOVD surface ([guide](../guides/sovd.md)): the gateway serves Jarvis's faults at `/sovd/api/v1`, with the paths and fields of ros2_medkit's gateway (ISO 17978): the entity tree, faults listed, in detail, live (server-sent events) and cleared through the gates. The unmodified ros2_medkit web UI connects to it |
 | 6.4 ✔ | ros2_medkit faults into Jarvis (`jarvis_medkit`, `medkit:=true`, [guide](../guides/integration.md#already-running-ros2_medkit)): what medkit's fault manager confirms, updates and clears becomes Jarvis faults (`medkit.<code>`), with a periodic resync for missed events and a reconcile at start, so a robot running medkit gets Jarvis's rules, recovery and agent on top |
 
+### M7 — Platforms & fleets
+Where it is going next (October 2026): ROS 2 Lyrical Luth, the new LTS (May 2026, Ubuntu 26.04), next to Jazzy; graph-level checks that catch what ROS keeps quiet (ros2_medkit 0.7 added QoS, orphan-topic and parameter-drift watchdogs); fleet managers that speak VDA 5050 and want robots' errors in its state; and fleets small teams watch from one place.
+
+| PR | Content |
+|----|---------|
+| 7.1 | QoS watchdog: a subscription whose QoS its publisher cannot match gets nothing, silently. `ros.topic.qos_incompatible` per topic, from the QoS of every endpoint on the graph (rmw's own check), with which pair and why; it clears once they match |
+| 7.2 | ROS 2 Lyrical Luth (LTS): the ROS packages built and tested on Lyrical in CI, the Docker image on either distro |
+| 7.3 | VDA 5050: Jarvis's open faults as the `errors` of a robot's VDA 5050 state (MQTT), for the fleet manager |
+| 7.4 | Fleet view: one dashboard over several robots' gateways (read-only), faults and incidents side by side |
+
 ### Later (v2+)
 Fleet (Parquet to object storage) & fleet dashboard · real-robot bring-up (ARM64) · visual rule editor with live backtest · generic `action.goal` / `service.call` actuators · BehaviorTree.CPP actuator · Foxglove panel · Zenoh/MQTT transports for non-ROS producers.
 

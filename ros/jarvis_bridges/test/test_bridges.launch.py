@@ -57,6 +57,7 @@ def generate_test_description():
             ),
             bridge("NodeWatchdogBridge", nodes=["/test/ephemeral"], grace_s=0.5, period_s=0.1),
             bridge("LifecycleBridge", discovery_period_s=0.2),
+            bridge("QosWatchdogBridge", period_s=0.2),
         ],
         output="screen",
     )
@@ -241,6 +242,34 @@ class TestBridges(unittest.TestCase):
             )
         finally:
             ephemeral.destroy_node()
+
+    def test_qos_watchdog_reports_a_subscription_that_gets_nothing(self):
+        # A best-effort sensor and a reliable subscriber: DDS never connects them, ROS says nothing.
+        best_effort = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT)
+        sensor = self.node.create_publisher(String, "/test/qos_scan", best_effort)
+        reader = rclpy.create_node("qos_reader", namespace="/test")
+        reliable = reader.create_subscription(String, "/test/qos_scan", lambda _: None, 5)
+        try:
+            raised = self.keep_trying(
+                lambda: rclpy.spin_once(reader, timeout_sec=0.01),
+                lambda e: e.code == "ros.topic.qos_incompatible" and e.kind == Event.KIND_FAULT_RAISE,
+                "the QoS mismatch",
+            )
+            self.assertEqual(raised.source.component, "test_qos_scan")
+            attrs = {a.key: a.string_value for a in raised.attrs}
+            self.assertEqual(attrs["subscription"], "/test/qos_reader")
+            self.assertIn("best effort publisher and reliable subscription", attrs["reason"])
+            # The reader asks for what the sensor offers: cleared.
+            reader.destroy_subscription(reliable)
+            reader.create_subscription(String, "/test/qos_scan", lambda _: None, best_effort)
+            self.keep_trying(
+                lambda: rclpy.spin_once(reader, timeout_sec=0.01),
+                lambda e: e.code == "ros.topic.qos_incompatible" and e.kind == Event.KIND_FAULT_CLEAR,
+                "the QoS fixed",
+            )
+        finally:
+            reader.destroy_node()
+            self.node.destroy_publisher(sensor)
 
     def test_lifecycle_transitions_become_states_and_faults(self):
         managed = LifecycleNode("managed", namespace="/test")

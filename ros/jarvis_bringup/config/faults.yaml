@@ -45,6 +45,9 @@ faults:
     description: A watched topic publishes below its minimum rate.
     severity: WARN
     debounce: { persist: 3s }
+  - code: ros.topic.qos_incompatible
+    description: A subscription asks for QoS its publisher cannot match; no message reaches it.
+    debounce: { persist: 2s }
   - code: ros.node.missing
     description: An expected node is not on the ROS graph (it crashed or never started).
     capture: { blackbox: true }

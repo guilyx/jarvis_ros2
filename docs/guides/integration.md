@@ -102,10 +102,12 @@ lifecycle node under `/jarvis/bridges/` (`bridges:=false` turns them all off).
 | lifecycle | every managed node (or `nodes`) | `ros.lifecycle.inactive`, `ros.lifecycle.failed`; each node's state as `STATE` |
 | topic watchdog | the topics you list | `ros.topic.stale` (silent, or no publisher), `ros.topic.slow` (below a rate) |
 | node watchdog | the nodes you list | `ros.node.missing` |
+| QoS watchdog | every topic's publishers and subscriptions | `ros.topic.qos_incompatible` while a subscription asks for QoS its publisher cannot match (a best-effort driver, a reliable subscriber): it receives nothing, and ROS says nothing |
 
-The watchdogs watch nothing until you tell them what matters. Their parameters live in the
-params file (`params_file:=`, by default `jarvis_bringup/config/jarvis.yaml`). **The launch file
-uses one params file, it doesn't merge**: copy `jarvis.yaml` into your package and add to it.
+The topic and node watchdogs watch nothing until you tell them what matters (the QoS watchdog
+checks every topic). Their parameters live in the params file (`params_file:=`, by default
+`jarvis_bringup/config/jarvis.yaml`). **The launch file uses one params file, it doesn't merge**:
+copy `jarvis.yaml` into your package and add to it.
 
 ```yaml
 # my_robot_jarvis/config/jarvis.yaml: a copy of jarvis_bringup's, plus:

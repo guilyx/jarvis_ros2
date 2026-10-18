@@ -249,6 +249,10 @@ export function IncidentTimeline() {
   if (incident.isLoading) return <Loading />;
   if (incident.error) return <ErrorNote error={incident.error} />;
   const d = incident.data!;
+  // Resolved, or opened by a rule on a pattern with no fault to resolve it.
+  const closable =
+    d.state === "RESOLVED" ||
+    (["OPEN", "RECOVERING", "ESCALATED"].includes(d.state ?? "") && !d.faults.length);
   const insights = d.timeline.filter((e) => e.kind === "INSIGHT");
 
   return (
@@ -275,7 +279,7 @@ export function IncidentTimeline() {
             <Sparkles size={13} /> Ask agent
           </Button>
         </Link>
-        {can("operator") && d.state === "RESOLVED" ? (
+        {can("operator") && closable ? (
           <ConfirmDialog
             trigger={
               <Button size="sm" variant="default">

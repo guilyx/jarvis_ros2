@@ -813,6 +813,12 @@ void RuleEngine::run_actions(
           open ? fire.last.severity : Severity::Error,
           "Rule " + rule.id + " asked to " + fields["op"], match, match.id, match.stamp);
         e.attrs["rule"] = rule.id;
+        if (open) {  // what the fault manager opens it for: the fault matched, or its code
+          e.attrs["matched_code"] = fire.last.code;
+          if (const auto * fault_id = attr_string(fire.last.attrs, "fault_id")) {
+            e.attrs["fault_id"] = *fault_id;
+          }
+        }
         out.push_back(EmitEvent{std::move(e)});
         break;
       }

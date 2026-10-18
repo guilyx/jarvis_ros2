@@ -316,6 +316,12 @@ Effects FaultManager::on_event(const Event & e, Timestamp now)
       case Kind::Recovery:
         return on_recovery(e, now);
       case Kind::System:
+        if (e.code == "jarvis.incident.open") {
+          return on_open_request(e, now);
+        }
+        if (e.code == "jarvis.blackbox.captured") {
+          return on_blackbox_captured(e);
+        }
         if (e.code == "jarvis.incident.escalate" && !e.correlation_id.empty()) {
           Effects out;
           if (auto it = incidents_.find(e.correlation_id);
@@ -800,12 +806,13 @@ void FaultManager::close(
   fx.emplace_back(PersistState{});
 }
 
-void FaultManager::open_or_join_incident(FaultEpisode & ep, Timestamp at, Effects & fx)
+void FaultManager::open_or_join_incident(FaultEpisode & ep, Timestamp at, Effects & fx, bool forced)
 {
   const FaultPolicy policy = catalog_.policy_for(ep.code);
   if (
-    policy.incident == IncidentPolicy::Never ||
-    (policy.incident == IncidentPolicy::Auto && ep.severity < config_.incident_min_severity)) {
+    !forced &&
+    (policy.incident == IncidentPolicy::Never ||
+     (policy.incident == IncidentPolicy::Auto && ep.severity < config_.incident_min_severity))) {
     return;
   }
   const std::string & component = ep.source.component;
@@ -846,6 +853,82 @@ void FaultManager::open_or_join_incident(FaultEpisode & ep, Timestamp at, Effect
      {"root_fault_id", ep.fault_id}},
     component, inc.incident_id, {}, at)});
   incidents_.emplace(inc.incident_id, std::move(inc));
+}
+
+Effects FaultManager::on_open_request(const Event & e, Timestamp now)
+{
+  // A rule asks for an incident (`incident: { open: true }`). What it matched may already be in
+  // one; a fault below the incident threshold gets one; anything else opens one without a fault,
+  // which joins the faults that follow on its component and is closed by an operator.
+  Effects fx;
+  if (const auto it = incidents_.find(e.correlation_id);
+      !e.correlation_id.empty() && it != incidents_.end() && it->second.is_live()) {
+    return fx;
+  }
+  const std::string * rule = attr_string(e.attrs, "rule");
+  if (const std::string * fault_id = attr_string(e.attrs, "fault_id")) {
+    if (const auto it = open_.find(*fault_id); it != open_.end()) {
+      const auto inc = incidents_.find(it->second.incident_id);
+      if (inc == incidents_.end() || !inc->second.is_live()) {
+        open_or_join_incident(it->second, now, fx, true);
+        fx.emplace_back(FaultsChanged{});
+        fx.emplace_back(PersistState{});
+      }
+      return fx;
+    }
+  }
+  const std::string & component = e.source.component;
+  for (auto & [id, inc] : incidents_) {
+    if (
+      inc.is_live() && inc.component == component &&
+      now - inc.last_activity <= config_.incident_merge_window) {
+      return fx;  // the component's open incident is the one
+    }
+  }
+  const std::string * matched = attr_string(e.attrs, "matched_code");
+  Incident inc;
+  inc.incident_id = ids_.uuid7(now);
+  inc.state = IncidentState::Open;
+  inc.severity = e.severity;
+  inc.title = (matched ? *matched : std::string("incident")) +
+              (component.empty() ? "" : " on " + component) + (rule ? " (rule " + *rule + ")" : "");
+  inc.component = component;
+  inc.opened_at = now;
+  inc.last_activity = now;
+  Attrs attrs{
+    {"incident_id", inc.incident_id},
+    {"state", std::string("OPEN")},
+    {"prev_state", std::string("NONE")},
+    {"root_fault_id", std::string()}};
+  if (rule) {
+    attrs["rule"] = *rule;
+  }
+  fx.emplace_back(EmitEvent{make_event(
+    Kind::System, "jarvis.incident.opened", e.severity, inc.title, std::move(attrs), component,
+    inc.incident_id, e.id, now)});
+  incidents_.emplace(inc.incident_id, std::move(inc));
+  fx.emplace_back(FaultsChanged{});
+  fx.emplace_back(PersistState{});
+  return fx;
+}
+
+Effects FaultManager::on_blackbox_captured(const Event & e)
+{
+  // The fault links to its black-box recording: the event that says it was saved, and when.
+  const std::string * fault_id = attr_string(e.attrs, "fault_id");
+  if (!fault_id) {
+    return {};
+  }
+  if (const auto it = open_.find(*fault_id); it != open_.end()) {
+    it->second.snapshot_ref = e.id;
+    return {FaultsChanged{}, PersistState{}};
+  }
+  for (auto & ep : history_) {
+    if (ep.fault_id == *fault_id) {
+      ep.snapshot_ref = e.id;  // it healed before the recorder answered
+    }
+  }
+  return {};
 }
 
 void FaultManager::transition_incident(
@@ -1057,7 +1140,8 @@ OperatorResult FaultManager::clear(
 }
 
 OperatorResult FaultManager::close_incident(
-  const std::string & incident_id, const std::string & user, Timestamp now)
+  const std::string & incident_id, const std::string & user, const std::string & note,
+  Timestamp now)
 {
   OperatorResult r;
   auto it = incidents_.find(incident_id);
@@ -1065,14 +1149,19 @@ OperatorResult FaultManager::close_incident(
     r.message = "no incident with id " + incident_id;
     return r;
   }
-  if (it->second.state != IncidentState::Resolved) {
+  const bool without_faults = it->second.is_live() && it->second.fault_ids.empty();
+  if (it->second.state != IncidentState::Resolved && !without_faults) {
     r.message = "incident is " + std::string(to_string(it->second.state)) +
-                "; only RESOLVED incidents can be closed";
+                "; only RESOLVED incidents can be closed (or ones a rule opened without a fault)";
     return r;
+  }
+  Attrs attrs{{"user", user}, {"incident_id", incident_id}};
+  if (!note.empty()) {
+    attrs["note"] = note;
   }
   r.effects.emplace_back(EmitEvent{make_event(
     Kind::Operator, "incident.close", Severity::Info, user + " closed " + it->second.title,
-    {{"user", user}, {"incident_id", incident_id}}, it->second.component, incident_id, {}, now)});
+    std::move(attrs), it->second.component, incident_id, {}, now)});
   transition_incident(it->second, IncidentState::Closed, now, {}, "closed by " + user, r.effects);
   incidents_.erase(it);
   merge_effects(r.effects, {});

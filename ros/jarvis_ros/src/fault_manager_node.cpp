@@ -149,7 +149,8 @@ public:
       "~/close_incident", [this](
                             const std::shared_ptr<CloseIncident::Request> req,
                             std::shared_ptr<CloseIncident::Response> res) {
-        auto r = manager_->close_incident(req->incident_id, req->operator_name, now_ns(*this));
+        auto r =
+          manager_->close_incident(req->incident_id, req->operator_name, req->note, now_ns(*this));
         res->success = r.success;
         res->message = r.message;
         apply(std::move(r.effects));

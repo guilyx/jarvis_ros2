@@ -87,9 +87,19 @@ export function FaultDetail() {
                 [
                   "black box",
                   fault?.snapshot_ref ? (
-                    <Link key="b" to="/system" className="font-mono text-xs text-sky-400 hover:underline">
-                      {fault.snapshot_ref}
-                    </Link>
+                    <span key="b" className="text-xs">
+                      <Link
+                        to="/events"
+                        search={{ event: fault.snapshot_ref }}
+                        className="text-sky-400 hover:underline"
+                      >
+                        saved
+                      </Link>
+                      {" · the file is under "}
+                      <Link to="/system" className="text-sky-400 hover:underline">
+                        System → Recordings
+                      </Link>
+                    </span>
                   ) : (
                     "—"
                   ),

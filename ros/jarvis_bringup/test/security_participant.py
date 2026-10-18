@@ -14,7 +14,7 @@ import sys
 import time
 
 import rclpy
-from jarvis_interfaces.msg import Event
+from jarvis_interfaces.msg import Event, EventBatch
 from jarvis_interfaces.srv import GetFaults
 from rclpy.duration import Duration
 from rclpy.qos import QoSProfile, ReliabilityPolicy
@@ -62,6 +62,12 @@ def main(enclave, action, *args):
     elif action == "forge":
         out["publish_events"] = attempt(lambda: node.create_publisher(Event, "/jarvis/events", 10))
         out["read_events"] = attempt(lambda: node.create_subscription(Event, "/jarvis/events", print, 10))
+        out["publish_batches"] = attempt(
+            lambda: node.create_publisher(EventBatch, "/jarvis/event_batches", 10)
+        )
+        out["read_batches"] = attempt(
+            lambda: node.create_subscription(EventBatch, "/jarvis/event_batches", print, 10)
+        )
     node.destroy_node()
     rclpy.try_shutdown()
     print(json.dumps(out))

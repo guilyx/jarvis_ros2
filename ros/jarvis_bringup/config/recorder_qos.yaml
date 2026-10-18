@@ -1,9 +1,9 @@
 # rosbag2 QoS overrides for the Jarvis recorder (docs/design/03-data-model.md §11): match the
 # publishers, so a recorder that starts late still gets the latched fault snapshot.
 # rosbag2 wants every field; a zero duration means "unspecified" (the RMW default, infinite).
-/jarvis/events:
+/jarvis/event_batches:
   history: keep_last
-  depth: 20000  # deep, so a burst (NFR-1) waits here while the recorder catches up
+  depth: 1000  # batches: deep, so a burst (NFR-1) waits here while the recorder catches up
   reliability: reliable
   durability: volatile
   deadline: { sec: 0, nsec: 0 }

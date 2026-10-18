@@ -423,13 +423,17 @@ string message
 
 | Topic | Type | Reliability | Durability | History | Recorded |
 |-------|------|-------------|------------|---------|----------|
-| `/jarvis/ingest` | `Event` | RELIABLE | VOLATILE | KEEP_LAST 1000 | no (raw input) |
-| `/jarvis/events` | `Event` | RELIABLE | VOLATILE | KEEP_LAST 1000 | **yes** |
+| `/jarvis/ingest` | `Event` | RELIABLE | VOLATILE | KEEP_LAST 20000 | no (raw input) |
+| `/jarvis/ingest_batches` | `EventBatch` | RELIABLE | VOLATILE | KEEP_LAST 1000 | no (raw input, from high-rate producers) |
+| `/jarvis/event_batches` | `EventBatch` | RELIABLE | VOLATILE | KEEP_LAST 100 (readers 1000) | **yes**: the canonical stream |
+| `/jarvis/events` | `Event` | RELIABLE | VOLATILE | KEEP_LAST 1000 | no: the same events, one message each, while someone reads it |
 | `/jarvis/faults` | `FaultArray` | RELIABLE | TRANSIENT_LOCAL | KEEP_LAST 1 | **yes** |
 | `/jarvis/executions` | `ExecutionArray` | RELIABLE | TRANSIENT_LOCAL | KEEP_LAST 1 | **yes** |
 | `/diagnostics` | `diagnostic_msgs/DiagnosticArray` | default | default | default | optional |
 
-All names are relative (`events`, `~/query_events`) in the `jarvis` namespace. Multi-robot setups push a robot namespace.
+`EventBatch` is `Event[] events`, in `seq` order: the hub sends one per group of events (at most 500, within 5 ms; [04 · Data flow §1](04-data-flow.md#1-ingest)), because one message per event costs more in the middleware than Jarvis spends on it.
+
+All names are relative (`event_batches`, `~/query_events`) in the `jarvis` namespace. Multi-robot setups push a robot namespace.
 
 > Field names avoid C++ and Python keywords (`operator_name`, `since`/`until`), because rosidl generates code in both languages.
 
@@ -438,7 +442,7 @@ All names are relative (`events`, `~/query_events`) in the `jarvis` namespace. M
 ```mermaid
 flowchart LR
   subgraph GRAPH["ROS graph"]
-    EV{{"/jarvis/events<br/>/jarvis/faults<br/>/jarvis/executions"}}
+    EV{{"/jarvis/event_batches<br/>/jarvis/faults<br/>/jarvis/executions"}}
   end
   EV --> REC["/jarvis/recorder<br/>rosbag2 Recorder component"]
   REC --> MCAP[("MCAP splits<br/>5 min · zstd")]
@@ -454,7 +458,7 @@ flowchart LR
 
 | Layer | What | Where | Retention (default) |
 |-------|------|-------|---------------------|
-| **Live** | `/jarvis/events` stream; latched `/jarvis/faults`, `/jarvis/executions` | ROS graph | — |
+| **Live** | `/jarvis/event_batches` stream; latched `/jarvis/faults`, `/jarvis/executions` | ROS graph | — |
 | **Recent** | Ring buffer in the event hub, served by `~/query_events` | Memory, ≤ 128 MiB, severity-aware eviction | ~30 min at normal rates |
 | **Recorded** | Continuous MCAP of `/jarvis/**` (+ optional low-rate context topics) | `$JARVIS_DATA/bags/` | 7 days / 10 GiB; a split is deleted only **after** conversion |
 | **History** | Parquet (`events/date=YYYY-MM-DD/<split>.parquet`) + DuckDB views (`events`, `fault_transitions`, `fault_episodes`, `incidents`, `executions`, `rule_matches`, `operator_actions`); KPIs and analytics in `jarvis_lake.analytics` | `$JARVIS_DATA/lake/` | 180 days / 5 GiB |

@@ -398,6 +398,7 @@ export interface SystemInfo {
   uptime_s: number;
   connected: boolean;
   events_received: number;
+  events_dropped?: number;
   recent_events: number;
   stream_clients: number;
   components: Record<string, { state: string; since: string }>;

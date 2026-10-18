@@ -56,7 +56,7 @@ ARGUMENTS = {
         "MCAP writer settings of the recorder: what a crash loses vs. compression",
     ),
     "blackbox": ("true", "Run the snapshot-mode black-box recorder"),
-    "blackbox_topics": ("/tf /tf_static /odom /scan /cmd_vel /jarvis/events", "Black-box topics"),
+    "blackbox_topics": ("/tf /tf_static /odom /scan /cmd_vel /jarvis/event_batches", "Black-box topics"),
     "blackbox_cache_mb": ("256", "Memory of the black-box ring buffer"),
     "lake": ("true", "Convert closed splits to Parquet and enforce retention (jarvis_lake)"),
     "lake_min_free_gib": ("1", "Free disk the lake keeps by deleting the oldest data (disk pressure)"),
@@ -80,6 +80,12 @@ ARGUMENTS = {
     ),
     "fastdds_profile": (str(SHARE / "config" / "fastdds.xml"), "Fast DDS profile of the Jarvis processes"),
 }
+
+
+# Recorded: /jarvis/event_batches, the canonical stream, and the rest of /jarvis/ but the ingest side
+# (pre-validation), /jarvis/events (the stream again, one message per event) and the recorders'
+# own notices.
+NOT_RECORDED = "^/jarvis/(ingest|ingest_batches|events|recorder/.*|blackbox/.*)$"
 
 
 def _flag(value):
@@ -183,8 +189,7 @@ def _setup(context):
                         "storage.storage_config_uri": arg["recorder_storage_config"],
                         "storage.max_bagfile_duration": int(arg["split_duration_s"]),
                         "record.regex": "^/jarvis/.*",
-                        # The ingest side is pre-validation; /jarvis/events is the canonical stream.
-                        "record.exclude_regex": "^/jarvis/(ingest|recorder/.*|blackbox/.*)$",
+                        "record.exclude_regex": NOT_RECORDED,
                         "record.topics": arg["record_extra_topics"].split(),
                         "record.qos_profile_overrides_path": str(SHARE / "config" / "recorder_qos.yaml"),
                         "record.disable_keyboard_controls": True,

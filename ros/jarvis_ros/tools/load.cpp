@@ -4,15 +4,17 @@
 // `jarvis_load`: Jarvis under load, end to end (docs/design/01-requirements.md §5, NFR-1/2/5).
 //
 //   ros2 run jarvis_ros jarvis_load [--rate 1000] [--seconds 30] [--sources 200] [--faults 2]
-//                                   [--burst 0] [--process NAME] [--check] [--max-p99-ms 50]
-//                                   [--max-rss-mb 0] [--json FILE]
+//                                   [--burst 0] [--batch 0] [--process NAME] [--check]
+//                                   [--max-p99-ms 50] [--max-rss-mb 0] [--json FILE]
 //
 // Publishes synthetic events on /jarvis/ingest as a fleet of `--sources` nodes would (mostly INFO
 // logs, some warnings and states, `--faults` % faults raised and cleared), reads them back on
-// /jarvis/events (then, with --burst N, N more as fast as it can: a burst to buffer),
+// /jarvis/event_batches (then, with --burst N, N more as fast as it can: a burst to buffer),
 // and reports the rate it got through, the ingest -> publish -> delivery latency, what was lost
 // (sent, not delivered and not counted in a suppression or shedding summary), and the RSS and CPU of the
 // Jarvis processes (those whose executable's name has `--process`, by default the containers).
+// With --batch N it sends as a producer that batches would, on /jarvis/ingest_batches: up to N
+// events a message, none waiting more than 10 ms.
 // With --check it exits 1 when something was lost, p99 is over --max-p99-ms, less than 99 % of the
 // rate got through, or the RSS is over --max-rss-mb (0: not checked).
 
@@ -28,6 +30,7 @@
 #include <iomanip>
 #include <iostream>
 #include <jarvis_interfaces/msg/event.hpp>
+#include <jarvis_interfaces/msg/event_batch.hpp>
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -39,6 +42,7 @@
 
 using jarvis_interfaces::msg::Attribute;
 using jarvis_interfaces::msg::Event;
+using jarvis_interfaces::msg::EventBatch;
 using SteadyClock = std::chrono::steady_clock;
 
 namespace
@@ -46,8 +50,8 @@ namespace
 
 constexpr const char * kUsage =
   "usage: jarvis_load [--rate R] [--seconds S] [--sources N] [--faults PERCENT] [--burst N]\n"
-  "                   [--process NAME] [--check] [--max-p99-ms MS] [--max-rss-mb MB] [--json "
-  "FILE]\n";
+  "                   [--batch N] [--process NAME] [--check] [--max-p99-ms MS] [--max-rss-mb MB]\n"
+  "                   [--json FILE]\n";
 
 struct Options
 {
@@ -56,6 +60,7 @@ struct Options
   std::size_t sources{200};
   std::uint64_t faults{2};  // percent of the events
   std::uint64_t burst{0};
+  std::size_t batch{0};  // events per /jarvis/ingest_batches message; 0: one message per event
   std::string process{"component_container"};
   bool check{false};
   double max_p99_ms{50.0};
@@ -262,6 +267,8 @@ bool parse(int argc, char ** argv, Options & o)
       o.faults = std::min<std::uint64_t>(87, std::stoul(value()));
     } else if (a == "--burst") {
       o.burst = std::stoul(value());
+    } else if (a == "--batch") {
+      o.batch = std::stoul(value());
     } else if (a == "--process") {
       o.process = value();
     } else if (a == "--check") {
@@ -302,6 +309,7 @@ int main(int argc, char ** argv)
   const auto depth = std::max<std::size_t>(10000, o.burst + o.burst / 10);
   const auto qos = rclcpp::QoS(rclcpp::KeepLast(depth)).reliable().durability_volatile();
   auto pub = node->create_publisher<Event>("/jarvis/ingest", qos);
+  auto batch_pub = node->create_publisher<EventBatch>("/jarvis/ingest_batches", qos);
 
   const std::string run = "load" + std::to_string(getpid());
   std::mutex mu;
@@ -310,48 +318,60 @@ int main(int argc, char ** argv)
   std::atomic<std::uint64_t> received{0};
   std::atomic<std::uint64_t> suppressed{0};
   std::atomic<std::uint64_t> shed{0};
-  auto sub = node->create_subscription<Event>("/jarvis/events", qos, [&](Event::UniquePtr e) {
-    if (e->code == "jarvis.ingest.shed") {  // the hub was behind: routine logs dropped
-      for (const auto & a : e->attrs) {
+  auto on_event = [&](const Event & e, const rclcpp::Time & now) {
+    if (e.code == "jarvis.ingest.shed") {  // the hub was behind: routine logs dropped
+      for (const auto & a : e.attrs) {
         if (a.key == "count") {
           shed += static_cast<std::uint64_t>(a.int_value);
         }
       }
       return;
     }
-    if (e->code == "jarvis.ingest.suppressed") {
-      for (const auto & a : e->attrs) {
+    if (e.code == "jarvis.ingest.suppressed") {
+      for (const auto & a : e.attrs) {
         if (a.key == "producer" && a.string_value.rfind("/load/", 0) != 0) {
           return;
         }
       }
-      for (const auto & a : e->attrs) {
+      for (const auto & a : e.attrs) {
         if (a.key == "count") {
           suppressed += static_cast<std::uint64_t>(a.int_value);
         }
       }
       return;
     }
-    if (e->id.rfind(run + "-", 0) != 0) {
+    if (e.id.rfind(run + "-", 0) != 0) {
       return;
     }
-    const auto now = node->now();
-    const double ms = (now - rclcpp::Time(e->stamp, now.get_clock_type())).seconds() * 1e3;
+    const double ms = (now - rclcpp::Time(e.stamp, now.get_clock_type())).seconds() * 1e3;
     std::lock_guard<std::mutex> lock(mu);
     latency_ms.push_back(ms);
     ++received;
-  });
+  };
+  auto sub = node->create_subscription<EventBatch>(
+    "/jarvis/event_batches", rclcpp::QoS(rclcpp::KeepLast(10000)).reliable().durability_volatile(),
+    [&](EventBatch::UniquePtr batch) {
+      const auto now = node->now();
+      for (const auto & e : batch->events) {
+        on_event(e, now);
+      }
+    });
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
   std::thread spin([&] { executor.spin(); });
 
+  const auto matched = [&] {
+    const auto readers =
+      o.batch > 0 ? batch_pub->get_subscription_count() : pub->get_subscription_count();
+    return readers > 0 && sub->get_publisher_count() > 0;
+  };
   const auto deadline = SteadyClock::now() + std::chrono::seconds(15);
-  while ((pub->get_subscription_count() == 0 || sub->get_publisher_count() == 0) &&
-         SteadyClock::now() < deadline) {
+  while (!matched() && SteadyClock::now() < deadline) {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
-  if (pub->get_subscription_count() == 0 || sub->get_publisher_count() == 0) {
-    std::cerr << "nobody reads /jarvis/ingest or publishes /jarvis/events: is Jarvis running?\n";
+  if (!matched()) {
+    std::cerr << "nobody reads /jarvis/ingest" << (o.batch > 0 ? "_batches" : "")
+              << " or publishes /jarvis/event_batches: is Jarvis running?\n";
     executor.cancel();
     spin.join();
     rclcpp::shutdown();
@@ -373,6 +393,30 @@ int main(int argc, char ** argv)
     }
   });
 
+  // A batching producer: a message when the batch is full or its first event is 10 ms old.
+  EventBatch pending;
+  auto pending_since = t0;
+  const auto flush = [&] {
+    if (!pending.events.empty()) {
+      batch_pub->publish(pending);
+      pending.events.clear();
+    }
+  };
+  const auto send = [&](std::uint64_t n) {
+    auto e = make_event(n, o.sources, o.faults, run, node->now());
+    if (o.batch == 0) {
+      pub->publish(e);
+      return;
+    }
+    if (pending.events.empty()) {
+      pending_since = SteadyClock::now();
+    }
+    pending.events.push_back(std::move(e));
+    if (pending.events.size() >= o.batch) {
+      flush();
+    }
+  };
+
   // Send in 1 ms ticks: rate / 1000 events each, on schedule (catching up after a stall).
   const auto total = static_cast<std::uint64_t>(o.rate * o.seconds);
   std::uint64_t sent = 0;
@@ -383,10 +427,14 @@ int main(int argc, char ** argv)
       total,
       static_cast<std::uint64_t>(o.rate * std::chrono::duration<double>(next_tick - t0).count()));
     for (; sent < due; ++sent) {
-      pub->publish(make_event(sent, o.sources, o.faults, run, node->now()));
+      send(sent);
+    }
+    if (SteadyClock::now() - pending_since >= std::chrono::milliseconds(10)) {
+      flush();
     }
     std::this_thread::sleep_until(next_tick);
   }
+  flush();
   const double send_s = elapsed();
   // The burst: as fast as the publisher goes. Its latency is how long the hub takes to catch up,
   // so only the steady part counts for the latency check.
@@ -397,8 +445,9 @@ int main(int argc, char ** argv)
   }
   const std::uint64_t burst_end = sent + o.burst;
   for (; sent < burst_end; ++sent) {
-    pub->publish(make_event(sent, o.sources, o.faults, run, node->now()));
+    send(sent);
   }
+  flush();
   // Drain: what is in flight, and a suppression summary window (10 s by default) if needed.
   const auto drain_until =
     SteadyClock::now() + std::chrono::seconds(12 + static_cast<int>(o.burst / 2000));
@@ -435,6 +484,7 @@ int main(int argc, char ** argv)
     {"sources", o.sources},
     {"fault_percent", o.faults},
     {"burst", o.burst},
+    {"batch", o.batch},
     {"sent", sent},
     {"sent_per_s", send_s > 0 ? static_cast<double>(sent - o.burst) / send_s : 0.0},
     {"delivered", got},

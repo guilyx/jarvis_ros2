@@ -17,7 +17,7 @@
 2. **If it matters, it's on the graph.** Every event, fault transition, rule match, recovery step and insight is published. Anything (rosbag2, Foxglove, `ros2 topic echo`, the dashboard) can observe it.
 3. **Right primitive for the job.** Topics for streams, latched topics for current state, services for quick request/response, actions for long-running work. See [03 §9](03-data-model.md#9-communication-patterns).
 4. **Record, don't store.** rosbag2 is the system of record (MCAP). History and analytics come from Parquet converted off the hot path. Small state that must survive a restart (open faults, running executions) is written as atomic snapshot files.
-5. **One canonical stream.** Only `/jarvis/event_hub` publishes `/jarvis/events`. It validates, de-duplicates, rate-limits and sequences everything.
+5. **One canonical stream.** Only `/jarvis/event_hub` publishes the stream (`/jarvis/event_batches`, and `/jarvis/events` one message per event). It validates, de-duplicates, rate-limits and sequences everything.
 6. **Deterministic decisions.** Fault manager, rule engine and orchestrator never read wall clocks or do I/O. They receive inputs and return effects.
 7. **Least privilege for automation.** The agent has no actuators. Rules can only name plans. Plans can only use registered actions.
 8. **Degrade, don't die.** If the LLM is offline, use heuristics. If there's a flood, shed DEBUG/INFO first. If the disk fills, retention evicts the oldest recordings.
@@ -176,7 +176,7 @@ flowchart BT
 
 | Component | Process | Kind | Responsibility |
 |-----------|---------|------|----------------|
-| `/jarvis/event_hub` | runtime container | lifecycle component (C++) | Single publisher of `/jarvis/events`: validate, de-dupe, rate-limit, shed, sequence. Ring buffer of recent events + `~/query_events`. |
+| `/jarvis/event_hub` | runtime container | lifecycle component (C++) | Single publisher of the stream (`/jarvis/event_batches`, batched; `/jarvis/events` while read): validate, de-dupe, rate-limit, shed, sequence. Ring buffer of recent events + `~/query_events`. |
 | `/jarvis/fault_manager` | runtime container | lifecycle component (C++) | Fault lifecycle (debounce/heal/latch/correlate), incidents, freeze frames, black-box trigger, `/jarvis/faults` (latched), ack/clear services, `/diagnostics` export, state snapshot |
 | `/jarvis/rule_engine` | runtime container | lifecycle component (C++) | Load/validate/hot-reload rules, CEP evaluation, `RULE_MATCH`, recovery requests, policy counters snapshot |
 | `/jarvis/recovery` | runtime container | lifecycle component (C++) | `ExecuteRecovery` server, gates, approvals, plan execution, actuators, escalation, `/jarvis/executions` (latched), state snapshot |
@@ -227,7 +227,7 @@ flowchart LR
 | Fault manager crash | Restores open episodes, incidents, latches and acks from its snapshot file, then republishes `/jarvis/faults`. Emits `jarvis.fault_manager.restored`. |
 | Orchestrator crash mid-plan | Plans are **not** resumed, because resuming blind is unsafe. The snapshot lists executions that were `RUNNING`. It emits `jarvis.recovery.interrupted` (ERROR) for each and escalates their incidents. |
 | Rule engine restart | Partial matches are lost (documented). Cooldowns and `max_fires` counters are restored from the snapshot, so a restart can't cause a recovery storm. Optional warm-up replays the last N minutes from the event hub's ring buffer. |
-| Recorder down or lagging | The fault manager raises `jarvis.recorder.down` if `/jarvis/events` has no recorder subscription, or no split closed for 2× the split duration. Live behavior is unaffected. |
+| Recorder down or lagging | The fault manager raises `jarvis.recorder.down` if `/jarvis/event_batches` has no recorder subscription, or no split closed for 2× the split duration. Live behavior is unaffected. |
 | Hard crash / power cut | Open state survives (fsynced snapshots). What the recorder had not written yet (its file buffer, ≤ ~1 s) is lost, and on a power cut what the OS had not written back. The lake recovers the torn split when Jarvis restarts. Tested with SIGKILL in CI (`test_durability.py`). |
 | Event flood | Per-(source, code) token bucket. Excess is collapsed into `jarvis.ingest.suppressed` summaries. On overload, DEBUG/INFO are shed first and ≥ ERROR is never dropped. All counted in diagnostics. |
 | Disk pressure | Below a free-disk floor (1 GiB) on any file system it writes to, lake retention makes room there first, oldest first: MCAP splits **already in Parquet**, then black-box snapshots (never the one being written), then Parquet days (never the newest). If that is not enough, the lake's diagnostic turns ERROR and it raises `jarvis.storage.low`; it clears it once there is room, after a restart too. |

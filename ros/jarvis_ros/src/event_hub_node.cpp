@@ -1,8 +1,10 @@
 // Copyright 2026 Erwin L.
 // SPDX-License-Identifier: Apache-2.0
 //
-// /jarvis/event_hub: the single publisher of /jarvis/events (docs/design/04-data-flow.md §1).
+// /jarvis/event_hub: the single publisher of the event stream, /jarvis/event_batches (and
+// /jarvis/events, one message per event, while someone reads it) (docs/design/04-data-flow.md §1).
 
+#include <algorithm>
 #include <chrono>
 #include <diagnostic_updater/diagnostic_updater.hpp>
 #include <jarvis_core/event_hub.hpp>
@@ -46,6 +48,14 @@ public:
     // readers that may lag (the recorder, the gateway) are deep instead.
     declare<int>(*this, "queue_depth", 1000, "History depth of /jarvis/events (the writer)");
     declare<int>(*this, "ingest_queue_depth", 20000, "History depth of /jarvis/ingest");
+    // The stream goes out in batches: one message per group of events, the "group commit" of
+    // NFR-2. A batch leaves when it is full or batch_period_ms after its first event.
+    declare<int>(
+      *this, "batch_max_events", 500, "Most events in one /jarvis/event_batches message");
+    declare<int>(*this, "batch_period_ms", 5, "Longest an event waits for its batch to leave");
+    declare<int>(*this, "batch_queue_depth", 100, "History depth of /jarvis/event_batches");
+    declare<int>(
+      *this, "ingest_batch_queue_depth", 1000, "History depth of /jarvis/ingest_batches");
     if (declare<bool>(*this, "autostart", false, "Configure and activate on startup")) {
       autostart_timer_ = create_wall_timer(std::chrono::milliseconds(1), [this]() {
         autostart_timer_->cancel();
@@ -76,6 +86,13 @@ public:
     config.max_causal_depth = static_cast<int>(get_parameter("max_causal_depth").as_int());
     depth_ = static_cast<std::size_t>(get_parameter("queue_depth").as_int());
     ingest_depth_ = static_cast<std::size_t>(get_parameter("ingest_queue_depth").as_int());
+    batch_max_ =
+      static_cast<std::size_t>(std::max<int64_t>(1, get_parameter("batch_max_events").as_int()));
+    batch_period_ =
+      std::chrono::milliseconds(std::max<int64_t>(1, get_parameter("batch_period_ms").as_int()));
+    batch_depth_ = static_cast<std::size_t>(get_parameter("batch_queue_depth").as_int());
+    ingest_batch_depth_ =
+      static_cast<std::size_t>(get_parameter("ingest_batch_queue_depth").as_int());
 
     StateFile state(get_parameter("state_dir").as_string(), "event_hub.json");
     try {
@@ -89,6 +106,7 @@ public:
 
     hub_ = std::make_unique<jarvis_core::EventHub>(config, boot_count_);
     events_pub_ = create_event_publisher(*this, "events", stream_qos(depth_));
+    batches_pub_ = create_batch_publisher(*this, "event_batches", stream_qos(batch_depth_));
     query_srv_ = create_service<QueryEvents>(
       "~/query_events", [this](
                           const std::shared_ptr<QueryEvents::Request> req,
@@ -115,6 +133,7 @@ public:
       s.add("evicted", st.evicted);
       s.add("buffered_events", st.buffered_events);
       s.add("buffered_bytes", st.buffered_bytes);
+      s.add("batches", batches_);
     });
 
     RCLCPP_INFO(get_logger(), "configured (boot %u)", static_cast<unsigned>(boot_count_));
@@ -126,19 +145,33 @@ public:
     ingest_sub_ = create_subscription<AdaptedEvent>(
       "ingest", stream_qos(ingest_depth_),
       [this](const jarvis_core::Event & event, const rclcpp::MessageInfo & info) {
-        on_ingest(event, info);
+        on_ingest(event, queued(info));
+      });
+    ingest_batch_sub_ = create_subscription<AdaptedBatch>(
+      "ingest_batches", stream_qos(ingest_batch_depth_),
+      [this](const std::vector<jarvis_core::Event> & batch, const rclcpp::MessageInfo & info) {
+        const auto waited = queued(info);
+        for (const auto & event : batch) {
+          on_ingest(event, waited);
+        }
       });
     tick_timer_ = create_wall_timer(
       std::chrono::seconds(1), [this]() { publish_all(hub_->advance_to(now_ns(*this))); });
+    // Armed by the first event of a batch, so an idle hub doesn't wake up.
+    flush_timer_ = create_wall_timer(batch_period_, [this]() { flush(); });
+    flush_timer_->cancel();
     is_active_ = true;
     return CallbackReturn::SUCCESS;
   }
 
   CallbackReturn on_deactivate(const rclcpp_lifecycle::State &) override
   {
+    flush();
     is_active_ = false;
     ingest_sub_.reset();
+    ingest_batch_sub_.reset();
     tick_timer_.reset();
+    flush_timer_.reset();
     return CallbackReturn::SUCCESS;
   }
 
@@ -147,6 +180,7 @@ public:
     diagnostics_.reset();
     query_srv_.reset();
     events_pub_.reset();
+    batches_pub_.reset();
     hub_.reset();
     return CallbackReturn::SUCCESS;
   }
@@ -160,22 +194,24 @@ public:
   }
 
 private:
-  void on_ingest(const jarvis_core::Event & event, const rclcpp::MessageInfo & info)
+  /// How long a message waited in the queue, on this host's clock: the hub sheds routine logs when
+  /// it is behind. Unknown (0) for intra-process deliveries, whose message info carries no
+  /// timestamps (Jarvis's own components, in this container), and for an implausible one.
+  static jarvis_core::Duration queued(const rclcpp::MessageInfo & info)
   {
-    // How long it waited in the queue, on this host's clock: the hub sheds routine logs when it is
-    // behind. Unknown (0) for intra-process deliveries, whose message info carries no timestamps
-    // (Jarvis's own components, in this container), and for an implausible one.
     const auto & rmw = info.get_rmw_message_info();
-    jarvis_core::Duration queued = 0;
-    if (!rmw.from_intra_process && rmw.received_timestamp > 0) {
-      const auto wall = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                          std::chrono::system_clock::now().time_since_epoch())
-                          .count();
-      const auto waited = wall - rmw.received_timestamp;
-      if (waited > 0 && waited < 3600 * jarvis_core::kSecond) {
-        queued = waited;
-      }
+    if (rmw.from_intra_process || rmw.received_timestamp <= 0) {
+      return 0;
     }
+    const auto wall = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::system_clock::now().time_since_epoch())
+                        .count();
+    const auto waited = wall - rmw.received_timestamp;
+    return waited > 0 && waited < 3600 * jarvis_core::kSecond ? waited : 0;
+  }
+
+  void on_ingest(const jarvis_core::Event & event, jarvis_core::Duration queued)
+  {
     auto result = hub_->ingest(event, now_ns(*this), queued);
     if (
       !result.accepted && result.reject_reason != "rate limited" &&
@@ -189,12 +225,40 @@ private:
 
   void publish_all(std::vector<jarvis_core::Event> && events)
   {
-    if (!is_active_) {
+    if (!is_active_ || events.empty()) {
       return;
     }
-    for (const auto & e : events) {
-      events_pub_->publish(e);
+    // One message per event costs more than the hub spends on it: only for those who read it.
+    if (
+      events_pub_->get_subscription_count() > 0 ||
+      events_pub_->get_intra_process_subscription_count() > 0) {
+      for (const auto & e : events) {
+        events_pub_->publish(e);
+      }
     }
+    for (auto & e : events) {
+      if (batch_.empty()) {
+        flush_timer_->reset();
+      }
+      batch_.push_back(std::move(e));
+      if (batch_.size() >= batch_max_) {
+        flush();
+      }
+    }
+  }
+
+  void flush()
+  {
+    if (flush_timer_) {
+      flush_timer_->cancel();
+    }
+    if (batch_.empty()) {
+      return;
+    }
+    auto batch = std::make_unique<std::vector<jarvis_core::Event>>();
+    batch->swap(batch_);
+    batches_pub_->publish(std::move(batch));
+    ++batches_;
   }
 
   void on_query(const QueryEvents::Request & req, QueryEvents::Response & res)
@@ -231,13 +295,22 @@ private:
 
   std::unique_ptr<jarvis_core::EventHub> hub_;
   EventPublisher::SharedPtr events_pub_;
+  BatchPublisher::SharedPtr batches_pub_;
   rclcpp::Subscription<AdaptedEvent>::SharedPtr ingest_sub_;
+  rclcpp::Subscription<AdaptedBatch>::SharedPtr ingest_batch_sub_;
   rclcpp::Service<QueryEvents>::SharedPtr query_srv_;
   rclcpp::TimerBase::SharedPtr tick_timer_;
+  rclcpp::TimerBase::SharedPtr flush_timer_;
   rclcpp::TimerBase::SharedPtr autostart_timer_;
   std::unique_ptr<diagnostic_updater::Updater> diagnostics_;
   std::size_t depth_{1000};
   std::size_t ingest_depth_{20000};
+  std::size_t batch_max_{500};
+  std::chrono::milliseconds batch_period_{5};
+  std::size_t batch_depth_{100};
+  std::size_t ingest_batch_depth_{1000};
+  std::vector<jarvis_core::Event> batch_;  // the next /jarvis/event_batches message
+  uint64_t batches_{0};
   uint16_t boot_count_{0};
   bool is_active_{false};
 };

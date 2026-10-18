@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // /jarvis/fault_manager: fault lifecycle, correlation and incidents (docs/design/04-data-flow.md §2).
-// It reads /jarvis/events, publishes its decisions to /jarvis/ingest, keeps the latched
+// It reads /jarvis/event_batches, publishes its decisions to /jarvis/ingest, keeps the latched
 // /jarvis/faults snapshot, exports active faults on /diagnostics and saves its state to disk.
 
 #include <algorithm>
 #include <diagnostic_msgs/msg/diagnostic_array.hpp>
 #include <diagnostic_updater/diagnostic_updater.hpp>
+#include <iterator>
 #include <jarvis_core/fault_manager.hpp>
 #include <jarvis_core/util.hpp>
 #include <jarvis_interfaces/msg/fault_array.hpp>
@@ -65,7 +66,8 @@ public:
     declare<double>(
       *this, "blackbox_timeout_s", 10.0,
       "How long a capture waits for the snapshot service's answer once the request is sent");
-    declare<int>(*this, "queue_depth", 1000, "History depth of /jarvis/events and /jarvis/ingest");
+    declare<int>(
+      *this, "queue_depth", 1000, "History depth of /jarvis/event_batches and /jarvis/ingest");
     if (declare<bool>(*this, "autostart", false, "Configure and activate on startup")) {
       autostart_timer_ = create_wall_timer(std::chrono::milliseconds(1), [this]() {
         autostart_timer_->cancel();
@@ -194,9 +196,17 @@ public:
       diagnostics_pub_->on_activate();
     }
     active_ = true;
-    events_sub_ = create_subscription<AdaptedEvent>(
-      "events", stream_qos(depth_),
-      [this](const jarvis_core::Event & e) { apply(manager_->on_event(e, now_ns(*this))); });
+    events_sub_ = create_subscription<AdaptedBatch>(
+      "event_batches", stream_qos(depth_), [this](const std::vector<jarvis_core::Event> & batch) {
+        // The batch's effects at once: one fault snapshot for the batch, not one per event.
+        jarvis_core::Effects effects;
+        const auto now = now_ns(*this);
+        for (const auto & e : batch) {
+          auto fx = manager_->on_event(e, now);
+          std::move(fx.begin(), fx.end(), std::back_inserter(effects));
+        }
+        apply(std::move(effects));
+      });
     // State writes are coalesced so a burst of transitions costs one fsync.
     persist_timer_ =
       create_wall_timer(std::chrono::milliseconds(100), [this]() { persist_if_dirty(); });
@@ -258,6 +268,7 @@ public:
 private:
   void apply(jarvis_core::Effects effects)
   {
+    bool faults_changed = false;
     for (auto & fx : effects) {
       if (auto * emit = std::get_if<jarvis_core::EmitEvent>(&fx)) {
         if (active_) {
@@ -266,15 +277,16 @@ private:
           pending_.push_back(std::move(fx));
         }
       } else if (std::holds_alternative<jarvis_core::FaultsChanged>(fx)) {
-        if (active_) {
-          publish_faults();
-          export_diagnostics();
-        }
+        faults_changed = true;
       } else if (std::holds_alternative<jarvis_core::PersistState>(fx)) {
         dirty_ = true;
       } else if (auto * capture = std::get_if<jarvis_core::CaptureBlackbox>(&fx)) {
         request_blackbox(*capture);
       }
+    }
+    if (faults_changed && active_) {
+      publish_faults();
+      export_diagnostics();
     }
     arm_deadline();
   }
@@ -509,7 +521,7 @@ private:
   EventPublisher::SharedPtr ingest_pub_;
   rclcpp_lifecycle::LifecyclePublisher<FaultArray>::SharedPtr faults_pub_;
   rclcpp_lifecycle::LifecyclePublisher<DiagnosticArray>::SharedPtr diagnostics_pub_;
-  rclcpp::Subscription<AdaptedEvent>::SharedPtr events_sub_;
+  rclcpp::Subscription<AdaptedBatch>::SharedPtr events_sub_;
   rclcpp::Service<GetFaults>::SharedPtr get_faults_srv_;
   rclcpp::Service<AcknowledgeFault>::SharedPtr ack_srv_;
   rclcpp::Service<ClearFault>::SharedPtr clear_srv_;

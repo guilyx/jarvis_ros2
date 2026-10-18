@@ -68,7 +68,7 @@ def wait_for(node, predicate, what, timeout=60.0):
 
 def recording(node):
     """The recorder is subscribed to the event stream (it starts last)."""
-    subs = node.get_subscriptions_info_by_topic("/jarvis/events")
+    subs = node.get_subscriptions_info_by_topic("/jarvis/event_batches")
     return any(s.node_name == "recorder" for s in subs)
 
 

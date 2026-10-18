@@ -13,6 +13,7 @@
 #include <jarvis_core/types.hpp>
 #include <jarvis_interfaces/msg/attribute.hpp>
 #include <jarvis_interfaces/msg/event.hpp>
+#include <jarvis_interfaces/msg/event_batch.hpp>
 #include <jarvis_interfaces/msg/execution.hpp>
 #include <jarvis_interfaces/msg/fault.hpp>
 #include <jarvis_interfaces/msg/rule_status.hpp>
@@ -75,7 +76,34 @@ struct rclcpp::TypeAdapter<jarvis_core::Event, jarvis_interfaces::msg::Event>
   }
 };
 
+/// A batch of events (/jarvis/event_batches, /jarvis/ingest_batches) as core events, in order.
+template <>
+struct rclcpp::TypeAdapter<std::vector<jarvis_core::Event>, jarvis_interfaces::msg::EventBatch>
+{
+  using is_specialized = std::true_type;
+  using custom_type = std::vector<jarvis_core::Event>;
+  using ros_message_type = jarvis_interfaces::msg::EventBatch;
+
+  static void convert_to_ros_message(const custom_type & source, ros_message_type & destination)
+  {
+    destination.events.resize(source.size());
+    for (std::size_t i = 0; i < source.size(); ++i) {
+      jarvis_ros::to_msg(source[i], destination.events[i]);
+    }
+  }
+
+  static void convert_to_custom(const ros_message_type & source, custom_type & destination)
+  {
+    destination.resize(source.events.size());
+    for (std::size_t i = 0; i < source.events.size(); ++i) {
+      jarvis_ros::from_msg(source.events[i], destination[i]);
+    }
+  }
+};
+
 namespace jarvis_ros
 {
 using AdaptedEvent = rclcpp::TypeAdapter<jarvis_core::Event, jarvis_interfaces::msg::Event>;
+using AdaptedBatch =
+  rclcpp::TypeAdapter<std::vector<jarvis_core::Event>, jarvis_interfaces::msg::EventBatch>;
 }  // namespace jarvis_ros

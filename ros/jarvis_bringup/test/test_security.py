@@ -6,8 +6,8 @@ test plays a robot node (the producer enclave) and a person (the operator enclav
 
 - what is allowed works end to end: a producer's fault reaches the fault manager, an operator
   sees it, and so does the gateway (its enclave reads the stream);
-- what is not is refused by DDS: a producer cannot publish the stream (/jarvis/events) nor read
-  it, and a participant whose enclave is not in the keystore cannot join at all.
+- what is not is refused by DDS: a producer cannot publish the stream (/jarvis/event_batches,
+  /jarvis/events) nor read it, and a participant whose enclave is not in the keystore cannot join at all.
 """
 
 import json
@@ -121,5 +121,7 @@ def test_what_it_does_not_allow_is_refused(stack):
     assert forged["join"] == "allowed"
     assert forged["publish_events"].startswith("denied"), forged
     assert forged["read_events"].startswith("denied"), forged
+    assert forged["publish_batches"].startswith("denied"), forged
+    assert forged["read_batches"].startswith("denied"), forged
     # An enclave the keystore does not have: no certificate, no participant.
     assert participant("/jarvis/intruder", "join")["join"].startswith("denied")

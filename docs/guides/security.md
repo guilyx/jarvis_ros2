@@ -28,9 +28,9 @@ enclave of its own, with what it uses and nothing else:
 | `/jarvis/agent` | `jarvis-agent` | publish insights on `/jarvis/ingest`; serve `analyze`; ask for recoveries |
 | `/jarvis/launch` | `ros2 launch` itself | load the components into the container |
 | `/jarvis/operator` | people: `ros2 jarvis`, the monitor, `ros2 topic ...` | read the stream and diagnostics; call Jarvis' services and actions |
-| `/jarvis/producer` | a robot node reporting through `jarvis_reporter` | publish `/jarvis/ingest`, nothing else of Jarvis' |
+| `/jarvis/producer` | a robot node reporting through `jarvis_reporter` | publish `/jarvis/ingest` (or `/jarvis/ingest_batches`), nothing else of Jarvis' |
 
-What that buys: only the core can publish `/jarvis/events`, `/jarvis/faults` and
+What that buys: only the core can publish the stream (`/jarvis/event_batches`, `/jarvis/events`), `/jarvis/faults` and
 `/jarvis/executions` or answer as a Jarvis service, so no other process can forge history, fake a
 recovery or clear a fault. A node outside the keystore cannot even join the graph.
 

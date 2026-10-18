@@ -60,7 +60,7 @@ def generate_launch_description():
             "use_sim_time": "true",
             "catalog": str(DEMO / "config" / "demo_faults.yaml"),
             "rules": str(DEMO / "config" / "rules"),
-            "blackbox_topics": f"/scan {RELAYED} /odom /tf /tf_static /cmd_vel /jarvis/events",
+            "blackbox_topics": f"/scan {RELAYED} /odom /tf /tf_static /cmd_vel /jarvis/event_batches",
         }.items(),
     )
     relay = Node(

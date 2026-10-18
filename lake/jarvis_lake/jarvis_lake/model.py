@@ -29,6 +29,9 @@ SEVERITIES = {10: "DEBUG", 20: "INFO", 30: "WARN", 40: "ERROR", 50: "CRITICAL"}
 SEVERITY_LEVELS = {name: level for level, name in SEVERITIES.items()}
 ATTR_STRING, ATTR_INT, ATTR_DOUBLE, ATTR_BOOL = 0, 1, 2, 3
 
+# The recorder records the batched stream; bags of Jarvis before 1.0 have one message per event.
+BATCHES_TOPIC = "/jarvis/event_batches"
+BATCH_TYPE = "jarvis_interfaces/msg/EventBatch"
 EVENTS_TOPIC = "/jarvis/events"
 EVENT_TYPE = "jarvis_interfaces/msg/Event"
 

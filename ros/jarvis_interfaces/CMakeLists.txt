@@ -10,6 +10,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   msg/Attribute.msg
   msg/Source.msg
   msg/Event.msg
+  msg/EventBatch.msg
   msg/Fault.msg
   msg/FaultArray.msg
   msg/GateResult.msg

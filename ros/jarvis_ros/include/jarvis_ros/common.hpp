@@ -17,7 +17,8 @@
 namespace jarvis_ros
 {
 
-/// /jarvis/ingest and /jarvis/events: reliable, bounded memory (docs/design/03-data-model.md §11).
+/// The event stream's topics, single and batched: reliable, bounded memory
+/// (docs/design/03-data-model.md §11).
 inline rclcpp::QoS stream_qos(std::size_t depth)
 {
   return rclcpp::QoS(rclcpp::KeepLast(depth)).reliable().durability_volatile();
@@ -60,6 +61,17 @@ inline EventPublisher::SharedPtr create_event_publisher(
   return rclcpp::create_publisher<
     rclcpp::TypeAdapter<jarvis_core::Event, jarvis_interfaces::msg::Event>>(
     parameters, topics, topic, qos);
+}
+
+/// Publisher of event batches (/jarvis/event_batches), also through a type adapter.
+using BatchPublisher = rclcpp::Publisher<AdaptedBatch>;
+
+inline BatchPublisher::SharedPtr create_batch_publisher(
+  rclcpp_lifecycle::LifecycleNode & node, const std::string & topic, const rclcpp::QoS & qos)
+{
+  auto parameters = node.get_node_parameters_interface();
+  auto topics = node.get_node_topics_interface();
+  return rclcpp::create_publisher<AdaptedBatch>(parameters, topics, topic, qos);
 }
 
 template <typename T>

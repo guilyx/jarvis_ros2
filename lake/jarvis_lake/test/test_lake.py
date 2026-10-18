@@ -188,6 +188,28 @@ def test_a_split_becomes_typed_rows_and_other_topics_are_ignored(data_dir, event
     assert r["split"] == "b1_0"
 
 
+def test_a_batched_split_reads_as_its_events_and_bags_before_batches_still_read(data_dir, events):
+    stream = [events("LOG", f"x.e{n}", message=f"m{n}") for n in range(7)]
+    batched = write_split(split(data_dir, "b1", 0), stream, batch=3, other_topic=True)
+    single = write_split(split(data_dir, "b2", 0), stream)
+    rows, result = convert.read_split(batched)
+    assert (result.rows, result.skipped) == (7, 0)
+    assert [r["code"] for r in rows] == [f"x.e{n}" for n in range(7)]
+    legacy, _ = convert.read_split(single)
+    strip = [{k: v for k, v in r.items() if k != "split"} for r in rows]
+    assert strip == [{k: v for k, v in r.items() if k != "split"} for r in legacy]
+
+
+def test_a_torn_batched_split_keeps_its_complete_batches(data_dir, events):
+    stream = [events("LOG", "x.y") for _ in range(48)]
+    path = write_split(split(data_dir, "b1", 0), stream, chunk_size=2000, finalize=False, batch=4)
+    os.truncate(path, path.stat().st_size - 300)
+    rows, result = convert.read_split(path)
+    assert not result.finalized and result.truncated
+    assert 0 < result.rows < 48 and result.rows % 4 == 0, "whole batches"
+    assert [r["seq"] for r in rows] == list(range(1, result.rows + 1)), "a prefix, in order"
+
+
 def test_events_are_partitioned_by_utc_day_and_conversion_is_idempotent(data_dir):
     e = Events(step=datetime.timedelta(minutes=4))  # 23:50 → 00:30 over eleven events
     path = write_split(split(data_dir, "b1", 0), [e("LOG", "x.y") for _ in range(11)])

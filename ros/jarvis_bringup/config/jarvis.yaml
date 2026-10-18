@@ -84,3 +84,9 @@
   ros__parameters:
     grace_s: 5.0
     period_s: 1.0
+
+/jarvis/bridges/medkit:           # with medkit:=true (jarvis_medkit)
+  ros__parameters:
+    code_prefix: medkit           # MOTOR_OVERHEAT is reported as medkit.motor_overheat
+    include_muted: false          # medkit's muted symptoms stay in medkit
+    resync_period_s: 10.0         # reads list_faults this often: catches events the bridge missed

@@ -18,6 +18,9 @@ The gateway (jarvis_gateway) serves the API, live stream and dashboard on gatewa
 
 Rules and plans are directories of YAML files (`rules`, `plans`); the defaults ship generic ones.
 
+A robot that runs ros2_medkit: `medkit:=true` reports the faults its fault manager confirms to Jarvis
+(jarvis_medkit; docs/guides/integration.md).
+
 With SROS2 (security/policy.xml), each process takes its own enclave under `enclave_root`:
     ros2 run jarvis_bringup jarvis_keystore ~/jarvis_keystore    # prints what to export
     ROS_SECURITY_ENCLAVE_OVERRIDE=/jarvis/launch ros2 launch jarvis_bringup jarvis.launch.py
@@ -48,6 +51,8 @@ ARGUMENTS = {
     "use_sim_time": ("false", "Use /clock"),
     "autostart": ("true", "Configure and activate the lifecycle components on startup"),
     "bridges": ("true", "Bridge /diagnostics, /rosout, action goal status, lifecycle and watchdogs"),
+    "medkit": ("false", "Bring the faults of ros2_medkit's fault manager into Jarvis (jarvis_medkit)"),
+    "medkit_fault_manager": ("/fault_manager", "Node of ros2_medkit's fault manager"),
     "record": ("true", "Record /jarvis/** to MCAP"),
     "record_extra_topics": ("/diagnostics /rosout", "Context topics recorded with /jarvis/**"),
     "split_duration_s": ("300", "Length of a recorder split"),
@@ -222,6 +227,21 @@ def _setup(context):
         )
 
     processes = []
+    if _flag(arg["medkit"]):
+        processes.append(
+            Node(
+                package="jarvis_medkit",
+                executable="medkit_bridge",
+                name="medkit",
+                namespace="jarvis/bridges",
+                additional_env=enclave("medkit"),
+                parameters=[
+                    arg["params_file"],
+                    {"use_sim_time": use_sim_time, "fault_manager": arg["medkit_fault_manager"]},
+                ],
+                output="screen",
+            )
+        )
     if _flag(arg["lake"]):
         # Its own process: disk-heavy, third-party libraries, and nothing else waits on it.
         processes.append(

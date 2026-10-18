@@ -30,3 +30,10 @@ Interoperability went the other way first: the gateway serves Jarvis's faults wi
 fields of medkit's gateway (ISO 17978, SOVD), at `/sovd/api/v1` ([guide](../guides/sovd.md)), so
 medkit's web UI and Foxglove panel show a robot's Jarvis faults without depending on medkit. The
 bridge from medkit's faults into Jarvis is next (roadmap 6.4).
+
+## Follow-up (2026-10-18, milestone 6.4)
+The bridge exists, as planned and optional: `jarvis_medkit` (`medkit:=true`) turns the faults medkit's
+fault manager confirms into Jarvis faults, `medkit.<code>` ([integration guide](../guides/integration.md#already-running-ros2_medkit)).
+It depends on `ros2_medkit_msgs` only, on what its 0.6 release (Jazzy) carries, and the rest of
+Jarvis does not depend on it. medkit stays the fault manager of record for its faults: a clear in
+Jarvis does not reach it.

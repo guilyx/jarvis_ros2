@@ -24,6 +24,11 @@ schema: jarvis.gateway/v1
 cors_origins: [http://localhost:3000]
 ```
 
+To try it with the demo (`./demo up`, whose gateway allows that origin and lets anyone clear):
+run the ros2_medkit web UI on port 3000 (`docker run -p 3000:80
+ghcr.io/selfpatch/ros2_medkit_web_ui`), open http://localhost:3000 and connect to
+`http://localhost:8080/sovd`.
+
 Check it from the command line:
 
 ```bash

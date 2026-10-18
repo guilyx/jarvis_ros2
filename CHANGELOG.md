@@ -48,6 +48,8 @@ a dashboard and an agent that explains what happened.
 - AI assistants (Claude Code, Claude Desktop, Cursor) ask the robot what is wrong over MCP:
   `jarvis-mcp` reads faults, runbooks, incidents, events and history through the gateway, with
   its tokens and audit trail, and requests recoveries through the gates only if allowed.
+- SOVD clients (the ros2_medkit web UI, its Foxglove panel) list, follow and clear Jarvis's faults:
+  the gateway serves them on a SOVD-style API at `/sovd/api/v1`.
 
 ### Production
 - Measured against the requirements: load, soak, crash and disk-pressure tests in CI.

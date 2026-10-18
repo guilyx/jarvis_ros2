@@ -38,6 +38,10 @@ def test_discovery_finds_the_robot_and_its_apps(gw):
     assert [a["id"] for a in apps] == ["lidar-front"], "an id the clients keep as is"
     assert gw.get(f"{API}/apps/lidar-front")["name"] == "lidar_front"
     assert gw.client.get(f"{API}/apps/nope", headers=VIEWER).json()["error_code"] == "resource-not-found"
+    # Jarvis serves faults only: what the clients ask for besides is there, and empty.
+    assert gw.get(f"{API}/apps/lidar-front/data") == {"items": []}
+    assert gw.get(f"{API}/components/fake-bot/operations") == {"items": []}
+    assert gw.client.get(f"{API}/apps/lidar-front/logs", headers=VIEWER).status_code == 404
 
 
 def test_faults_are_listed_as_medkit_lists_them(gw):

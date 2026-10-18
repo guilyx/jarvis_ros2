@@ -332,6 +332,17 @@ def router(gw, viewer, operator):
             "x-jarvis": {**listed["x-jarvis"], "runbook": f"/api/v1/runbooks/{code}" if runbook else None},
         }
 
+    # After the fault routes: the first route that matches a path serves it.
+    @api.get("/{collection}/{entity_id}/{resource}")
+    def nothing_else(collection: str, entity_id: str, resource: str, who=Depends(viewer)):
+        """Data, operations and configurations: Jarvis serves faults only, so these are empty."""
+        if resource not in ("data", "operations", "configurations") or collection not in (
+            "components",
+            "apps",
+        ):
+            return _error(404, "resource-not-found", f"no {resource} here", resource=resource)
+        return {"items": []}
+
     async def clear(faults_, who):
         for f in faults_:
             await gw.command(

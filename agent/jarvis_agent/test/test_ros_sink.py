@@ -125,6 +125,7 @@ def test_proposals_go_to_the_one_gate_as_the_agent():
 def test_questions_are_answered_over_the_analyze_action(query):
     rclpy = pytest.importorskip("rclpy")
     pytest.importorskip("jarvis_interfaces")
+    from action_msgs.msg import GoalStatus
     from jarvis_agent.adapters.ros2 import RosAgent
     from jarvis_interfaces.action import Analyze
     from rclpy.action import ActionClient
@@ -146,13 +147,16 @@ def test_questions_are_answered_over_the_analyze_action(query):
         )
         executor.spin_until_future_complete(sent, timeout_sec=20)
         assert sent.done(), "the goal was not taken"
-        result = sent.result().get_result_async()
+        handle = sent.result()
+        # Nothing orders feedback (a topic) and the result (a service reply), and rclpy's client
+        # drops a goal's feedback once its result is in: hear the last stage, then ask for it.
+        ended = (GoalStatus.STATUS_ABORTED, GoalStatus.STATUS_CANCELED)
+        deadline = time.monotonic() + 30.0
+        while stages[-1:] != ["done"] and handle.status not in ended and time.monotonic() < deadline:
+            executor.spin_once(timeout_sec=0.1)
+        result = handle.get_result_async()
         executor.spin_until_future_complete(result, timeout_sec=30)
         assert result.done(), "no result"
-        # Feedback is a topic and the result a service reply: the last feedback can land after it.
-        deadline = time.monotonic() + 5.0
-        while result.result().result.success and stages[-1:] != ["done"] and time.monotonic() < deadline:
-            executor.spin_once(timeout_sec=0.1)
         return result.result().result, stages
 
     try:

@@ -84,8 +84,9 @@ def _error(status, error_code, message, **parameters):
 def router(gw, viewer, operator):
     """The SOVD routes over a Gateway, with its role checks: `api` at /sovd/api/v1, `root` at
     /sovd."""
-    api = APIRouter(prefix=BASE, tags=["sovd"])
-    root = APIRouter(prefix="/sovd", tags=["sovd"])
+    # Not in the gateway's OpenAPI document (/docs): SOVD clients follow SOVD's.
+    api = APIRouter(prefix=BASE, include_in_schema=False)
+    root = APIRouter(prefix="/sovd", include_in_schema=False)
 
     def robot():
         return gw.state.robot or "robot"

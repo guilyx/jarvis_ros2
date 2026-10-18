@@ -50,7 +50,8 @@ curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/sovd/api/v1/faults
 | `DELETE /{components,apps}/{id}/faults[/{code}]` | Clears them (operator) |
 | `GET /{components,apps}/{id}/{data,operations,configurations}` | Empty: Jarvis serves faults only |
 
-Errors are SOVD's: `{"error_code": "resource-not-found", "message": ..., "parameters": {...}}`.
+Errors are SOVD's: `{"error_code": "resource-not-found", "message": ..., "parameters": {...}}`. These
+paths follow SOVD, not the gateway's own API: they are not in its OpenAPI document (`/docs`).
 
 ## 3. How Jarvis maps to SOVD
 

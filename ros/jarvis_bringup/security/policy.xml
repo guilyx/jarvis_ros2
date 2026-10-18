@@ -17,6 +17,9 @@
   - /jarvis/launch     ros2 launch itself: launch_ros loads the components into the container;
   - /jarvis/container  the core: event hub, fault manager, rules, recovery, bridges, recorder, black box;
   - /jarvis/lake       woken by closed splits, reports its health and jarvis.storage.low;
+  - /jarvis/medkit     with medkit:=true, reports the faults ros2_medkit's fault manager (/fault_manager)
+                       confirms; with another medkit_fault_manager, change its two /fault_manager/ names.
+                       medkit's own nodes are in the robot's policy;
   - /jarvis/gateway    the live stream for the dashboard, and the operators' commands;
   - /jarvis/agent      reads through the gateway, publishes insights, may propose recoveries;
   - /jarvis/operator   people: ros2 jarvis, ros2 run jarvis_demo monitor, ros2 topic/node/service;
@@ -93,6 +96,29 @@
           </topics>
           <services reply="ALLOW">
             <service>/jarvis/lake/*</service>
+          </services>
+        </profile>
+      </profiles>
+    </enclave>
+
+    <enclave path="/jarvis/medkit">
+      <profiles>
+        <profile ns="/jarvis/bridges" node="medkit">
+          <topics publish="ALLOW">
+            <topic>/jarvis/ingest</topic>
+            <topic>/rosout</topic>
+            <topic>/parameter_events</topic>
+          </topics>
+          <topics subscribe="ALLOW">
+            <topic>/fault_manager/events</topic>
+            <topic>/parameter_events</topic>
+          </topics>
+          <services request="ALLOW">
+            <service>/fault_manager/list_faults</service>
+            <service>/jarvis/fault_manager/get_faults</service>
+          </services>
+          <services reply="ALLOW">
+            <service>/jarvis/bridges/medkit/*</service>
           </services>
         </profile>
       </profiles>

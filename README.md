@@ -282,6 +282,7 @@ both. A nightly soak runs the stack for 15 minutes at 500 events/s
 | [`ros/jarvis_nav2`](ros/jarvis_nav2) | Nav2 actuators: lifecycle manager, costmaps, cancel and send goals |
 | [`ros/jarvis_reporter`](ros/jarvis_reporter) | C++ and Python client libraries for apps |
 | [`ros/jarvis_bridges`](ros/jarvis_bridges) | Diagnostics, rosout, action status and lifecycle bridges; topic and node watchdogs |
+| [`ros/jarvis_medkit`](ros/jarvis_medkit) | For robots that run ros2_medkit: the faults its fault manager confirms, as Jarvis faults (`medkit:=true`) |
 | [`ros/jarvis_bringup`](ros/jarvis_bringup) | Launch, parameters, default fault catalog, rules and plans, recorder and black box |
 | [`ros/jarvis_demo`](ros/jarvis_demo) | Lidar relay, fault injector, demo launch files |
 | [`lake/jarvis_lake`](lake/jarvis_lake) | Recordings as Parquet + DuckDB: history, KPIs, analytics, retention (runs without ROS) |

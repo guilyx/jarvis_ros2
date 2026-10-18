@@ -6,6 +6,9 @@ serves). So a SOVD client, such as the ros2_medkit web UI or its Foxglove panel,
 faults, follows them live and clears them. Nothing to install: it is part of the gateway, at
 `/sovd`.
 
+The other way round, a robot that already runs ros2_medkit can bring its faults into Jarvis, for
+Jarvis's rules, recovery and agent: [`medkit:=true`](integration.md#already-running-ros2_medkit).
+
 1. [Connect a client](#1-connect-a-client)
 2. [What it serves](#2-what-it-serves)
 3. [How Jarvis maps to SOVD](#3-how-jarvis-maps-to-sovd)

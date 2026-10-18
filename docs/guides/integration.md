@@ -140,6 +140,37 @@ uses one params file, it doesn't merge**: copy `jarvis.yaml` into your package a
   never fire.
 - The lifecycle bridge also watches Jarvis' own managed nodes; `ignore_nodes` narrows it.
 
+### Already running ros2_medkit?
+
+Keep it. With `medkit:=true`, a bridge (`jarvis_medkit`, `/jarvis/bridges/medkit`) reports to Jarvis
+the faults medkit's fault manager confirms, so Jarvis's rules, recovery and agent work on them:
+
+```bash
+# rosdep (step 1) installs what it needs: ros2_medkit_msgs, which your medkit install already has
+ros2 launch jarvis_bringup jarvis.launch.py medkit:=true    # medkit_fault_manager:=/fault_manager
+```
+
+| ros2_medkit | Jarvis |
+|-------------|--------|
+| A fault confirmed (`fault_confirmed`), seen again (`fault_updated`) | A `FAULT_RAISE`, per reporting source |
+| `MOTOR_OVERHEAT` | `medkit.motor_overheat` (`code_prefix`); the original in the attribute `medkit.fault_code` |
+| A reporting source (`/powertrain/motor_left`) | The node, and its last segment as the component (`motor_left`) |
+| Severity INFO / WARN / ERROR / CRITICAL (0-3) | INFO / WARN / ERROR / CRITICAL |
+| Cleared, healed (`fault_cleared`), and the symptoms cleared with it | A `FAULT_CLEAR` |
+
+- medkit debounces, Jarvis takes its word: only confirmed faults come over, and medkit's muted
+  symptoms stay in medkit (`include_muted: true` brings them).
+- medkit's events are not replayed to a late joiner: every `resync_period_s` (10 s) the bridge reads
+  medkit's `list_faults` and makes Jarvis agree. At start it also clears the `medkit.*` faults Jarvis
+  still has open from before and medkit no longer confirms.
+- Clearing a medkit fault in Jarvis does not clear it in medkit, and medkit seeing it again raises it
+  again: clear it in medkit (its web UI, or `/fault_manager/clear_fault`).
+- Name your rules and catalog entries after the Jarvis codes: `medkit.motor_overheat`, `medkit.*`.
+- With SROS2, the bridge runs in the `/jarvis/medkit` enclave; medkit's own nodes need their
+  enclaves in your robot's policy.
+
+The other way round, the gateway serves Jarvis's faults to medkit's web UI ([SOVD guide](sovd.md)).
+
 ## 4. Catalog your faults
 
 The catalog says what each code means and how it behaves: when reports become a confirmed fault,
@@ -275,6 +306,7 @@ The arguments people change (`ros2 launch jarvis_bringup jarvis.launch.py --show
 | `recovery_mode` | `ENABLED` | `DRY_RUN` to rehearse, `DISABLED` to never act (a saved mode wins) |
 | `use_sim_time` | `false` | In simulation |
 | `bridges`, `record`, `blackbox`, `lake`, `gateway`, `agent`, `recovery` | `true` | Turn a part off |
+| `medkit`, `medkit_fault_manager` | `false`, `/fault_manager` | Bring ros2_medkit's faults in ([§3](#already-running-ros2_medkit)) |
 | `record_extra_topics` | `/diagnostics /rosout` | Recorded with Jarvis' own topics |
 | `blackbox_topics`, `blackbox_cache_mb` | `/tf /tf_static /odom /scan /cmd_vel /jarvis/event_batches`, 256 | What the black box keeps, how much |
 | `split_duration_s` | 300 | Length of a recording file |

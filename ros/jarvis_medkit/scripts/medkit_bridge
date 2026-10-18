@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+import sys
+
+from jarvis_medkit.bridge import main
+
+sys.exit(main())

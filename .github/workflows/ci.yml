@@ -57,12 +57,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Coverage (in the job summary)
+      - name: Coverage (in the job summary; fails under 90 % of lines)
         run: |
           pip install gcovr==8.3
           gcovr -r core/jarvis_core --filter core/jarvis_core/src/ --filter core/jarvis_core/include/ \
-            --exclude-unreachable-branches --txt --print-summary build/core | tee build/core/coverage.txt
+            --exclude-unreachable-branches --txt build/core/coverage.txt --print-summary \
+            --fail-under-line 90 build/core || status=$?
+          cat build/core/coverage.txt
           { echo "### Core coverage"; echo '```'; cat build/core/coverage.txt; echo '```'; } >>"$GITHUB_STEP_SUMMARY"
+          exit "${status:-0}"
       - name: Bench against the NFR targets (Release)
         run: |
           cmake -S core/jarvis_core -B build/bench -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -93,8 +96,9 @@ jobs:
       - run: |
           pip install numpy==1.26.4 -r lake/jarvis_lake/requirements.txt \
             pytest pytest-cov==6.0.0 coverage==7.6.4
-      - run: PYTHONPATH=lake/jarvis_lake pytest -q --cov=jarvis_lake lake/jarvis_lake/test
+      - run: PYTHONPATH=lake/jarvis_lake pytest -q --cov=jarvis_lake --cov-fail-under=78 lake/jarvis_lake/test
       - name: Coverage (in the job summary)
+        if: ${{ !cancelled() }} # also when the tests fail the coverage floor
         run: '{ echo "### Lake coverage"; coverage report --format=markdown; } >>"$GITHUB_STEP_SUMMARY"'
 
   gateway:
@@ -110,8 +114,9 @@ jobs:
             -r lake/jarvis_lake/requirements.txt -r gateway/jarvis_gateway/requirements.txt
       - run: |
           PYTHONPATH=lake/jarvis_lake:gateway/jarvis_gateway \
-            pytest -q --cov=jarvis_gateway gateway/jarvis_gateway/test
+            pytest -q --cov=jarvis_gateway --cov-fail-under=79 gateway/jarvis_gateway/test
       - name: Coverage (in the job summary)
+        if: ${{ !cancelled() }} # also when the tests fail the coverage floor
         run: '{ echo "### Gateway coverage"; coverage report --format=markdown; } >>"$GITHUB_STEP_SUMMARY"'
 
   agent:
@@ -127,8 +132,9 @@ jobs:
             -r agent/jarvis_agent/requirements.txt \
             -r lake/jarvis_lake/requirements.txt -r gateway/jarvis_gateway/requirements.txt
           pip install --require-hashes -r agent/jarvis_agent/requirements-llm.txt
-      - run: PYTHONPATH=agent/jarvis_agent pytest -q --cov=jarvis_agent agent/jarvis_agent/test
+      - run: PYTHONPATH=agent/jarvis_agent pytest -q --cov=jarvis_agent --cov-fail-under=87 agent/jarvis_agent/test
       - name: Coverage (in the job summary)
+        if: ${{ !cancelled() }} # also when the tests fail the coverage floor
         run: '{ echo "### Agent coverage"; coverage report --format=markdown; } >>"$GITHUB_STEP_SUMMARY"'
 
   dashboard:

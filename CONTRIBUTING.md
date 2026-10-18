@@ -48,6 +48,10 @@ colcon build && colcon test --return-code-on-test-failure && colcon test-result 
 cmake -S core/jarvis_core -B build/core -G Ninja -DJARVIS_SANITIZE=ON -DJARVIS_WERROR=ON
 cmake --build build/core && ctest --test-dir build/core --output-on-failure
 
+# Coverage, as CI reports it: add -DJARVIS_COVERAGE=ON to the core's cmake line, then
+gcovr -r core/jarvis_core --filter core/jarvis_core/src/ --filter core/jarvis_core/include/ build/core
+PYTHONPATH=lake/jarvis_lake pytest -q --cov=jarvis_lake lake/jarvis_lake/test  # same for the others
+
 # Contracts
 pytest -q schemas/tests
 ```

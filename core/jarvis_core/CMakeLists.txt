@@ -14,6 +14,7 @@ endif()
 option(BUILD_TESTING "Build the unit tests" ON)
 option(JARVIS_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(JARVIS_WERROR "Treat warnings as errors" OFF)
+option(JARVIS_COVERAGE "Build with line coverage (gcov), for CI's coverage report" OFF)
 
 find_package(nlohmann_json 3.10 REQUIRED)
 find_package(yaml-cpp REQUIRED)
@@ -55,6 +56,10 @@ if(JARVIS_SANITIZE)
     target_compile_options(${t} PUBLIC -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all)
     target_link_options(${t} PUBLIC -fsanitize=address,undefined)
   endforeach()
+endif()
+if(JARVIS_COVERAGE)
+  target_compile_options(jarvis_core PUBLIC --coverage)
+  target_link_options(jarvis_core PUBLIC --coverage)
 endif()
 
 # `jarvis lint` and `jarvis backtest`: the offline tools (tools/jarvis.cpp).

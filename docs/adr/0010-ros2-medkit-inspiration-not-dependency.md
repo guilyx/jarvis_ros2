@@ -24,3 +24,9 @@
 ## Consequences
 - ➕ We keep a single coherent model and a deterministic core, plus the best of medkit's field experience.
 - ➖ Some overlap in fault management. Revisit after M2 if medkit's fault manager could serve as a drop-in backend.
+
+## Follow-up (2026-10-18, milestone 6.3)
+Interoperability went the other way first: the gateway serves Jarvis's faults with the paths and
+fields of medkit's gateway (ISO 17978, SOVD), at `/sovd/api/v1` ([guide](../guides/sovd.md)), so
+medkit's web UI and Foxglove panel show a robot's Jarvis faults without depending on medkit. The
+bridge from medkit's faults into Jarvis is next (roadmap 6.4).

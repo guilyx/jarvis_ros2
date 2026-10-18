@@ -1,3 +1,5 @@
 # Gateway settings of the demo. DEMO ONLY: anyone who reaches the port is an admin.
 schema: jarvis.gateway/v1
 anonymous: { name: demo, role: admin }
+# A SOVD client in the browser, such as the ros2_medkit web UI on port 3000 (docs/guides/sovd.md).
+cors_origins: [http://localhost:3000, http://127.0.0.1:3000]

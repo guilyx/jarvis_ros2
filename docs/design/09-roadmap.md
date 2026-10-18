@@ -85,7 +85,8 @@ Where the field is going (October 2026): diagnostics converging on SOVD (ISO 179
 |----|---------|
 | 6.1 ✔ | Four-eyes approvals: nobody approves a run they asked for, nor its sub-plans or `on_failure` ladder (`on_behalf_of`); the dashboard offers *Withdraw* instead; `separate_approver: false` for a team of one |
 | 6.2 ✔ | MCP server (`jarvis_mcp`, [guide](../guides/ai-assistants.md)): AI assistants read faults, incidents, runbooks, events, recoveries and analytics through the gateway (its tokens, roles and audit), ask the agent, and, if allowed, request a recovery through the gates |
-| 6.3 | ros2_medkit / SOVD interop: medkit faults into Jarvis (rules, recovery, agent on top), and Jarvis faults on a SOVD-style surface for SOVD clients |
+| 6.3 ✔ | SOVD surface ([guide](../guides/sovd.md)): the gateway serves Jarvis's faults at `/sovd/api/v1`, with the paths and fields of ros2_medkit's gateway (ISO 17978): the entity tree, faults listed, in detail, live (server-sent events) and cleared through the gates. The unmodified ros2_medkit web UI connects to it |
+| 6.4 | ros2_medkit faults into Jarvis: a bridge from medkit's fault events, so a robot running medkit gets Jarvis's rules, recovery and agent on top |
 
 ### Later (v2+)
 Fleet (Parquet to object storage) & fleet dashboard · real-robot bring-up (ARM64) · visual rule editor with live backtest · generic `action.goal` / `service.call` actuators · BehaviorTree.CPP actuator · Foxglove panel · Zenoh/MQTT transports for non-ROS producers.

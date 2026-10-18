@@ -20,6 +20,7 @@
     catalog: /path/to/faults.yaml   # the fault manager's catalog: descriptions and runbooks
     runbooks: [/path/to/runbooks]   # more <code>.md runbooks (besides runbooks/ next to the catalog)
     lint: { plans_dir: ..., catalog: ... }        # what POST /rules:validate checks rules against
+    cors_origins: [http://localhost:3000]         # browser apps served elsewhere (a SOVD web UI)
 
 Tokens can also come from $JARVIS_GATEWAY_TOKENS ("token:name:role,..."), to keep them out of files.
 docs/guides/security.md puts TLS and single sign-on together.
@@ -71,6 +72,7 @@ class Settings:
     tls_cert: str = ""
     tls_key: str = ""
     proxy_auth: object = None  # jarvis_gateway.auth.ProxyAuth
+    cors_origins: list = dataclasses.field(default_factory=list)
 
     @classmethod
     def load(cls, path=None, **overrides):
@@ -89,6 +91,7 @@ class Settings:
                 "jarvis_bin",
                 "catalog",
                 "runbooks",
+                "cors_origins",
             ):
                 if key in raw:
                     setattr(s, key, raw[key])

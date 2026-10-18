@@ -19,11 +19,12 @@ import time
 
 import yaml
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from jarvis_lake import model, storage
 
-from jarvis_gateway import __version__, auth, bags, models, stream
+from jarvis_gateway import __version__, auth, bags, models, sovd, stream
 from jarvis_gateway.catalog import Catalog
 from jarvis_gateway.history import History
 from jarvis_gateway.metrics import Metrics
@@ -129,6 +130,13 @@ def create_app(settings, port, notifier=None):
         lifespan=lifespan,
     )
     app.state.gateway = gw
+    if settings.cors_origins:  # browser clients served from elsewhere (a SOVD web UI)
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(settings.cors_origins),
+            allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type"],
+        )
 
     # -- auth --------------------------------------------------------------------------------------
 
@@ -553,6 +561,8 @@ def create_app(settings, port, notifier=None):
         return Response(gw.metrics.render(gw.lake_status()), media_type=gw.metrics.content_type)
 
     app.include_router(api)
+    for routes in sovd.router(gw, viewer, operator):  # SOVD clients: /sovd/api/v1
+        app.include_router(routes)
 
     @app.exception_handler(ValueError)
     async def bad_value(request: Request, exc: ValueError):

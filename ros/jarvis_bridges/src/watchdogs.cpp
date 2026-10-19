@@ -56,6 +56,31 @@ bool can_follow(std::uint8_t known, std::uint8_t start)
   }
 }
 
+/// The transition an event is about. ROS publishes the event's `transition` empty (id 0, no
+/// label): the intermediate state it started from names it (deactivating: deactivate).
+std::string transition_name(const lifecycle_msgs::msg::TransitionEvent & ev)
+{
+  if (!ev.transition.label.empty()) {
+    return ev.transition.label;
+  }
+  switch (ev.start_state.id) {
+    case State::TRANSITION_STATE_CONFIGURING:
+      return "configure";
+    case State::TRANSITION_STATE_CLEANINGUP:
+      return "cleanup";
+    case State::TRANSITION_STATE_SHUTTINGDOWN:
+      return "shutdown";
+    case State::TRANSITION_STATE_ACTIVATING:
+      return "activate";
+    case State::TRANSITION_STATE_DEACTIVATING:
+      return "deactivate";
+    case State::TRANSITION_STATE_ERRORPROCESSING:
+      return "error processing";
+    default:
+      return "";
+  }
+}
+
 /// The component of a topic's QoS faults: the whole name, so /front/scan and /rear/scan stay apart.
 std::string topic_component(std::string_view topic)
 {
@@ -360,13 +385,14 @@ std::vector<Event> LifecycleTranslator::on_transition(
   std::vector<Event> out;
   auto & t = nodes_[node];
   const auto goal = ev.goal_state.id;
-  const std::string transition = ev.transition.label;
+  const std::string transition = transition_name(ev);
   if (goal == State::TRANSITION_STATE_ERRORPROCESSING && !t.failed) {
     t.failed = true;
     Event e = make(node, Kind::FaultRaise, "ros.lifecycle.failed", Severity::Error, now);
     e.attrs["transition"] = transition;
     e.attrs["from"] = ev.start_state.label;
-    e.message = node + ": '" + transition + "' failed, error processing";
+    e.message = node + (transition.empty() ? ": a transition" : ": '" + transition + "'") +
+                " failed, error processing";
     out.push_back(std::move(e));
   }
   if (goal < State::PRIMARY_STATE_UNCONFIGURED || goal > State::PRIMARY_STATE_FINALIZED) {
@@ -401,7 +427,8 @@ std::vector<Event> LifecycleTranslator::on_transition(
     Event e = make(node, Kind::FaultRaise, "ros.lifecycle.inactive", Severity::Warn, now);
     e.attrs["state"] = ev.goal_state.label;
     e.attrs["transition"] = transition;
-    e.message = node + " left active: " + ev.goal_state.label + " after '" + transition + "'";
+    e.message = node + " left active: " + ev.goal_state.label +
+                (transition.empty() ? "" : " after '" + transition + "'");
     out.push_back(std::move(e));
   }
   return out;

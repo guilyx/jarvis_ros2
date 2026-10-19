@@ -213,12 +213,27 @@ TEST(LifecycleTranslator, TransitionsOlderThanTheBaselineAreSkipped)
   EXPECT_TRUE(
     t.on_transition(node, transition("", State::TRANSITION_STATE_ACTIVATING, 3, "active"), kT0)
       .empty());
-  // A real deactivation still counts.
+  // A real deactivation still counts. ROS leaves the transition empty: the state it went through
+  // names it.
   auto out = t.on_transition(
     node, transition("", State::TRANSITION_STATE_DEACTIVATING, 2, "inactive"), kT0 + 1);
-  EXPECT_EQ(
+  ASSERT_EQ(
     codes(out),
     (V{"STATE ros.lifecycle.demo.scan_relay.state", "FAULT_RAISE ros.lifecycle.inactive"}));
+  EXPECT_EQ(attr(out[1], "transition"), "deactivate");
+  EXPECT_EQ(out[1].message, "/demo/scan_relay left active: inactive after 'deactivate'");
+  out = t.on_transition(
+    node, transition("", State::TRANSITION_STATE_ERRORPROCESSING, 1, "unconfigured"), kT0 + 2);
+  t.on_transition(
+    node, transition("", State::TRANSITION_STATE_CONFIGURING, 2, "inactive"), kT0 + 3);
+  out = t.on_transition(
+    node,
+    transition(
+      "", State::TRANSITION_STATE_ACTIVATING, State::TRANSITION_STATE_ERRORPROCESSING,
+      "errorprocessing"),
+    kT0 + 4);
+  ASSERT_EQ(codes(out), V{"FAULT_RAISE ros.lifecycle.failed"});
+  EXPECT_EQ(out[0].message, "/demo/scan_relay: 'activate' failed, error processing");
 }
 
 TEST(LifecycleTranslator, ABaselineNeverOverridesATransition)

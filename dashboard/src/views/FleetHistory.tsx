@@ -114,7 +114,7 @@ export function FleetHistory() {
                   <tr key={r.robot} data-testid="fleet-history-robot">
                     <Td className="font-medium">{r.robot}</Td>
                     <Td className="text-right tabular-nums">{r.faults_confirmed}</Td>
-                    <Td className="text-right tabular-nums">{duration(r.mttr_s)}</Td>
+                    <Td className="text-right tabular-nums whitespace-nowrap">{duration(r.mttr_s)}</Td>
                     <Td className="text-right tabular-nums">{r.incidents_opened}</Td>
                     <Td className="text-right tabular-nums">{r.incidents_escalated}</Td>
                     <Td className="text-right tabular-nums">{percent(r.auto_recovery_rate)}</Td>
@@ -156,7 +156,7 @@ export function FleetHistory() {
                         </Td>
                         <Td className="text-right tabular-nums">{c.episodes}</Td>
                         <Td className="text-muted-fg">{c.robot_names.join(", ")}</Td>
-                        <Td className="text-right tabular-nums">{duration(c.mttr_s)}</Td>
+                        <Td className="text-right tabular-nums whitespace-nowrap">{duration(c.mttr_s)}</Td>
                       </tr>
                     ))}
                   </tbody>

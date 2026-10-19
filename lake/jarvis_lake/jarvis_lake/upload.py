@@ -55,7 +55,7 @@ def redact(uri):
     if p.port:
         host += f":{p.port}"
     query = [(k, v) for k, v in urllib.parse.parse_qsl(p.query) if not re.search("key|secret|token", k, re.I)]
-    return urllib.parse.urlunsplit((p.scheme, host, p.path, urllib.parse.urlencode(query), ""))
+    return urllib.parse.urlunsplit((p.scheme, host, p.path, urllib.parse.urlencode(query, safe=":/"), ""))
 
 
 def behind_message(status):

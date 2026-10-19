@@ -203,7 +203,7 @@ def test_an_unreachable_target_is_not_the_lakes_error(data_dir, tmp_path):
 
 def test_the_target_never_shows_credentials():
     assert upload.redact("s3://key:secret@bucket/fleet?endpoint_override=minio:9000&scheme=http") == (
-        "s3://bucket/fleet?endpoint_override=minio%3A9000&scheme=http"
+        "s3://bucket/fleet?endpoint_override=minio:9000&scheme=http"
     )
     assert (
         upload.redact("s3://bucket/x?access_key=a&secret_key=b&region=eu-west-3")

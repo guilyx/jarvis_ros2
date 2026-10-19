@@ -198,7 +198,8 @@ jobs:
           rosdep update --rosdistro ${{ matrix.distro }}
           rosdep install --from-paths core ros lake gateway agent --ignore-src -y --rosdistro ${{ matrix.distro }}
           apt-get install -y --no-install-recommends python3-pip
-          pip3 install --break-system-packages -r lake/jarvis_lake/requirements.txt \
+          # --ignore-installed: next to Debian's copies (Ubuntu 26.04's pip can't upgrade them).
+          pip3 install --break-system-packages --ignore-installed -r lake/jarvis_lake/requirements.txt \
             -r gateway/jarvis_gateway/requirements.txt -r agent/jarvis_agent/requirements.txt
       - name: Build
         run: |

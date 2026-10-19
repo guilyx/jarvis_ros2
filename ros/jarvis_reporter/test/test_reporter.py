@@ -137,3 +137,16 @@ def test_waits_for_the_hub_and_flushes(h, node):
     assert len(h.receive(1)) == 1
     alone = Reporter(node, "cli", topic="/test_reporter_py_nobody")
     assert not alone.wait_for_hub(0.05), "no reader on that topic"
+
+
+def test_reporters_can_share_a_publisher(h, node):
+    bms = Reporter(node, "bms", publisher=h.reporter._publisher)
+    charger = Reporter(node, "charger", publisher=h.reporter._publisher)
+    assert bms._publisher is charger._publisher is h.reporter._publisher
+    bms.fault("power.bms.overtemp")
+    charger.state("charger.state", "idle")
+    got = h.receive(2)
+    assert [(e.code, e.source.component) for e in got] == [
+        ("power.bms.overtemp", "bms"),
+        ("charger.state", "charger"),
+    ]

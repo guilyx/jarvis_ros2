@@ -76,6 +76,8 @@ client.publish("jarvis/devices/bms/status", "online", qos=1, retain=True)
 
 - Devices listed in `devices` are expected. If one hasn't said `online` within `startup_grace_s`
   (10 s), it is offline.
+- The bridge connects to the broker once Jarvis's event hub hears it (at most 10 s after it
+  starts), so the statuses the broker kept from before aren't lost on the way.
 - If the bridge loses the broker for more than 5 s, it raises `mqtt.broker.unreachable`. While
   that fault is open, nothing the devices send is heard.
 

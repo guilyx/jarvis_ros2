@@ -57,6 +57,8 @@ MAX_MESSAGE = 500
 LATCHED = QoSProfile(
     depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL
 )
+INGEST = QoSProfile(depth=1000, reliability=ReliabilityPolicy.RELIABLE)
+HUB_WAIT_S = 10.0  # how long the bridge waits for the event hub before it listens to the broker
 
 
 def _scalar(v):
@@ -164,7 +166,10 @@ class MqttBridge(Node):
         self._online = {}  # device -> True/False, from its status
         self._rejected = {}  # device -> last refusal (ns), to keep a chatty device from flooding
         self._published = None
-        self._jarvis = Reporter(self, "mqtt")
+        # One publisher for every device: it is matched to the event hub once, so a device's first
+        # report isn't lost to discovery.
+        self._ingest = self.create_publisher(Event, "/jarvis/ingest", INGEST)
+        self._jarvis = Reporter(self, "mqtt", publisher=self._ingest)
 
         self._client = make_client(p("client_id") or f"jarvis-{self._robot}")
         if p("username"):
@@ -172,13 +177,15 @@ class MqttBridge(Node):
             self._client.username_pw_set(p("username"), password or None)
         if p("tls"):
             self._client.tls_set(ca_certs=p("ca_file") or None)
+        self._subscribed = threading.Event()  # connected and subscribed: devices are heard
         self._client.on_connect = self._on_connect
+        self._client.on_subscribe = lambda *_args: self._subscribed.set()
         self._client.on_disconnect = self._on_disconnect
         self._client.on_message = self._on_message
         self._client.reconnect_delay_set(min_delay=1, max_delay=10)
-        self._client.connect_async(p("host"), int(p("port")), keepalive=10)
-        self._client.loop_start()
-        self.get_logger().info(f"MQTT broker {p('host')}:{p('port')}, devices under {self._prefix}/devices/")
+        self._listening = False
+        self._waiting_since = self.get_clock().now()
+        self._hub = self.create_timer(0.1, self._listen)
 
         if p("publish_faults"):
             self.create_subscription(FaultArray, "/jarvis/faults", self._on_faults, LATCHED)
@@ -187,11 +194,26 @@ class MqttBridge(Node):
         self.create_timer(1.0, self._check_expected)
 
     def connected(self):
-        return self._client.is_connected()
+        """Connected to the broker and subscribed to the devices' topics."""
+        return self._client.is_connected() and self._subscribed.is_set()
+
+    def _listen(self):
+        """Connects to the broker once the event hub hears the bridge: the retained statuses that
+        come first would be lost otherwise."""
+        waited = (self.get_clock().now() - self._waiting_since).nanoseconds / 1e9
+        if self._ingest.get_subscription_count() == 0 and waited < HUB_WAIT_S:
+            return
+        self._hub.cancel()
+        self._listening = True
+        host, port = self.get_parameter("host").value, int(self.get_parameter("port").value)
+        self._client.connect_async(host, port, keepalive=10)
+        self._client.loop_start()
+        self.get_logger().info(f"MQTT broker {host}:{port}, devices under {self._prefix}/devices/")
 
     def destroy_node(self):
-        self._client.loop_stop()
-        self._client.disconnect()
+        if self._listening:
+            self._client.loop_stop()
+            self._client.disconnect()
         super().destroy_node()
 
     # -- MQTT (paho's network thread) ---------------------------------------------------------------
@@ -209,6 +231,7 @@ class MqttBridge(Node):
             self._publish(last)
 
     def _on_disconnect(self, _client, _userdata, *args):
+        self._subscribed.clear()
         rc = args[-2] if len(args) >= 2 else (args[0] if args else 0)
         self._jarvis.fault(
             "mqtt.broker.unreachable",
@@ -270,7 +293,7 @@ class MqttBridge(Node):
     def _reporter(self, device):
         with self._lock:
             if device not in self._reporters:
-                self._reporters[device] = Reporter(self, device)
+                self._reporters[device] = Reporter(self, device, publisher=self._ingest)
             return self._reporters[device]
 
     # -- ROS (the executor's thread) ----------------------------------------------------------------
@@ -314,6 +337,10 @@ def main(args=None):
         rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except RuntimeError:
+        # SIGINT can shut ROS down while a message is being taken (rclpy on Lyrical raises then).
+        if rclpy.ok():
+            raise
     finally:
         node.destroy_node()
         rclpy.try_shutdown()

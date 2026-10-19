@@ -51,11 +51,23 @@ def _attribute(key, value):
 class Reporter:
     """Reports faults, states and logs to the Jarvis event hub. Thread-safe."""
 
-    def __init__(self, node, component="", *, topic="/jarvis/ingest", repeat_period=1.0, queue_depth=1000):
+    def __init__(
+        self,
+        node,
+        component="",
+        *,
+        topic="/jarvis/ingest",
+        repeat_period=1.0,
+        queue_depth=1000,
+        publisher=None,
+    ):
+        """``publisher``: an Event publisher to share, e.g. one per bridge for the components it
+        reports for. A new publisher is not matched to the event hub at once: what it sends first
+        can be lost, a shared one is matched already."""
         self._node = node
         self._component = component
         self._repeat = Duration(nanoseconds=int(repeat_period * 1e9))
-        self._publisher = node.create_publisher(
+        self._publisher = publisher or node.create_publisher(
             Event, topic, QoSProfile(depth=queue_depth, reliability=ReliabilityPolicy.RELIABLE)
         )
         self._lock = threading.Lock()

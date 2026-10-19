@@ -306,7 +306,13 @@ def create_app(settings, port, notifier=None):
             raise HTTPException(404, f"no runbook for '{code}'")
         return {"code": code, "markdown": text}
 
-    @api.get("/vda5050/errors", response_model=models.Vda5050Errors, tags=["faults"])
+    # VDA 5050 fields are strings: one without a value is left out, never null.
+    @api.get(
+        "/vda5050/errors",
+        response_model=models.Vda5050Errors,
+        response_model_exclude_none=True,
+        tags=["faults"],
+    )
     def vda5050_errors(who=Depends(viewer)):
         """Jarvis's open root-cause faults as VDA 5050 error objects, for the robot's VDA 5050 adapter
         to merge into the `errors` of its state (docs/guides/vda5050.md)."""

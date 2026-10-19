@@ -129,5 +129,16 @@ def test_the_endpoint_a_vda5050_adapter_reads(make_gateway, tmp_path):
     assert (stale["errorType"], stale["errorLevel"]) == ("ros.topic.stale", "URGENT")
     assert stale["errorDescription"] == "/scan: no message for 1.0 s"
     assert stale["errorHint"].startswith("A managed driver: restart it.")
+    # As VDA 5050's state schema has them: the required fields, its levels, strings (no nulls).
+    for e in out["errors"]:
+        assert {"errorType", "errorLevel"} <= e.keys() and e["errorLevel"] in (
+            "WARNING",
+            "URGENT",
+            "CRITICAL",
+            "FATAL",
+        )
+        assert all(isinstance(v, (str, list)) for v in e.values()), e
+        assert all({"referenceKey", "referenceValue"} == r.keys() for r in e["errorReferences"])
+    assert "errorHint" not in estop  # no runbook for it here: left out, not null
     # A viewer may read it (the adapter can use the anonymous role, a viewer by default).
     assert gw.client.get("/api/v1/vda5050/errors").status_code == 200

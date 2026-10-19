@@ -9,4 +9,5 @@ Forthcoming
 * ``medkit:=true``: ros2_medkit's faults into Jarvis (``jarvis_medkit``), in the ``/jarvis/medkit`` enclave.
 * ``mqtt:=true``: devices that don't run ROS report over MQTT (``jarvis_mqtt``), in the ``/jarvis/mqtt`` enclave; ``mqtt.device.offline`` and ``mqtt.broker.unreachable`` in the catalog, with runbooks.
 * Plans ``restart-container`` and ``restart-systemd-unit``; ``params_overlay`` layers a parameters file over ``jarvis.yaml``.
+* ``lake_upload_to``, ``lake_upload_blackbox``, ``lake_upload_max_lag_hours``: the lake uploads the history for the fleet; ``jarvis.upload.behind`` in the catalog, with a runbook.
 * ``systemd/jarvis.service`` and ``jarvis.env``: Jarvis started at boot, as its own user, after the time sync; stopped with SIGINT, restarted on failure.

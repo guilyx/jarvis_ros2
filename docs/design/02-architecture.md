@@ -186,7 +186,7 @@ flowchart BT
 | `/jarvis/bridges/*` | runtime container | lifecycle components (C++) | `/diagnostics`, `/rosout`, lifecycle transitions, action goal status, topic/node health → events |
 | `/jarvis/recorder` | runtime container | `rosbag2_transport::Recorder` component | Continuous MCAP recording of `/jarvis/**` (+ optional context topics), split every 5 min |
 | `/jarvis/blackbox` | own process | rosbag2 recorder, snapshot mode | In-memory ring buffer of high-rate sensor topics, dumped on `~/snapshot` |
-| `jarvis_lake` | own process | Python service | Converts closed MCAP splits → Parquet, maintains DuckDB views, enforces retention |
+| `jarvis_lake` | own process | Python service | Converts closed MCAP splits → Parquet, maintains DuckDB views, enforces retention, uploads the history for the fleet (optional) |
 | `/jarvis/agent` | own process | Python node (lifecycle) | Windows, triage, LLM analysis (LiteLLM), insights, proposals, `Analyze` action |
 | `/jarvis/gateway` | own process | Python (FastAPI + rclpy adapter) | REST/WS API, notifications, serves the dashboard bundle (LAN-only) |
 

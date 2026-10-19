@@ -1,13 +1,14 @@
 # Copyright 2026 Erwin L.
 # SPDX-License-Identifier: Apache-2.0
 """The lake on the ROS graph: woken by the recorder's closed splits, reporting on /diagnostics, and
-raising `jarvis.storage.low` while the disk is short of free space after retention.
+raising `jarvis.storage.low` while the disk is short of free space after retention, and
+`jarvis.upload.behind` while what waits to be uploaded is older than the upload's `max_lag_s`.
 
 The fault is raised when retention found nothing more it may delete, and cleared once a fresh look
 at the disk finds it above the floor: in between (a file system that frees space lazily, a deleted
 file still open), nothing changes, so the fault does not flap. The fault manager restores open
 faults after a restart, the lake's included: while /jarvis/faults lists it and the disk has room,
-the lake clears it, whoever raised it.
+the lake clears it, whoever raised it. The same goes for `jarvis.upload.behind`.
 
 This is the only module of jarvis_lake that imports rclpy, and only when the service runs with ROS.
 """
@@ -25,8 +26,11 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.signals import SignalHandlerOptions
 from rosbag2_interfaces.msg import WriteSplitEvent
 
+from jarvis_lake import upload
+
 SPLIT_TOPIC = "/jarvis/recorder/events/write_split"
 DISK_LOW = "jarvis.storage.low"
+UPLOAD_BEHIND = "jarvis.upload.behind"
 VALUES = (
     "splits",
     "splits_converted",
@@ -47,13 +51,16 @@ class LakeNode(Node):
         self._jarvis = Reporter(self, "lake")
         self._hub = False  # the event hub is matched: what we report is not lost to discovery
         self._disk_low_open = False  # the fault manager holds jarvis.storage.low for the lake
+        self._behind_open = False  # ... and jarvis.upload.behind
         latched = QoSProfile(
             depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL
         )
         self.create_subscription(FaultArray, "/jarvis/faults", self._on_faults, latched)
 
     def _on_faults(self, msg):
-        self._disk_low_open = any(f.code == DISK_LOW and f.source.component == "lake" for f in msg.faults)
+        mine = {f.code for f in msg.faults if f.source.component == "lake"}
+        self._disk_low_open = DISK_LOW in mine
+        self._behind_open = UPLOAD_BEHIND in mine
 
     def _on_split(self, msg):
         self.get_logger().debug(f"split closed: {msg.closed_file}")
@@ -80,7 +87,24 @@ class LakeNode(Node):
         if not status.get("disk_low") and not status.get("disk_short_bytes"):
             # force: the fault may be from before a restart, when this reporter raised nothing.
             self._jarvis.clear(DISK_LOW, "free disk is back above the floor", force=self._disk_low_open)
+        behind = upload.behind_message(status.get("upload"))
+        if behind:
+            message = behind if level == DiagnosticStatus.OK else message
+            level = max(level, DiagnosticStatus.WARN)
+            up = status["upload"]
+            self._jarvis.fault(
+                UPLOAD_BEHIND,
+                Severity.WARN,
+                behind,
+                {"pending_files": up["pending_files"], "oldest_pending_s": up["oldest_pending_s"]},
+            )
+        elif status.get("upload") is not None:
+            self._jarvis.clear(UPLOAD_BEHIND, "the history is uploaded again", force=self._behind_open)
         values = {k: status.get(k) for k in VALUES}
+        if status.get("upload"):
+            values |= {
+                f"upload_{k}": status["upload"][k] for k in ("pending_files", "oldest_pending_s", "lost")
+            }
         diag = DiagnosticStatus(
             level=level,
             name="jarvis: lake",

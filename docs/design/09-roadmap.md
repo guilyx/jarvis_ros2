@@ -118,9 +118,10 @@ Jarvis has run on laptops, in CI and in Docker. Robots are ARM64 boards that boo
 | PR | Content |
 |----|---------|
 | 9.1 ✔ | Robot bring-up ([guide](../guides/robot.md)): ARM64 built and tested in CI on a native ARM runner (ROS 2 Jazzy, and the Docker demo's smoke test); release images for amd64 and arm64 under one tag, each built natively; a systemd unit and its settings file (`jarvis_bringup/systemd`: its own user, after the time sync, SIGINT then 30 s, restart on failure); `ros2 jarvis doctor`: the nodes and their lifecycle state, the recovery mode, plans, rules, open faults, the data disk, the recorder, the clock's sync and the gateway, each problem with its fix, exit code 1 on a problem, `--json` |
+| 9.2 ✔ | History off the robot ([fleet guide §4](../guides/fleet.md#4-the-fleets-history)): the lake uploads its Parquet, and the black box's snapshots if asked, as they are complete, to S3 or any S3 API (MinIO, Ceph) or a mounted share (`lake_upload_to`, pyarrow's file systems: no new dependency); a ledger across restarts, oldest first, a time budget per pass, backoff while offline; retention keeps what is not uploaded unless the disk runs short (then counted as lost); `jarvis.upload.behind` past a max lag; the System page shows it; `jarvis-lake fleet` queries every robot's history in place with the lake's views and a `robot` column |
 
 ### Later (v2+)
-Fleet (Parquet to object storage) · Foxglove panel · Zenoh for non-ROS producers.
+Foxglove panel · Zenoh for non-ROS producers.
 
 ## Demo scenarios (Nav2 simulation)
 

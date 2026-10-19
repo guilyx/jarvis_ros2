@@ -116,6 +116,10 @@ raises `jarvis.storage.low` when it has to; the doctor warns below 5 GiB free, b
 happens. A day of recordings is what your robot publishes on `/jarvis/**` and
 `record_extra_topics` in a day: measure a shift, then size the disk.
 
+A disk can fail, or be swapped with the computer. To keep the history beyond the robot, the
+lake uploads it to object storage or a share as it goes (`lake_upload_to`, in
+`JARVIS_LAUNCH_ARGS`; credentials in `jarvis.env`): [fleet guide §4](fleet.md#4-the-fleets-history).
+
 ## 5. The clock
 
 Every event has its time from the robot's clock: the timeline, incidents, rule windows, and the

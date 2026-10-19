@@ -15,6 +15,9 @@ of free disk space on each file system the lake writes to: below it, more goes t
 age, in the order it costs least (converted splits; black-box snapshots, never the one being
 written; whole days of Parquet, never the newest). When that is not enough, the disk is reported
 short (status, diagnostics, a fault).
+
+With uploads on (jarvis_lake.upload), the ages and budgets also wait for what is not uploaded yet;
+disk pressure does not, and reports what it deleted before it went up (`lost`).
 """
 
 import dataclasses
@@ -50,6 +53,7 @@ class RetentionReport:
     freed_bytes: int = 0
     disk_free_bytes: int = 0  # after retention, on the fullest file system (estimated, dry run)
     disk_short_bytes: int = 0  # still missing for the floor: what is left may not be deleted
+    lost: list = dataclasses.field(default_factory=list)  # deleted for room before it was uploaded
 
 
 def _size(path):
@@ -81,6 +85,8 @@ class Lake:
         self.clock = clock
         self.free_bytes = disk_free or _free_bytes
         self.ledger = storage.Ledger(self.layout.ledger)
+        # Uploads on: whether deleting a path loses what is not uploaded yet (Uploader.waiting).
+        self.waiting = lambda path: False
 
     def filesystems(self):
         """{device: a path on it} for every file system the lake writes to or deletes from."""
@@ -162,6 +168,8 @@ class Lake:
 
         def delete(path, deleted, name=None):
             size, device = _size(path), _device(path)
+            if self.waiting(path):
+                report.lost.append(name or str(path))
             deleted.append(name or str(path))
             report.freed_bytes += size
             freed[device] = freed.get(device, 0) + size
@@ -188,7 +196,8 @@ class Lake:
         today = datetime.datetime.fromtimestamp(now, tz=datetime.UTC).date()
         for day, directory in partitions:
             age_days = (today - datetime.date.fromisoformat(day)).days
-            if age_days > policy.lake_max_age_days or total > policy.lake_max_bytes:
+            too_much = age_days > policy.lake_max_age_days or total > policy.lake_max_bytes
+            if too_much and not self.waiting(directory):
                 total -= delete(directory, report.deleted_partitions, day)
 
         # Black-box snapshots: oldest files first, down to the budget.
@@ -197,7 +206,8 @@ class Lake:
         for f in snapshots:
             if total <= policy.blackbox_max_bytes:
                 break
-            total -= delete(f, report.deleted_blackbox)
+            if not self.waiting(f):
+                total -= delete(f, report.deleted_blackbox)
 
         # Disk pressure: more of the same on each file system short of space, cheapest loss first.
         free = {

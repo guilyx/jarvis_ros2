@@ -95,8 +95,17 @@ jobs:
       # NumPy as ROS Jazzy has it (Ubuntu 24.04): the libraries must work with it.
       - run: |
           pip install numpy==1.26.4 -r lake/jarvis_lake/requirements.txt \
-            pytest pytest-cov==6.0.0 coverage==7.6.4
+            pytest pytest-cov==6.0.0 coverage==7.6.4 "moto[server]==5.2.4"
+      - name: An S3 API for the upload's test (moto's server)
+        run: |
+          moto_server -p 5055 > moto.log 2>&1 &
+          for _ in $(seq 30); do curl -sf http://127.0.0.1:5055/ > /dev/null && break; sleep 1; done
       - run: PYTHONPATH=lake/jarvis_lake pytest -q --cov=jarvis_lake --cov-fail-under=78 lake/jarvis_lake/test
+        env:
+          JARVIS_TEST_S3: s3://jarvis-ci/fleet?endpoint_override=127.0.0.1:5055&scheme=http&region=us-east-1&allow_bucket_creation=true
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_EC2_METADATA_DISABLED: "true"
       - name: Coverage (in the job summary)
         if: ${{ !cancelled() }} # also when the tests fail the coverage floor
         run: '{ echo "### Lake coverage"; coverage report --format=markdown; } >>"$GITHUB_STEP_SUMMARY"'

@@ -5,6 +5,9 @@
 Retention runs every `retention_period`, and at every pass while the disk is low on free space,
 before conversion: converting needs room too.
 
+With an uploader (jarvis_lake.upload), each pass then uploads what is complete, within the
+uploader's time budget, and the status has an `upload` section.
+
 It wakes up when poked (the ROS adapter pokes it on `events/write_split`) and every `scan_period`
 anyway, so it also works without ROS and catches splits it was not told about (a bag closed at
 shutdown, splits left by a crash). Each pass writes lake/status.json for the gateway.
@@ -18,8 +21,13 @@ from jarvis_lake import storage
 
 
 class LakeService:
-    def __init__(self, lake, scan_period=30.0, retention_period=600.0, log=print, clock=time.time):
+    def __init__(
+        self, lake, scan_period=30.0, retention_period=600.0, log=print, clock=time.time, uploader=None
+    ):
         self.lake = lake
+        self.uploader = uploader
+        if uploader:
+            lake.waiting = uploader.waiting
         self.scan_period = scan_period
         self.retention_period = retention_period
         self.log = log
@@ -48,6 +56,8 @@ class LakeService:
             self._last_retention = now
             self._step(errors, "retention", self._retention)
         failed = self._step(errors, "conversion", lambda: self._convert(recover)) or []
+        if self.uploader:
+            self._step(errors, "upload", self._upload)
         self.last_error = "; ".join(failed + errors)
         return self.write_status()
 
@@ -65,6 +75,10 @@ class LakeService:
         deleted = report.deleted_splits + report.deleted_partitions + report.deleted_blackbox
         if deleted:
             self.log(f"retention: deleted {len(deleted)} item(s), {report.freed_bytes} bytes")
+        if report.lost:
+            self.log(f"disk low: deleted {len(report.lost)} item(s) before they were uploaded")
+            if self.uploader:
+                self.uploader.deleted_waiting(report.lost)
         if report.disk_short_bytes:
             self.log(
                 f"disk low: {report.disk_free_bytes >> 20} MiB free, "
@@ -92,6 +106,19 @@ class LakeService:
             self.log(f"{result.split.name}: {result.rows} events {how}")
         return failed
 
+    def _upload(self):
+        """Uploads what is complete. An unreachable target is the uploader's to report (status,
+        then a fault on ROS once it is behind): it is not the lake's error."""
+        error = self.uploader.last_error
+        n = self.uploader.run()
+        if n:
+            self.log(f"uploaded {n} file(s) to {self.uploader.status()['target']}")
+        if self.uploader.last_error and self.uploader.last_error != error:
+            self.log(
+                f"upload failed, trying again in {self.uploader.retry_at - self.clock():.0f} s: "
+                f"{self.uploader.last_error}"
+            )
+
     def write_status(self):
         status = {
             "schema": "jarvis.lake.status/v1",
@@ -103,6 +130,8 @@ class LakeService:
         }
         try:
             status.update(self.lake.status())
+            if self.uploader:
+                status["upload"] = self.uploader.status()
             storage.write_json(self.lake.layout.status, status)
         except OSError as e:
             self.log(f"cannot write {self.lake.layout.status}: {e}")

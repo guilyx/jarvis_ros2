@@ -9,8 +9,12 @@
     jarvis-lake kpis [--hours 24]   the dashboard's KPIs and analytics, as JSON
     jarvis-lake status              counts, sizes and the last conversion
     jarvis-lake retention [--dry-run]
+    jarvis-lake upload [--dry-run]  upload what is complete now (--upload-to), then exit
+    jarvis-lake fleet URI [SQL]     the fleet's uploaded history: one line per robot, or a query
 
 The data directory is --data-dir, else $JARVIS_DATA, else ~/.local/share/jarvis (as the bringup).
+With --upload-to (an s3:// or file:// URI), `run` also uploads the lake's Parquet, and with
+--upload-blackbox the black box's snapshots, as they are complete (jarvis_lake.upload).
 """
 
 import argparse
@@ -20,7 +24,7 @@ import os
 import pathlib
 import sys
 
-from jarvis_lake import analytics, lake, storage
+from jarvis_lake import analytics, fleet, lake, storage, upload
 from jarvis_lake.service import LakeService
 
 GIB = 1 << 30
@@ -35,7 +39,24 @@ def _lake(args):
         blackbox_max_bytes=int(args.blackbox_max_gib * GIB),
         min_free_bytes=int(args.min_free_gib * GIB),
     )
-    return lake.Lake(args.data_dir, args.lake_dir, retention)
+    the_lake = lake.Lake(args.data_dir, args.lake_dir, retention)
+    uploader = _uploader(args, the_lake)
+    if uploader:
+        the_lake.waiting = uploader.waiting
+    return the_lake
+
+
+def _uploader(args, the_lake):
+    if not args.upload_to:
+        return None
+    return upload.Uploader(
+        the_lake,
+        args.upload_to,
+        args.robot,
+        blackbox=args.upload_blackbox,
+        budget_s=args.upload_budget_s,
+        max_lag_s=args.upload_max_lag_hours * 3600,
+    )
 
 
 def _print(value):
@@ -43,7 +64,13 @@ def _print(value):
 
 
 def cmd_run(args):
-    service = LakeService(_lake(args), scan_period=args.scan_period, retention_period=args.retention_period)
+    the_lake = _lake(args)
+    service = LakeService(
+        the_lake,
+        scan_period=args.scan_period,
+        retention_period=args.retention_period,
+        uploader=_uploader(args, the_lake),
+    )
     if args.ros:
         from jarvis_lake.adapters import ros2  # rclpy only here
 
@@ -86,13 +113,21 @@ def cmd_convert(args):
 
 
 def cmd_sql(args):
-    con = _lake(args).connect()
-    cur = con.execute(args.query)
+    _rows(_lake(args).connect().execute(args.query), args.format)
+    return 0
+
+
+def cmd_fleet(args):
+    _rows(fleet.connect(args.target).execute(args.query or fleet.SUMMARY), args.format)
+    return 0
+
+
+def _rows(cur, fmt):
     names = [d[0] for d in cur.description]
     rows = cur.fetchall()
-    if args.format == "json":
+    if fmt == "json":
         _print([dict(zip(names, r, strict=True)) for r in rows])
-    elif args.format == "csv":
+    elif fmt == "csv":
         import csv
 
         writer = csv.writer(sys.stdout, lineterminator="\n")
@@ -102,8 +137,7 @@ def cmd_sql(args):
         widths = [max([len(n)] + [len(str(r[i])) for r in rows]) for i, n in enumerate(names)]
         print("  ".join(n.ljust(w) for n, w in zip(names, widths, strict=True)))
         for r in rows:
-            print("  ".join(str(v).ljust(w) for v, w in zip(r, widths, strict=True)))
-    return 0
+            print("  ".join(str(v).ljust(w) for v, w in zip(r, widths, strict=True)).rstrip())
 
 
 def cmd_kpis(args):
@@ -123,7 +157,32 @@ def cmd_kpis(args):
 
 
 def cmd_status(args):
-    _print(_lake(args).status())
+    the_lake = _lake(args)
+    status = the_lake.status()
+    uploader = _uploader(args, the_lake)
+    if uploader:
+        status["upload"] = uploader.status()
+    _print(status)
+    return 0
+
+
+def cmd_upload(args):
+    uploader = _uploader(args, _lake(args))
+    if not uploader:
+        print("jarvis-lake: where to? --upload-to s3://bucket/prefix (or file:///mnt/share)", file=sys.stderr)
+        return 2
+    pending = uploader.pending()
+    if args.dry_run:
+        for item in pending:
+            print(f"{item.path} -> {item.key} ({item.size} bytes)")
+        print(f"{len(pending)} file(s) to upload")
+        return 0
+    uploader.budget_s = float("inf")
+    n = uploader.run()
+    print(f"uploaded {n} of {len(pending)} file(s) to {upload.redact(args.upload_to)}")
+    if uploader.last_error:
+        print(f"jarvis-lake: {uploader.last_error}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -146,6 +205,18 @@ def parser():
     p.add_argument("--lake-max-gib", type=float, default=5.0)
     p.add_argument("--blackbox-max-gib", type=float, default=2.0)
     p.add_argument("--min-free-gib", type=float, default=1.0, help="free disk to keep (disk pressure)")
+    p.add_argument("--robot", default="robot", help="this robot's id: where its uploads go")
+    p.add_argument(
+        "--upload-to", default="", help="upload history there: s3://bucket/prefix, file:///mnt/share"
+    )
+    p.add_argument("--upload-blackbox", action="store_true", help="also the black box's snapshots")
+    p.add_argument("--upload-budget-s", type=float, default=60.0, help="seconds of uploading per pass")
+    p.add_argument(
+        "--upload-max-lag-hours",
+        type=float,
+        default=24.0,
+        help="older than this, waiting is behind (a fault)",
+    )
     sub = p.add_subparsers(dest="command", required=True)
 
     s = sub.add_parser("run", help="the service")
@@ -176,6 +247,16 @@ def parser():
     s = sub.add_parser("retention", help="enforce retention now")
     s.add_argument("--dry-run", action="store_true")
     s.set_defaults(func=cmd_retention)
+
+    s = sub.add_parser("upload", help="upload what is complete (--upload-to), then exit")
+    s.add_argument("--dry-run", action="store_true", help="only list what would go")
+    s.set_defaults(func=cmd_upload)
+
+    s = sub.add_parser("fleet", help="query the fleet's uploaded history")
+    s.add_argument("target", help="where the robots upload: s3://bucket/prefix, file:///mnt/share")
+    s.add_argument("query", nargs="?", default="", help="SQL over the views (default: one line per robot)")
+    s.add_argument("--format", choices=("table", "csv", "json"), default="table")
+    s.set_defaults(func=cmd_fleet)
     return p
 
 

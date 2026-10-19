@@ -48,6 +48,8 @@ robots, with history, a dashboard and an agent that explains what happened.
   fault), how often, in shadow mode first; the rule lab backtests it.
 
 ### History, dashboard and API
+- The fleet's history: each robot uploads its Parquet (and black-box snapshots) to S3, MinIO or
+  a share, and `jarvis-lake fleet` queries every robot's at once.
 - The lake: recordings as Parquet, queried with DuckDB; KPIs, analytics, retention with a
   free-disk floor.
 - The gateway: REST API, a gap-free live stream, roles, an audit trail, webhooks, Prometheus

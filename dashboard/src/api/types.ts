@@ -379,6 +379,24 @@ export interface LakeStatus {
   blackbox_bytes?: number;
   partitions?: string[];
   rows?: number;
+  upload?: UploadStatus; // the history going off the robot (lake_upload_to), when on
+}
+
+export interface UploadStatus {
+  target: string; // without credentials
+  robot: string;
+  blackbox: boolean;
+  pending_files: number;
+  pending_bytes: number;
+  oldest_pending_s: number;
+  behind: boolean; // waiting longer than max_lag_s: jarvis.upload.behind
+  max_lag_s: number;
+  uploaded_total: number; // since the lake started
+  uploaded_bytes_total: number;
+  last_upload_at: number | null; // unix seconds
+  last_error: string;
+  retry_at: number | null; // unix seconds: backing off until then
+  lost: number; // deleted for room before they were uploaded
 }
 
 export interface Health {

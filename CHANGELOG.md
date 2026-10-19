@@ -62,6 +62,9 @@ robots, with history, a dashboard and an agent that explains what happened.
   metrics; TLS and single sign-on through an authenticating proxy.
 - The dashboard: overview, events, faults with their runbooks, incident timelines, recovery and
   approvals, rules, analytics, the agent.
+- A panel for Foxglove and Lichtblick (`.foxe`, attached to the release): the open faults over
+  Jarvis's events, live through foxglove_bridge or on Jarvis's recordings, where the log runs up to
+  the playhead and a click on an event goes there.
 
 ### The agent
 - Explains incidents and failed recoveries with the evidence behind each claim: a deterministic

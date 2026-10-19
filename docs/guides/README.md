@@ -7,6 +7,7 @@
 | [Rules and recovery cookbook](rules-cookbook.md) | Whoever writes rules and plans: recipes linted in CI, and the gotchas |
 | [Running robots with Jarvis](operator.md) | The people on shift: the dashboard, faults, incidents, approvals, the kill switch |
 | [Securing Jarvis](security.md) | Production: SROS2, gateway TLS and single sign-on, what reaches a model |
+| [Jarvis in Foxglove and Lichtblick](foxglove.md) | Whoever debugs robots in Foxglove: the open faults and Jarvis's events in a panel, live or on a recording, a click on an event to go there |
 | [Jarvis for AI assistants](ai-assistants.md) | Claude Code, Claude Desktop, Cursor: asking the robot what is wrong, over MCP |
 | [Behavior trees](behavior-trees.md) | Recoveries that are BehaviorTree.CPP trees: run them as a plan step (`bt.run`), with nodes that call any service or action and read Jarvis's faults |
 | [Drivers in containers and systemd units](containers.md) | Drivers that aren't lifecycle nodes: Jarvis restarts their container or unit, only those you allow |

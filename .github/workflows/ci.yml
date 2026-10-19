@@ -192,6 +192,30 @@ jobs:
           name: dashboard-e2e-fake
           path: dashboard/playwright-report
 
+  foxglove:
+    name: Foxglove panel (lint, unit, package)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: foxglove/jarvis-panel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: foxglove/jarvis-panel/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-panel
+          path: foxglove/jarvis-panel/*.foxe
+          if-no-files-found: error
+
   ros:
     # Jazzy (Ubuntu 24.04) and Lyrical Luth (Ubuntu 26.04), the two LTS releases; and Jazzy on ARM64,
     # what most robot computers are (Jetson, Raspberry Pi, RK3588), natively on an ARM runner.

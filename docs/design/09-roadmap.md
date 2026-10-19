@@ -124,8 +124,15 @@ Jarvis has run on laptops, in CI and in Docker. Robots are ARM64 boards that boo
 | 9.5 ✔ | A rollout at a glance ([fleet guide §5](../guides/fleet.md#watch-a-rollout)): each robot's health carries where its rules and plans come from; the fleet view collects it, and the Fleet page shows which revision runs on which robots, which was refused where and why, and the robots on their own; each robot's card says it in one line (`config` in `GET /api/v1/fleet`) |
 | 9.6 ✔ | Fleet alerts ([fleet guide §6](../guides/fleet.md#6-alerts-when-nobody-is-looking)): with `fleet.watch`, the gateway that lists the robots looks at them every `period_s` by itself and alerts its webhooks (channel `fleet`) when a robot has been unreachable for `offline_after_s` and when it is back, when it refuses the fleet's rules and plans and when it takes them again; the Fleet page lists the last alerts (`GET /api/v1/fleet/alerts`); `/metrics` has `jarvis_fleet_robot_online` and `jarvis_fleet_config_refused` per robot |
 
+### M10 — Where robots are debugged
+The people who debug robots do it in Foxglove or Lichtblick, with the robot's data in front of them: Jarvis belongs there too, not only in its own dashboard.
+
+| PR | Content |
+|----|---------|
+| 10.1 ✔ | A Jarvis panel for Foxglove and Lichtblick ([guide](../guides/foxglove.md), `foxglove/jarvis-panel`): the open faults (`/jarvis/faults`) worst first, latched marked, over Jarvis's events (`/jarvis/event_batches`), from a minimum severity; live through foxglove_bridge, or on Jarvis's MCAP recordings, where the log is every event up to the playhead and a click on one seeks there. A `.foxe` built and tested in CI, attached to each release; one version with the rest (`scripts/version.py`) |
+
 ### Later (v2+)
-Foxglove panel · Zenoh for non-ROS producers.
+Zenoh for non-ROS producers.
 
 ## Demo scenarios (Nav2 simulation)
 

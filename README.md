@@ -58,8 +58,9 @@ kill switch, rules and analytics.
   Restart it yourself, through the same gates: `./demo jarvis recover restart-lifecycle-node -a
   node=/demo/scan_relay -a component=lidar`.
 
-- **Foxglove**: connect to `ws://localhost:8765` to browse `/jarvis/event_batches`, `/jarvis/faults`, `/scan` and
-  `/diagnostics` live. The MCAP recordings in `./demo-data/bags/` open in Foxglove too.
+- **Foxglove** or Lichtblick: connect to `ws://localhost:8765` to browse `/jarvis/event_batches`, `/jarvis/faults`,
+  `/scan` and `/diagnostics` live, with the [Jarvis panel](docs/guides/foxglove.md). The MCAP recordings in
+  `./demo-data/bags/` open there too.
 - **Restarts keep open faults**: that's the persistence at work. `./demo clear --all` clears every open
   fault; `rm -rf demo-data` (with `sudo` on Linux: the container writes as root) starts from scratch.
 - **No bash** (plain Windows): `docker compose up -d`, then `docker compose exec demo monitor` and
@@ -303,6 +304,7 @@ both. A nightly soak runs the stack for 15 minutes at 500 events/s
 | [`lake/jarvis_lake`](lake/jarvis_lake) | Recordings as Parquet + DuckDB: history, KPIs, analytics, retention (runs without ROS) |
 | [`gateway/jarvis_gateway`](gateway/jarvis_gateway) | REST API, gap-free WebSocket stream, attributed commands, webhooks, Prometheus metrics |
 | [`dashboard`](dashboard) | The web console (React + TypeScript), served by the gateway |
+| [`foxglove/jarvis-panel`](foxglove/jarvis-panel) | A panel for Foxglove and Lichtblick: open faults and events, live or on a recording |
 | [`agent/jarvis_agent`](agent/jarvis_agent) | Explains incidents and failed recoveries: triage, a model's tool loop (LiteLLM) or a heuristic analyst, evidence-checked insights, recovery advice |
 | [`schemas`](schemas) | JSON Schema contracts (canonical) |
 
@@ -316,6 +318,7 @@ both. A nightly soak runs the stack for 15 minutes at 500 events/s
 | The people on shift | [docs/guides/operator.md](docs/guides/operator.md) |
 | Production security: SROS2, TLS, single sign-on, what a model sees | [docs/guides/security.md](docs/guides/security.md) |
 | AI assistants (Claude Code, Cursor...) asking the robot, over MCP | [docs/guides/ai-assistants.md](docs/guides/ai-assistants.md) |
+| Jarvis in Foxglove and Lichtblick, live or on a recording | [docs/guides/foxglove.md](docs/guides/foxglove.md) |
 
 Each fault code the bridges raise has a runbook ([`jarvis_bringup/config/runbooks`](ros/jarvis_bringup/config/runbooks)):
 what it means, what to check, what fixes it. The dashboard shows it on the fault, the agent reads it. Yours

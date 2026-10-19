@@ -45,7 +45,7 @@ and summarized at the end. A package moves up once its gaps close.
   required yet. Required reviews on `main` are the step to Level 1.
 - [x] **Continuous integration.** Every pull request and every push to `main` runs CI: lint, the
   core with sanitizers, the schemas, each Python service, the dashboard (unit and end-to-end),
-  the full ROS build and tests, and the Docker demo with an end-to-end run against it.
+  the Foxglove panel, the full ROS build and tests, and the Docker demo with an end-to-end run against it.
   Nightly: a 15-minute soak at 500 events/s and the agent's evaluation.
 - [x] **Documentation policy.** A change that alters behaviour updates the documentation in the
   same pull request; the guides' examples are tested (the rules cookbook is linted in CI).
@@ -103,7 +103,8 @@ and summarized at the end. A package moves up once its gaps close.
   pinned FastAPI and pyarrow, LiteLLM) have no rosdep key, so a `.deb` of those three packages
   would not bring them: install them with pip, or use the Docker image, which has everything.
 - [x] **The dashboard's** npm dependencies are locked (`package-lock.json`) and only its built
-  bundle reaches the robot.
+  bundle reaches the robot. So are the Foxglove panel's; it runs in Foxglove or Lichtblick, never
+  on the robot.
 
 ## 6. Platform support
 

@@ -49,6 +49,7 @@ ARGUMENTS = {
     "recovery": ("true", "Run the rule engine and the recovery orchestrator"),
     "recovery_mode": ("ENABLED", "Initial recovery mode: ENABLED, DRY_RUN or DISABLED"),
     "params_file": (str(SHARE / "config" / "jarvis.yaml"), "Parameters of the Jarvis components"),
+    "params_overlay": ("", "Parameters layered over params_file: only what you change"),
     "use_sim_time": ("false", "Use /clock"),
     "autostart": ("true", "Configure and activate the lifecycle components on startup"),
     "bridges": ("true", "Bridge /diagnostics, /rosout, action goal status, lifecycle, QoS and watchdogs"),
@@ -107,6 +108,7 @@ def _setup(context):
     autostart = _flag(arg["autostart"])
 
     common = {"robot_id": arg["robot_id"], "use_sim_time": use_sim_time, "autostart": autostart}
+    files = [arg["params_file"]] + ([arg["params_overlay"]] if arg["params_overlay"] else [])
 
     def enclave(process):
         # Per process, over any inherited override (ros2 launch's own, /jarvis/launch). Without
@@ -122,7 +124,7 @@ def _setup(context):
             plugin="jarvis_ros::EventHubNode",
             name="event_hub",
             namespace="jarvis",
-            parameters=[arg["params_file"], {**common, **state}],
+            parameters=[*files, {**common, **state}],
             extra_arguments=fast,
         ),
         ComposableNode(
@@ -130,7 +132,7 @@ def _setup(context):
             plugin="jarvis_ros::FaultManagerNode",
             name="fault_manager",
             namespace="jarvis",
-            parameters=[arg["params_file"], {**common, **state, "catalog_path": arg["catalog"]}],
+            parameters=[*files, {**common, **state, "catalog_path": arg["catalog"]}],
             extra_arguments=fast,
         ),
     ]
@@ -142,7 +144,7 @@ def _setup(context):
                 plugin="jarvis_ros::RuleEngineNode",
                 name="rule_engine",
                 namespace="jarvis",
-                parameters=[arg["params_file"], {**common, **state, "rules_dir": arg["rules"]}],
+                parameters=[*files, {**common, **state, "rules_dir": arg["rules"]}],
                 extra_arguments=fast,
             ),
             ComposableNode(
@@ -151,7 +153,7 @@ def _setup(context):
                 name="recovery",
                 namespace="jarvis",
                 parameters=[
-                    arg["params_file"],
+                    *files,
                     {**common, **state, "plans_dir": arg["plans"], "mode": arg["recovery_mode"]},
                 ],
                 extra_arguments=fast,
@@ -174,7 +176,7 @@ def _setup(context):
                     plugin=f"jarvis_bridges::{plugin}",
                     name=name,
                     namespace="jarvis/bridges",
-                    parameters=[arg["params_file"], {"use_sim_time": use_sim_time, "autostart": autostart}],
+                    parameters=[*files, {"use_sim_time": use_sim_time, "autostart": autostart}],
                 )
             )
 
@@ -239,7 +241,7 @@ def _setup(context):
                 namespace="jarvis/bridges",
                 additional_env=enclave("medkit"),
                 parameters=[
-                    arg["params_file"],
+                    *files,
                     {"use_sim_time": use_sim_time, "fault_manager": arg["medkit_fault_manager"]},
                 ],
                 output="screen",
@@ -254,7 +256,7 @@ def _setup(context):
                 namespace="jarvis/bridges",
                 additional_env=enclave("mqtt"),
                 parameters=[
-                    arg["params_file"],
+                    *files,
                     {"use_sim_time": use_sim_time, "robot_id": arg["robot_id"]},
                 ],
                 output="screen",

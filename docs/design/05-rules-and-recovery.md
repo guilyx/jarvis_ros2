@@ -298,6 +298,8 @@ Plan fields: `params` (`type: string | int | number | bool`, `required`, `defaul
 | `action.goal` | jarvis_ros | `action`, `type`, `goal`, `expect` | Any action (`pkg/action/Name`): sends the goal, waits for the result, which must be `SUCCEEDED` and hold `expect`. A step timeout cancels the goal |
 | `param.set` | jarvis_ros | `node`, `name`, `value` | `rcl_interfaces/srv/SetParameters` |
 | `bag.snapshot` | jarvis_ros | `service` | rosbag2 `~/snapshot` |
+| `container.restart` | jarvis_ros | `container`, `stop_timeout_s` | Docker Engine API (Podman's compatible socket too): unpauses a paused container, restarts it, waits until it runs (and is healthy, with a healthcheck). Only containers in the recovery node's `containers.allowed` |
+| `systemd.restart` | jarvis_ros | `unit`, `user` | `systemctl [--user] restart`, then waits for `is-active`; a failed unit fails the step. Only units in `systemd.allowed_units` |
 | `nav2.manage_lifecycle` | jarvis_nav2 (plugin) | `manager`, `command` | `nav2_msgs/srv/ManageLifecycleNodes` (STARTUP / PAUSE / RESUME / RESET / SHUTDOWN) |
 | `nav2.clear_costmaps` | jarvis_nav2 (plugin) | `which: local\|global\|both` (default both) | `nav2_msgs/srv/ClearEntireCostmap` |
 | `nav2.cancel_navigation` | jarvis_nav2 (plugin) | `actions` (optional list) | Cancels all `NavigateToPose` / `NavigateThroughPoses` goals; succeeds when no server is up |

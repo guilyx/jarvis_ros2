@@ -26,3 +26,54 @@ plans:
         timeout: 15s
     on_failure:
       - escalate: operator
+
+  # What is not a lifecycle node: a driver in a container, a daemon under systemd. Only the
+  # containers and units the recovery node allows (containers.allowed, systemd.allowed_units).
+  - id: restart-container
+    description: Restart a container (Docker or Podman), then verify that its faults clear.
+    params:
+      container: { type: string, required: true, description: the container's name }
+      component: { type: string, required: true, description: the component its faults are about }
+      fault: { type: string, default: "*", description: code glob of the faults that must clear }
+    locks: ["container:{{ params.container }}"]
+    allowed_requesters: [RULE, OPERATOR, AGENT, PLAN]
+    agent_policy: supervised
+    preconditions: { faults_inactive: [safety.estop.engaged] }
+    max_attempts: { count: 3, per: 1h }
+    timeout: 120s
+    steps:
+      - id: restart
+        action: container.restart
+        with: { container: "{{ params.container }}", stop_timeout_s: 5 }
+        timeout: 60s
+      - id: verify
+        action: wait_for
+        with: { fault: { code: "{{ params.fault }}", component: "{{ params.component }}" }, state: CLEARED }
+        timeout: 30s
+    on_failure:
+      - escalate: operator
+
+  - id: restart-systemd-unit
+    description: Restart a systemd unit, then verify that its faults clear.
+    params:
+      unit: { type: string, required: true, description: "the unit, e.g. lidar-driver.service" }
+      component: { type: string, required: true, description: the component its faults are about }
+      fault: { type: string, default: "*", description: code glob of the faults that must clear }
+      user: { type: string, default: "false", description: "true: a unit of the user's manager (systemctl --user)" }
+    locks: ["unit:{{ params.unit }}"]
+    allowed_requesters: [RULE, OPERATOR, AGENT, PLAN]
+    agent_policy: supervised
+    preconditions: { faults_inactive: [safety.estop.engaged] }
+    max_attempts: { count: 3, per: 1h }
+    timeout: 120s
+    steps:
+      - id: restart
+        action: systemd.restart
+        with: { unit: "{{ params.unit }}", user: "{{ params.user }}" }
+        timeout: 60s
+      - id: verify
+        action: wait_for
+        with: { fault: { code: "{{ params.fault }}", component: "{{ params.component }}" }, state: CLEARED }
+        timeout: 30s
+    on_failure:
+      - escalate: operator

@@ -47,7 +47,7 @@ target_link_libraries(jarvis_ros PUBLIC
 )
 
 # Built-in actuators (pluginlib plugins of jarvis_ros::Actuator, see actuators.xml).
-add_library(jarvis_actuators SHARED src/actuators.cpp src/generic_actuators.cpp)
+add_library(jarvis_actuators SHARED src/actuators.cpp src/generic_actuators.cpp src/process_actuators.cpp)
 target_link_libraries(jarvis_actuators PUBLIC
   jarvis_ros
   pluginlib::pluginlib
@@ -124,6 +124,9 @@ if(BUILD_TESTING)
   target_link_libraries(test_actuators
     jarvis_ros pluginlib::pluginlib rclcpp_action::rclcpp_action ${lifecycle_msgs_TARGETS} ${std_srvs_TARGETS}
   )
+
+  ament_add_gtest(test_process_actuators test/test_process_actuators.cpp TIMEOUT 60)
+  target_link_libraries(test_process_actuators jarvis_ros pluginlib::pluginlib)
 
   # Own ROS domain: packages are tested in parallel and launch tests share node names.
   add_launch_test(test/test_fault_flow.launch.py TIMEOUT 120 ENV ROS_DOMAIN_ID=61)

@@ -51,7 +51,7 @@ using GoalHandle = rclcpp_action::ServerGoalHandle<ExecuteRecovery>;
 
 const std::vector<std::string> kBuiltinActuators{
   "jarvis_ros::LifecycleActuator", "jarvis_ros::ServiceActuator", "jarvis_ros::GenericActuator",
-  "jarvis_ros::ParamActuator", "jarvis_ros::BagActuator"};
+  "jarvis_ros::ParamActuator",     "jarvis_ros::BagActuator",     "jarvis_ros::ProcessActuator"};
 
 class RecoveryNode : public rclcpp_lifecycle::LifecycleNode
 {

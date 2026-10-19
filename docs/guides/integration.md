@@ -312,6 +312,7 @@ The arguments people change (`ros2 launch jarvis_bringup jarvis.launch.py --show
 | `robot_id` | `robot` | Stamped on every event; names the robot in notifications |
 | `data_dir` | `$JARVIS_DATA` or `~/.local/share/jarvis` | Recordings, the lake, state: put it on a disk with room |
 | `params_file`, `catalog`, `rules`, `plans` | the shipped ones | Your configuration |
+| `params_overlay` | none | A parameters file layered over `params_file`: only what you change (e.g. the [containers Jarvis may restart](containers.md)) |
 | `recovery_mode` | `ENABLED` | `DRY_RUN` to rehearse, `DISABLED` to never act (a saved mode wins) |
 | `use_sim_time` | `false` | In simulation |
 | `bridges`, `record`, `blackbox`, `lake`, `gateway`, `agent`, `recovery` | `true` | Turn a part off |

@@ -8,6 +8,7 @@ import type {
   Fault,
   FaultEpisode,
   FaultTransition,
+  FleetRobot,
   Flapping,
   HeatCell,
   Health,
@@ -46,6 +47,15 @@ export const useSystem = () =>
     queryKey: ["system"],
     queryFn: () => unwrap<SystemInfo>(client.GET("/api/v1/system")),
     refetchInterval: 10_000,
+  });
+
+// Each robot's gateway is asked when the view is: refresh at the pace of a glance.
+export const useFleet = () =>
+  useQuery({
+    queryKey: ["fleet"],
+    queryFn: () => unwrap<{ robots: FleetRobot[] }>(client.GET("/api/v1/fleet")),
+    refetchInterval: 5_000,
+    placeholderData: keepPreviousData,
   });
 
 // -- events ------------------------------------------------------------------------------------------

@@ -22,6 +22,8 @@
     lint: { plans_dir: ..., catalog: ... }        # what POST /rules:validate checks rules against
     cors_origins: [http://localhost:3000]         # browser apps served elsewhere (a SOVD web UI)
     vda5050: { version: "3.0", errors: [...] }   # Jarvis's faults as VDA 5050 errors (vda5050.py)
+    fleet:                          # other robots' gateways, side by side in the dashboard (fleet.py)
+      - { name: amr-2, url: http://amr-2.local:8080, token_env: JARVIS_AMR2_TOKEN }
 
 Tokens can also come from $JARVIS_GATEWAY_TOKENS ("token:name:role,..."), to keep them out of files.
 docs/guides/security.md puts TLS and single sign-on together.
@@ -75,6 +77,7 @@ class Settings:
     proxy_auth: object = None  # jarvis_gateway.auth.ProxyAuth
     cors_origins: list = dataclasses.field(default_factory=list)
     vda5050: object = None  # jarvis_gateway.vda5050.Settings
+    fleet: object = None  # jarvis_gateway.fleet.Settings
 
     @classmethod
     def load(cls, path=None, **overrides):
@@ -110,6 +113,10 @@ class Settings:
             s.tls_cert, s.tls_key = str(tls.get("cert", "")), str(tls.get("key", ""))
             if bool(s.tls_cert) != bool(s.tls_key):
                 raise ValueError(f"{path}: tls needs both cert and key")
+            if raw.get("fleet"):
+                from jarvis_gateway.fleet import Settings as Fleet
+
+                s.fleet = Fleet.load(raw["fleet"])
             if "vda5050" in raw:
                 from jarvis_gateway.vda5050 import Settings as Vda5050
 

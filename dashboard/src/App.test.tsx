@@ -163,6 +163,49 @@ function api(role: "viewer" | "operator") {
         return json({ execution: PROPOSED, history: null });
       case "/api/v1/recoveries/x-9:reject":
         return json({ success: true, message: "rejected", data: {} });
+      case "/api/v1/fleet":
+        return json({
+          robots: [
+            {
+              name: "bot-7",
+              url: "",
+              local: true,
+              online: true,
+              mode: "ENABLED",
+              faults: { total: 0 },
+              incidents: 0,
+              latched: 0,
+            },
+            {
+              name: "amr-2",
+              url: "http://amr-2:8080",
+              online: true,
+              mode: "DRY_RUN",
+              latency_ms: 12,
+              faults: { CRITICAL: 1, ERROR: 2, total: 3 },
+              worst: {
+                code: "safety.estop.engaged",
+                severity: "CRITICAL",
+                state: "LATCHED",
+                component: "base",
+                message: "e-stop pressed",
+                fault_id: "f",
+              },
+              incidents: 2,
+              latched: 1,
+            },
+            {
+              name: "amr-3",
+              url: "http://amr-3:8080",
+              online: false,
+              error: "unreachable",
+              mode: "UNKNOWN",
+              faults: {},
+              incidents: 0,
+              latched: 0,
+            },
+          ],
+        });
       case "/api/v1/plans":
         return json({ mode: "ENABLED", plans: [] });
       case "/api/v1/faults/f-estop:ack":
@@ -277,6 +320,23 @@ describe("dashboard", () => {
       incident_id: "i1",
       question: "Why?",
     });
+  });
+
+  it("shows the fleet, the robots that need someone first", async () => {
+    api("viewer");
+    renderApp("/fleet");
+    expect(await screen.findByTestId("fleet-summary")).toHaveTextContent(
+      "3 robots · 1 with open faults · 1 offline",
+    );
+    const cards = await screen.findAllByTestId("fleet-robot");
+    expect(cards.map((c) => c.getAttribute("aria-label"))).toEqual(["amr-3", "amr-2", "bot-7"]);
+    expect(within(cards[0]!).getByText(/Offline: unreachable/)).toBeInTheDocument();
+    expect(within(cards[1]!).getByText("safety.estop.engaged")).toBeInTheDocument();
+    expect(within(cards[1]!).getByRole("link", { name: /Open its dashboard/ })).toHaveAttribute(
+      "href",
+      "http://amr-2:8080",
+    );
+    expect(within(cards[2]!).getByText("No open faults")).toBeInTheDocument();
   });
 
   it("hides commands from viewers", async () => {

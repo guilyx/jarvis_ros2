@@ -381,6 +381,30 @@ export interface Health {
   lake?: LakeStatus | null;
 }
 
+export interface FleetRobot {
+  name: string;
+  url: string; // its gateway (and dashboard); empty for this one
+  online: boolean;
+  local?: boolean; // this gateway's own robot
+  robot?: string;
+  status?: string;
+  connected?: boolean;
+  latency_ms?: number | null;
+  error?: string | null; // why it is offline
+  mode: RecoveryMode;
+  faults: { CRITICAL?: number; ERROR?: number; WARN?: number; total?: number };
+  worst?: {
+    code: string;
+    severity: string;
+    state: string;
+    component: string;
+    message: string;
+    fault_id: string;
+  } | null;
+  incidents: number;
+  latched: number;
+}
+
 export interface Delivery {
   webhook: string;
   channel: string;

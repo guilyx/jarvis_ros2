@@ -7,6 +7,7 @@ import {
   Gauge,
   HeartPulse,
   ListTree,
+  Network,
   Moon,
   RotateCcw,
   Sparkles,
@@ -33,6 +34,7 @@ const NAV = [
   { to: "/rules", label: "Rules", icon: Workflow },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/agent", label: "Agent", icon: Sparkles },
+  { to: "/fleet", label: "Fleet", icon: Network },
   { to: "/system", label: "System", icon: HeartPulse },
 ] as const;
 

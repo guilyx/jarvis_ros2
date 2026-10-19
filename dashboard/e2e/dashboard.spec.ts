@@ -133,3 +133,14 @@ test("an operator asks the agent about an incident", async ({ page }) => {
   await expect(box.getByTestId("ask-progress")).toContainText("window");
   await expect(box.getByTestId("insight-card")).toBeVisible({ timeout: 30_000 });
 });
+
+test("the fleet view shows this robot, and leads to its faults", async ({ page }) => {
+  // No fleet configured on this gateway: this robot alone (its faults depend on the tests before).
+  await page.goto("/fleet");
+  await expect(page.getByTestId("fleet-summary")).toContainText("1 robot");
+  const card = page.getByTestId("fleet-robot");
+  await expect(card).toHaveCount(1);
+  await expect(card).toContainText("this robot");
+  await card.getByRole("link", { name: "Its faults" }).click();
+  await expect(page).toHaveURL(/\/faults/);
+});

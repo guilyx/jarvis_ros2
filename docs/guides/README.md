@@ -7,6 +7,7 @@
 | [Running robots with Jarvis](operator.md) | The people on shift: the dashboard, faults, incidents, approvals, the kill switch |
 | [Securing Jarvis](security.md) | Production: SROS2, gateway TLS and single sign-on, what reaches a model |
 | [Jarvis for AI assistants](ai-assistants.md) | Claude Code, Claude Desktop, Cursor: asking the robot what is wrong, over MCP |
+| [Watching a fleet](fleet.md) | Several robots in one dashboard: each robot's gateway, side by side, the ones that need someone first |
 | [Jarvis for VDA 5050 fleet managers](vda5050.md) | AMR fleets: Jarvis's open faults as the `errors` of the robot's VDA 5050 state |
 | [Jarvis for SOVD clients](sovd.md) | The ros2_medkit web UI, its Foxglove panel and other SOVD clients: Jarvis's faults on a SOVD-style API |
 

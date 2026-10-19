@@ -9,7 +9,8 @@ Data lands in `data_dir` (default $JARVIS_DATA, else ~/.local/share/jarvis):
                              closed splits are announced on /jarvis/recorder/events/write_split
   blackbox/blackbox_<stamp>/ snapshot-mode ring buffer of blackbox_topics, dumped when a fault asks
   lake/                      closed splits as Parquet (jarvis_lake), for history and analytics:
-                             `ros2 run jarvis_lake jarvis-lake sql "SELECT * FROM incidents"`
+                             `ros2 run jarvis_lake jarvis-lake sql "SELECT * FROM incidents"`;
+                             with `lake_upload_to`, uploaded for the fleet (docs/guides/fleet.md)
   state/                     open faults, rule fire history, waiting executions, hub boot counter
 
 The gateway (jarvis_gateway) serves the API, live stream and dashboard on gateway_host:gateway_port
@@ -68,6 +69,15 @@ ARGUMENTS = {
     "blackbox_cache_mb": ("256", "Memory of the black-box ring buffer"),
     "lake": ("true", "Convert closed splits to Parquet and enforce retention (jarvis_lake)"),
     "lake_min_free_gib": ("1", "Free disk the lake keeps by deleting the oldest data (disk pressure)"),
+    "lake_upload_to": (
+        "",
+        "Upload the history there: s3://bucket/prefix, file:///mnt/share (credentials: env)",
+    ),
+    "lake_upload_blackbox": ("false", "Upload the black box's snapshots too"),
+    "lake_upload_max_lag_hours": (
+        "24",
+        "Waiting longer than this to be uploaded raises jarvis.upload.behind",
+    ),
     "gateway": ("true", "Serve the API, live stream and dashboard (jarvis_gateway)"),
     "gateway_host": ("127.0.0.1", "Address the gateway binds (a LAN address to reach it from others)"),
     "gateway_port": ("8080", "Port of the gateway"),
@@ -271,7 +281,19 @@ def _setup(context):
                 name="lake",
                 namespace="jarvis",
                 additional_env=enclave("lake"),
-                arguments=["--data-dir", str(data_dir), "--min-free-gib", arg["lake_min_free_gib"], "run"],
+                arguments=[
+                    "--data-dir",
+                    str(data_dir),
+                    "--min-free-gib",
+                    arg["lake_min_free_gib"],
+                    "--robot",
+                    arg["robot_id"],
+                    *(["--upload-to", arg["lake_upload_to"]] if arg["lake_upload_to"] else []),
+                    *(["--upload-blackbox"] if _flag(arg["lake_upload_blackbox"]) else []),
+                    "--upload-max-lag-hours",
+                    arg["lake_upload_max_lag_hours"],
+                    "run",
+                ],
                 output="screen",
             )
         )

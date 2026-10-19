@@ -1,6 +1,7 @@
 # Copyright 2026 Erwin L.
 # SPDX-License-Identifier: Apache-2.0
-"""The lake in the running stack: splits close every 3 s, the lake converts each one as it is told."""
+"""The lake in the running stack: splits close every 3 s, the lake converts each one as it is told,
+and uploads the Parquet to the fleet's storage (a directory here: lake_upload_to:=file://...)."""
 
 import pathlib
 import tempfile
@@ -21,6 +22,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
 DATA_DIR = tempfile.mkdtemp(prefix="jarvis_lake_")
+FLEET_DIR = pathlib.Path(tempfile.mkdtemp(prefix="jarvis_fleet_"))
 BRINGUP = pathlib.Path(get_package_share_directory("jarvis_bringup")) / "launch" / "jarvis.launch.py"
 
 
@@ -36,6 +38,7 @@ def generate_test_description():
             "recovery": "false",
             "blackbox": "false",
             "gateway": "false",
+            "lake_upload_to": f"file://{FLEET_DIR}",
         }.items(),
     )
     return launch.LaunchDescription([jarvis, launch_testing.actions.ReadyToTest()])
@@ -100,6 +103,21 @@ class TestLake(unittest.TestCase):
             self.spin(0.25)
         self.assertTrue(self.diagnostics, "the lake reports on /diagnostics")
         self.assertEqual(self.diagnostics[-1].hardware_id, "jarvis")
+
+    def test_converted_history_goes_to_the_fleets_storage(self):
+        robot = FLEET_DIR / "robots" / "lake-bot" / "events"
+        deadline = time.time() + 60
+        while not list(robot.glob("date=*/*.parquet")) and time.time() < deadline:
+            self.spin(0.5)
+        self.assertTrue(list(robot.glob("date=*/*.parquet")), f"nothing uploaded under {robot}")
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            values = {v.key: v.value for v in self.diagnostics[-1].values} if self.diagnostics else {}
+            if "upload_pending_files" in values:
+                break
+            self.spin(0.5)
+        self.assertIn("upload_pending_files", values, "the upload reports with the lake")
+        self.assertEqual(values["upload_lost"], "0")
 
 
 @launch_testing.post_shutdown_test()

@@ -2,6 +2,7 @@ import { Download } from "lucide-react";
 import type { ReactNode } from "react";
 import { getToken } from "@/api/client";
 import { useAudit, useBags, useSystem } from "@/api/queries";
+import type { UploadStatus } from "@/api/types";
 import {
   Empty,
   ErrorNote,
@@ -18,6 +19,27 @@ import {
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { useLive } from "@/live/context";
 import { ago, bytes, dateTime, duration } from "@/lib/format";
+
+/** The history going off the robot (docs/guides/fleet.md): where, what waits, how it went. */
+function uploadRows(up: UploadStatus): [ReactNode, ReactNode][] {
+  const when = (t: number | null) => (t ? ago(new Date(t * 1000).toISOString()) : "—");
+  const waiting = up.pending_files
+    ? `${up.pending_files} file(s), ${bytes(up.pending_bytes)}, oldest ${duration(up.oldest_pending_s)}`
+    : "nothing";
+  return [
+    ["upload to", <Mono key="t">{up.target}</Mono>],
+    [
+      "waiting",
+      <span key="w" data-testid="upload-waiting" className={up.behind ? "text-amber-500" : undefined}>
+        {waiting}
+        {up.behind ? " (behind)" : ""}
+      </span>,
+    ],
+    ["last upload", when(up.last_upload_at)],
+    ["upload error", up.last_error ? `${up.last_error} (retrying ${when(up.retry_at)})` : "—"],
+    ...(up.lost ? ([["lost before upload", `${up.lost} file(s)`]] as [ReactNode, ReactNode][]) : []),
+  ];
+}
 
 export function System() {
   const system = useSystem();
@@ -86,6 +108,7 @@ export function System() {
                   ["days", lake.partitions?.length ?? 0],
                   ["updated", lake.updated_at ? ago(new Date(lake.updated_at * 1000).toISOString()) : "—"],
                   ["last error", lake.last_error || "—"],
+                  ...(lake.upload ? uploadRows(lake.upload) : []),
                 ]}
               />
             ) : (

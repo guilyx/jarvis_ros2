@@ -69,6 +69,13 @@ faults:
       The data disk is short of free space although retention deleted all it may (converted
       recordings, black-box snapshots, old days of Parquet): new recordings are at risk.
     heal: { on_clear: true }
+  - code: jarvis.upload.behind
+    description: >-
+      The lake's history is not leaving the robot: files have waited to be uploaded longer than
+      the upload's max lag (the target is unreachable, or refuses them). Retention keeps them
+      until the disk runs short.
+    severity: WARN
+    heal: { on_clear: true }
 
 correlation:
   # Inner servers abort first; the navigator's abort is the fault worth showing.

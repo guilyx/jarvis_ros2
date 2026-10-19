@@ -11,7 +11,7 @@
 | [Behavior trees](behavior-trees.md) | Recoveries that are BehaviorTree.CPP trees: run them as a plan step (`bt.run`), with nodes that call any service or action and read Jarvis's faults |
 | [Drivers in containers and systemd units](containers.md) | Drivers that aren't lifecycle nodes: Jarvis restarts their container or unit, only those you allow |
 | [Devices that don't run ROS (MQTT)](mqtt.md) | A BMS, a charger, a PLC: faults and states over MQTT, liveness from their last will, Jarvis's open faults back |
-| [Watching a fleet](fleet.md) | Several robots in one dashboard: each robot's gateway, side by side, the ones that need someone first |
+| [Watching a fleet](fleet.md) | Several robots in one dashboard: each robot's gateway, side by side, the ones that need someone first; their history uploaded to S3 or a share, queried across robots |
 | [Jarvis for VDA 5050 fleet managers](vda5050.md) | AMR fleets: Jarvis's open faults as the `errors` of the robot's VDA 5050 state |
 | [Jarvis for SOVD clients](sovd.md) | The ros2_medkit web UI, its Foxglove panel and other SOVD clients: Jarvis's faults on a SOVD-style API |
 

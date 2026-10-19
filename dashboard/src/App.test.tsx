@@ -208,6 +208,42 @@ function api(role: "viewer" | "operator") {
         });
       case "/api/v1/plans":
         return json({ mode: "ENABLED", plans: [] });
+      case "/api/v1/system":
+        return json({
+          version: "0.1.0",
+          robot: "bot-7",
+          uptime_s: 60,
+          connected: true,
+          events_received: 10,
+          recent_events: 10,
+          stream_clients: 1,
+          components: {},
+          notifications: [],
+          webhooks: [],
+          lake: {
+            rows: 1200,
+            upload: {
+              target: "s3://fleet/history?endpoint_override=minio%3A9000",
+              robot: "bot-7",
+              blackbox: false,
+              pending_files: 3,
+              pending_bytes: 3 * 1024 * 1024,
+              oldest_pending_s: 7200,
+              behind: true,
+              max_lag_s: 3600,
+              uploaded_total: 40,
+              uploaded_bytes_total: 1 << 30,
+              last_upload_at: null,
+              last_error: "b1_0.parquet: OSError: unreachable",
+              retry_at: null,
+              lost: 2,
+            },
+          },
+        });
+      case "/api/v1/bags":
+        return json({ bags: [] });
+      case "/api/v1/audit":
+        return json({ events: [] });
       case "/api/v1/faults/f-estop:ack":
         return json({ success: true, message: "acknowledged", data: {} });
       default:
@@ -337,6 +373,17 @@ describe("dashboard", () => {
       "http://amr-2:8080",
     );
     expect(within(cards[2]!).getByText("No open faults")).toBeInTheDocument();
+  });
+
+  it("shows the history going off the robot, and when it is behind", async () => {
+    api("operator");
+    renderApp("/system");
+    expect(await screen.findByText("s3://fleet/history?endpoint_override=minio%3A9000")).toBeInTheDocument();
+    const waiting = screen.getByTestId("upload-waiting");
+    expect(waiting).toHaveTextContent("3 file(s), 3.0 MiB, oldest 2 h");
+    expect(waiting).toHaveTextContent("(behind)");
+    expect(screen.getByText(/OSError: unreachable/)).toBeInTheDocument();
+    expect(screen.getByText("2 file(s)")).toBeInTheDocument(); // lost before upload
   });
 
   it("hides commands from viewers", async () => {

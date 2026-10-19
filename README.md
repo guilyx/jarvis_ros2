@@ -162,6 +162,14 @@ Retention deletes recordings only after they are converted (7 days or 10 GiB of 
 5 GiB of Parquet, 2 GiB of black-box snapshots by default), and keeps 1 GiB of the disk free: below
 that it deletes the oldest data first and raises `jarvis.storage.low` when nothing else may go.
 
+For the fleet, each robot uploads its history to S3, MinIO or a share as it goes
+(`lake_upload_to:=s3://bucket/jarvis`; retention waits for it, offline is fine), and one command
+queries every robot's at once ([fleet guide](docs/guides/fleet.md#4-the-fleets-history)):
+
+```bash
+ros2 run jarvis_lake jarvis-lake fleet s3://bucket/jarvis "SELECT robot, code, count(*) FROM fault_episodes GROUP BY ALL"
+```
+
 ## Dashboard
 
 ![Overview](docs/media/dashboard-overview.png)

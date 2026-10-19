@@ -13,6 +13,8 @@ table: they join `events` above the lake's newest seq, so a query sees both with
     executions        one row per recovery execution: plan, requester, outcome, duration
     rule_matches      RULE_MATCH events
     operator_actions  what operators did (the audit trail): acks, clears, closes, mode changes
+
+Over the fleet's uploaded history (jarvis_lake.fleet), the same views, each with a `robot` column.
 """
 
 import duckdb
@@ -93,12 +95,32 @@ VIEWS = {
 }
 
 
-def connect(layout, recent=None, database=":memory:"):
-    """A DuckDB connection with the lake's views. `recent`: an Arrow table of newer events."""
+# The fleet's views say which robot, and group by it too: ids are unique (UUIDs), but a robot's
+# history must never merge with another's.
+GROUPED = {"fault_episodes", "incidents", "executions"}
+TOP_FROM = "\n        FROM "
+
+
+def view_sql(name, fleet=False):
+    sql = VIEWS[name]
+    if not fleet:
+        return sql
+    head, tail = sql.split(TOP_FROM, 1)
+    sql = f"{head},\n               robot{TOP_FROM}{tail}"
+    return f"{sql}, robot" if name in GROUPED else sql
+
+
+def connect(layout, recent=None, database=":memory:", source=None):
+    """A DuckDB connection with the lake's views. `recent`: an Arrow table of newer events.
+    `source`: events to read instead of the layout's Parquet (an Arrow dataset: the fleet's, whose
+    views then say which robot)."""
     con = duckdb.connect(database)
     con.execute("SET TimeZone = 'UTC'")  # buckets and dates in UTC, whatever the host says
-    files = list(layout.events.glob("date=*/*.parquet")) if layout.events.is_dir() else []
-    if files:
+    files = list(layout.events.glob("date=*/*.parquet")) if layout and layout.events.is_dir() else []
+    if source is not None:
+        con.register("lake_events_source", source)
+        con.execute(f"CREATE VIEW lake_events AS SELECT {COLUMN_LIST} FROM lake_events_source")
+    elif files:
         pattern = str(layout.events / "date=*" / "*.parquet")
         con.execute(
             f"CREATE VIEW lake_events AS SELECT {COLUMN_LIST} "
@@ -116,8 +138,8 @@ def connect(layout, recent=None, database=":memory:"):
         )
     else:
         con.execute(f"CREATE VIEW events AS SELECT {COLUMN_LIST} FROM lake_events")
-    for name, sql in VIEWS.items():
-        con.execute(f"CREATE VIEW {name} AS {sql}")
+    for name in VIEWS:
+        con.execute(f"CREATE VIEW {name} AS {view_sql(name, fleet=source is not None)}")
     return con
 
 

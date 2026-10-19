@@ -323,6 +323,7 @@ The arguments people change (`ros2 launch jarvis_bringup jarvis.launch.py --show
 | `blackbox_topics`, `blackbox_cache_mb` | `/tf /tf_static /odom /scan /cmd_vel /jarvis/event_batches`, 256 | What the black box keeps, how much |
 | `split_duration_s` | 300 | Length of a recording file |
 | `lake_min_free_gib` | 1 | Free disk the lake keeps |
+| `lake_upload_to`, `lake_upload_blackbox`, `lake_upload_max_lag_hours` | none, `false`, 24 | Upload the history for the fleet: S3, MinIO, a share ([fleet guide §4](fleet.md#4-the-fleets-history)) |
 | `gateway_host`, `gateway_port`, `gateway_config` | `127.0.0.1`, 8080 | Where the API and the dashboard listen; tokens, webhooks |
 | `agent_config` | | The agent's model, autonomy, redaction |
 

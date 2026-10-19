@@ -21,6 +21,7 @@ if(BUILD_TESTING)
   # Own ROS domain: packages are tested in parallel and launch tests share node names.
   add_launch_test(test/test_demo.launch.py TIMEOUT 180 ENV ROS_DOMAIN_ID=64)
   add_launch_test(test/test_docking.launch.py TIMEOUT 150 ENV ROS_DOMAIN_ID=72)
+  add_launch_test(test/test_trees.launch.py TIMEOUT 150 ENV ROS_DOMAIN_ID=75)
 endif()
 
 ament_package()

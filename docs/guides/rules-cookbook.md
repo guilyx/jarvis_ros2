@@ -570,6 +570,42 @@ rules:
     policy: { cooldown: 30s, max_fires: { count: 3, per: 10m } }
 ```
 
+### 16. Run a behavior tree
+
+A team's recovery that is already a behavior tree (BehaviorTree.CPP) runs as one step, `bt.run`,
+behind the plan's gates and lock. The tree reads the step's `blackboard` entries as `{name}`, and
+the step's message says which named branch did what. The [behavior-trees guide](behavior-trees.md)
+loads the actuator (`jarvis_bt::TreeActuator`) and sets `bt.trees_dir`.
+
+```yaml
+schema: jarvis.plans/v1
+plans:
+  - id: restart-with-tree
+    description: Restart a managed node with a behavior tree, gently first, then all the way.
+    params:
+      node: { type: string, required: true, pattern: "^/" }
+      component: { type: string, required: true }
+    locks: ["node:{{ params.node }}"]
+    timeout: 90s
+    steps:
+      - id: tree
+        action: bt.run
+        with:
+          tree: restart_lifecycle_node.xml
+          blackboard:
+            change_state: "{{ params.node }}/change_state"
+            fault: sensor.scan.stale
+            component: "{{ params.component }}"
+            wait: 4
+        timeout: 60s
+      - id: verify                     # whatever the tree did, the plan checks the fault cleared
+        action: wait_for
+        with: { fault: { code: sensor.scan.stale, component: "{{ params.component }}" }, state: CLEARED }
+        timeout: 15s
+    on_failure:
+      - escalate: operator
+```
+
 ## Gotchas
 
 - **Quote what must stay text.** YAML reads `attrs.value: true` as a boolean and `attrs.id: 007`

@@ -17,6 +17,7 @@
   <exec_depend>diagnostic_msgs</exec_depend>
   <exec_depend>diagnostic_updater</exec_depend>
   <exec_depend>jarvis_bringup</exec_depend>
+  <exec_depend>jarvis_bt</exec_depend>
   <exec_depend>jarvis_cli</exec_depend>
   <exec_depend>jarvis_interfaces</exec_depend>
   <exec_depend>jarvis_reporter</exec_depend>

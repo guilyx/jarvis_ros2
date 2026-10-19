@@ -7,7 +7,7 @@ This declares the quality of the Jarvis packages against the ROS 2 quality categ
 |---------|------|
 | `jarvis_core` | C++ library and tools, no ROS dependency |
 | `jarvis_interfaces` | messages, services, actions |
-| `jarvis_ros`, `jarvis_bridges`, `jarvis_nav2` | C++ ROS components and plugins |
+| `jarvis_ros`, `jarvis_bridges`, `jarvis_nav2`, `jarvis_bt` | C++ ROS components and plugins |
 | `jarvis_reporter` | C++ header and Python client library |
 | `jarvis_medkit` | Python ROS node: ros2_medkit's faults into Jarvis (optional) |
 | `jarvis_mqtt` | Python ROS node: devices that don't run ROS, over MQTT (optional) |

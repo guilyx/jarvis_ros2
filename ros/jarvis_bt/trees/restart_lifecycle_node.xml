@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<!--
+  Restart a lifecycle node, gently first: deactivate and activate it again; if its fault is still
+  open after `wait` seconds, take it all the way down (cleanup) and up again. The plan passes:
+    change_state  <node>/change_state
+    fault         the fault code that should clear (`*` globs)
+    component     its component ("" for any)
+    wait          seconds to wait for the fault to clear after each try
+-->
+<root BTCPP_format="4" main_tree_to_execute="RestartLifecycleNode">
+  <BehaviorTree ID="RestartLifecycleNode">
+    <Fallback>
+      <Sequence name="Reactivate">
+        <JarvisCallService service="{change_state}" type="lifecycle_msgs/srv/ChangeState"
+                           request="{transition: {label: deactivate}}"/>
+        <JarvisCallService service="{change_state}" type="lifecycle_msgs/srv/ChangeState"
+                           request="{transition: {label: activate}}"/>
+        <JarvisWaitFaultCleared code="{fault}" component="{component}" timeout="{wait}"/>
+      </Sequence>
+      <Sequence name="Reconfigure">
+        <JarvisCallService service="{change_state}" type="lifecycle_msgs/srv/ChangeState"
+                           request="{transition: {label: deactivate}}" expect="{}"/>
+        <JarvisCallService service="{change_state}" type="lifecycle_msgs/srv/ChangeState"
+                           request="{transition: {label: cleanup}}"/>
+        <JarvisCallService service="{change_state}" type="lifecycle_msgs/srv/ChangeState"
+                           request="{transition: {label: configure}}"/>
+        <JarvisCallService service="{change_state}" type="lifecycle_msgs/srv/ChangeState"
+                           request="{transition: {label: activate}}"/>
+        <JarvisWaitFaultCleared code="{fault}" component="{component}" timeout="{wait}"/>
+      </Sequence>
+    </Fallback>
+  </BehaviorTree>
+</root>

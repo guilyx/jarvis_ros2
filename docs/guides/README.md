@@ -7,6 +7,7 @@
 | [Running robots with Jarvis](operator.md) | The people on shift: the dashboard, faults, incidents, approvals, the kill switch |
 | [Securing Jarvis](security.md) | Production: SROS2, gateway TLS and single sign-on, what reaches a model |
 | [Jarvis for AI assistants](ai-assistants.md) | Claude Code, Claude Desktop, Cursor: asking the robot what is wrong, over MCP |
+| [Behavior trees](behavior-trees.md) | Recoveries that are BehaviorTree.CPP trees: run them as a plan step (`bt.run`), with nodes that call any service or action and read Jarvis's faults |
 | [Drivers in containers and systemd units](containers.md) | Drivers that aren't lifecycle nodes: Jarvis restarts their container or unit, only those you allow |
 | [Devices that don't run ROS (MQTT)](mqtt.md) | A BMS, a charger, a PLC: faults and states over MQTT, liveness from their last will, Jarvis's open faults back |
 | [Watching a fleet](fleet.md) | Several robots in one dashboard: each robot's gateway, side by side, the ones that need someone first |

@@ -36,6 +36,8 @@ robots, with history, a dashboard and an agent that explains what happened.
   the type when the plans load.
 - Drivers that aren't lifecycle nodes: Jarvis restarts their container (Docker, Podman) or systemd
   unit, only those the recovery node allows.
+- Behavior trees: a recovery step runs a BehaviorTree.CPP tree (`bt.run`), with nodes that call any
+  service or action and read Jarvis's faults; the same nodes for a robot's own trees.
 - `ros2 jarvis lint` and `backtest`: check rules before they ship, replay recordings through them.
 - The rule lab, in the dashboard: write or change a rule and see what it would have done over
   the robot's recorded history (when it fires, on which event, the recoveries it would ask for,

@@ -283,6 +283,7 @@ both. A nightly soak runs the stack for 15 minutes at 500 events/s
 | [`ros/jarvis_ros`](ros/jarvis_ros) | Event hub, fault manager, rule engine and recovery lifecycle components; built-in actuators (lifecycle, std_srvs, parameters, bag snapshot, any service or action by type); `jarvis_load` |
 | [`ros/jarvis_cli`](ros/jarvis_cli) | `ros2 jarvis`: faults, rules, recovery, approvals, kill switch, bag export, lint and backtest |
 | [`ros/jarvis_nav2`](ros/jarvis_nav2) | Nav2 actuators: lifecycle manager, costmaps, cancel and send goals |
+| [`ros/jarvis_bt`](ros/jarvis_bt) | Behavior trees: `bt.run` runs a BehaviorTree.CPP tree as a recovery step; BT nodes that call any service or action and read Jarvis's faults |
 | [`ros/jarvis_reporter`](ros/jarvis_reporter) | C++ and Python client libraries for apps |
 | [`ros/jarvis_bridges`](ros/jarvis_bridges) | Diagnostics, rosout, action status and lifecycle bridges; topic, node and QoS watchdogs |
 | [`ros/jarvis_medkit`](ros/jarvis_medkit) | For robots that run ros2_medkit: the faults its fault manager confirms, as Jarvis faults (`medkit:=true`) |

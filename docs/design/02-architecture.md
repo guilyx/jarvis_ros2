@@ -133,6 +133,7 @@ jarvis_ros2/
 │   ├── jarvis_ros/               # type adapters, clock, state files, lifecycle components, actuators, pluginlib bases
 │   ├── jarvis_bridges/           # diagnostics · rosout · lifecycle · action status · topic & node watchdogs
 │   ├── jarvis_nav2/              # Nav2 actuator plugins (lifecycle manager, costmaps, goals) + bridge presets
+│   ├── jarvis_bt/                # bt.run actuator (BehaviorTree.CPP) + Jarvis BT nodes, also a BT plugin library
 │   ├── jarvis_reporter/          # tiny C++ & Python client libraries for apps (client-side debounce)
 │   ├── jarvis_cli/               # `ros2 jarvis …` verbs (ros2cli extension)
 │   ├── jarvis_bringup/           # launch, params, fault catalog, rules, plans, recorder QoS profiles
@@ -156,12 +157,14 @@ flowchart BT
   ros --> ifc
   br["jarvis_bridges"] --> ros
   nav["jarvis_nav2"] --> ros
+  bt["jarvis_bt"] --> ros
   rep["jarvis_reporter"] --> ifc
   cli["jarvis_cli"] --> ifc
   bring["jarvis_bringup"] --> ros
   bring --> br
   demo["jarvis_demo"] --> bring
   demo --> nav
+  demo --> bt
   lake["jarvis_lake"] -. "reads MCAP files<br/>(mcap libs, no ROS)" .-> ifc
   agent["jarvis_agent"] -. "optional ros2 adapter" .-> ifc
   gw["jarvis_gateway"] -. "optional ros2 adapter" .-> ifc

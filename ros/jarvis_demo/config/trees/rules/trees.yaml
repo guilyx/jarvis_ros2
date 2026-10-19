@@ -1,0 +1,26 @@
+# The behavior-tree demo (launch/trees.launch.py): the lidar went quiet -> a behavior tree restarts
+# its relay. Spec: docs/guides/behavior-trees.md.
+schema: jarvis.rules/v1
+rules:
+  - id: lidar-stale-tree
+    description: The lidar went quiet. Restart its relay with the behavior tree.
+    partition_by: [source.component]
+    when:
+      event: { kind: FAULT_STATE, code: sensor.scan.stale, attrs.state: ACTIVE }
+    guard: { faults_inactive: [safety.estop.engaged] }
+    then:
+      - recover:
+          plan: restart-with-tree
+          args:
+            node: "{{ event.attrs.node }}"
+            component: "{{ event.source.component }}"
+            fault: sensor.scan.stale
+    policy: { cooldown: 5s, max_fires: { count: 3, per: 10m } }
+
+  # Same as jarvis_bringup/config/rules/core.yaml (rules directories don't include each other yet).
+  - id: escalation-notify
+    description: Tell the operators when recovery gives up on an incident.
+    when:
+      event: { kind: RECOVERY, attrs.phase: ESCALATED, attrs.dry_run: false }
+    then:
+      - notify: { channel: operators, message: "{{ event.message }}" }

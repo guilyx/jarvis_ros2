@@ -135,7 +135,7 @@ def _rows(cur, fmt):
         writer.writerows(rows)
     else:
         widths = [max([len(n)] + [len(str(r[i])) for r in rows]) for i, n in enumerate(names)]
-        print("  ".join(n.ljust(w) for n, w in zip(names, widths, strict=True)))
+        print("  ".join(n.ljust(w) for n, w in zip(names, widths, strict=True)).rstrip())
         for r in rows:
             print("  ".join(str(v).ljust(w) for v, w in zip(r, widths, strict=True)).rstrip())
 

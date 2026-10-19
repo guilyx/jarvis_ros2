@@ -127,12 +127,12 @@ The bucket is yours to protect like the robots' disks: encryption at rest, no pu
 the Docker image), with credentials that may read the bucket:
 
 ```console
-$ jarvis-lake fleet s3://acme-robots/jarvis
-robot   events  first_event                 last_event                  faults  incidents  recoveries
-amr-07  48211   2026-10-02 06:01:13.204+00  2026-10-19 07:40:51.880+00  312     41         37
-amr-08  51007   2026-10-02 06:00:58.911+00  2026-10-19 07:41:02.113+00  198     22         20
+$ ros2 run jarvis_lake jarvis-lake fleet s3://acme-robots/jarvis
+robot   events  first_event                       last_event                        faults  incidents  recoveries
+amr-07  48211   2026-10-02 06:01:13.204118+00:00  2026-10-19 07:40:51.880412+00:00  312     41         37
+amr-08  51007   2026-10-02 06:00:58.911730+00:00  2026-10-19 07:41:02.113064+00:00  198     22         20
 
-$ jarvis-lake fleet s3://acme-robots/jarvis \
+$ ros2 run jarvis_lake jarvis-lake fleet s3://acme-robots/jarvis \
     "SELECT code, count(*) AS episodes, count(DISTINCT robot) AS robots,
             median(epoch(cleared_at - confirmed_at)) AS median_s
      FROM fault_episodes WHERE confirmed_at IS NOT NULL GROUP BY code ORDER BY episodes DESC LIMIT 5"

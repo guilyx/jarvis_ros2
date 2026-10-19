@@ -168,6 +168,13 @@ ros2 launch jarvis_bringup jarvis.launch.py medkit:=true    # medkit_fault_manag
 - Clearing a medkit fault in Jarvis does not clear it in medkit, and medkit seeing it again raises it
   again: clear it in medkit (its web UI, or `/fault_manager/clear_fault`).
 - Name your rules and catalog entries after the Jarvis codes: `medkit.motor_overheat`, `medkit.*`.
+
+### Devices that don't run ROS?
+
+A BMS, a charger, a PLC gateway, a microcontroller: with `mqtt:=true`, they report faults, states
+and logs to Jarvis as small JSON messages over MQTT (`jarvis_mqtt`). Their last will tells Jarvis
+when they drop off the network, and Jarvis's open faults go back out, retained, for HMIs and PLCs.
+See [Devices that don't run ROS](mqtt.md).
 - With SROS2, the bridge runs in the `/jarvis/medkit` enclave; medkit's own nodes need their
   enclaves in your robot's policy.
 

@@ -97,3 +97,15 @@
     code_prefix: medkit           # MOTOR_OVERHEAT is reported as medkit.motor_overheat
     include_muted: false          # medkit's muted symptoms stay in medkit
     resync_period_s: 10.0         # reads list_faults this often: catches events the bridge missed
+
+/jarvis/bridges/mqtt:             # with mqtt:=true (jarvis_mqtt, docs/guides/mqtt.md)
+  ros__parameters:
+    host: localhost               # the MQTT broker
+    port: 1883
+    tls: false                    # ca_file: the broker's CA, when tls
+    username: ""                  # password_env: the variable that holds the password
+    prefix: jarvis                # <prefix>/devices/<device>/{report,status}, <prefix>/robots/<robot>/faults
+    allow: ["*"]                  # codes devices may report (globs); jarvis.* and mqtt.* never
+    # devices: [bms, charger]     # expected: offline if not online within startup_grace_s
+    startup_grace_s: 10.0
+    publish_faults: true          # Jarvis's open faults, retained, for HMIs and PLCs

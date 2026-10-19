@@ -20,6 +20,8 @@
   - /jarvis/medkit     with medkit:=true, reports the faults ros2_medkit's fault manager (/fault_manager)
                        confirms; with another medkit_fault_manager, change its two /fault_manager/ names.
                        medkit's own nodes are in the robot's policy;
+  - /jarvis/mqtt       with mqtt:=true, reports what devices send over MQTT, publishes the open faults
+                       back (MQTT itself is outside DDS: secure it with the broker's TLS and ACLs);
   - /jarvis/gateway    the live stream for the dashboard, and the operators' commands;
   - /jarvis/agent      reads through the gateway, publishes insights, may propose recoveries;
   - /jarvis/operator   people: ros2 jarvis, ros2 run jarvis_demo monitor, ros2 topic/node/service;
@@ -119,6 +121,25 @@
           </services>
           <services reply="ALLOW">
             <service>/jarvis/bridges/medkit/*</service>
+          </services>
+        </profile>
+      </profiles>
+    </enclave>
+
+    <enclave path="/jarvis/mqtt">
+      <profiles>
+        <profile ns="/jarvis/bridges" node="mqtt">
+          <topics publish="ALLOW">
+            <topic>/jarvis/ingest</topic>
+            <topic>/rosout</topic>
+            <topic>/parameter_events</topic>
+          </topics>
+          <topics subscribe="ALLOW">
+            <topic>/jarvis/faults</topic>
+            <topic>/parameter_events</topic>
+          </topics>
+          <services reply="ALLOW">
+            <service>/jarvis/bridges/mqtt/*</service>
           </services>
         </profile>
       </profiles>

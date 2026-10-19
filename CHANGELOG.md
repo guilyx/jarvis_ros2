@@ -56,6 +56,9 @@ robots, with history, a dashboard and an agent that explains what happened.
   by side, the ones that need someone first.
 - Fleet managers that speak VDA 5050 see Jarvis's faults in the robot's state: the gateway serves
   them as VDA 5050 errors, with levels and the runbook's first fix as a hint.
+- Devices that don't run ROS (a BMS, a charger, a PLC) report faults, states and logs over MQTT
+  (`mqtt:=true`, `jarvis_mqtt`); their last will raises `mqtt.device.offline`, and Jarvis's open
+  faults go back out, retained, for HMIs and PLCs.
 - A robot that runs ros2_medkit keeps it: `medkit:=true` brings the faults its fault manager
   confirms into Jarvis (`jarvis_medkit`), for Jarvis's rules, recovery and agent.
 

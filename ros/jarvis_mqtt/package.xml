@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>jarvis_mqtt</name>
+  <version>0.1.0</version>
+  <description>Devices that don't run ROS report faults, states and logs to Jarvis over MQTT; their liveness from their last will; Jarvis's open faults published back.</description>
+  <maintainer email="erwin.lejeune15@gmail.com">Erwin L.</maintainer>
+  <license>Apache-2.0</license>
+  <url type="website">https://github.com/guilyx/jarvis_ros2</url>
+  <url type="repository">https://github.com/guilyx/jarvis_ros2</url>
+  <url type="bugtracker">https://github.com/guilyx/jarvis_ros2/issues</url>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <exec_depend>jarvis_interfaces</exec_depend>
+  <exec_depend>jarvis_reporter</exec_depend>
+  <exec_depend>python3-paho-mqtt</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>mosquitto</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

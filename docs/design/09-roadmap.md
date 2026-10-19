@@ -98,15 +98,16 @@ Where it is going next (October 2026): ROS 2 Lyrical Luth, the new LTS (May 2026
 | 7.3 ✔ | VDA 5050 ([guide](../guides/vda5050.md)): Jarvis's open root causes as VDA 5050 error objects (`GET /api/v1/vda5050/errors`), for the robot's adapter to merge into its state: levels from severity and latch (3.0, or 2.x), predefined types by mapping, the runbook's first fix as the hint |
 | 7.4 ✔ | Fleet view ([guide](../guides/fleet.md)): a gateway lists other robots' gateways (`fleet` in gateway.yaml) and its dashboard shows them side by side, worst first: online, open faults by severity, the worst one, the recovery mode; a click opens the robot's own dashboard. Read-only; `GET /api/v1/fleet` |
 
-### M8 — Act on anything
-Where it goes from here (October 2026): robots run more than Nav2 (vendor drivers with their own services, Nav2's docking server, behavior trees, processes outside ROS), and every recovery a team needs shouldn't wait for someone to write an actuator in C++.
+### M8 — Act on anything, hear from anything
+Where it goes from here (October 2026): robots run more than Nav2 (vendor drivers with their own services, Nav2's docking server, behavior trees, processes outside ROS) and more than ROS (BMSs, chargers, PLCs and microcontrollers that speak MQTT). Every recovery a team needs shouldn't wait for someone to write an actuator in C++, nor every device for someone to write a ROS driver.
 
 | PR | Content |
 |----|---------|
 | 8.1 ✔ | Generic actuators: `service.call` and `action.goal` drive any service or action of a type named in the plan, with the request or goal in YAML and `expect` on the response or result; checked against the type when the plans load ([cookbook](../guides/rules-cookbook.md#14-any-service-or-action-no-actuator-to-write)). The demo's docking scenario (`docking.launch.py`) docks through Nav2's `DockRobot` and re-seeds AMCL with no actuator written |
+| 8.2 ✔ | MQTT for devices that don't run ROS ([guide](../guides/mqtt.md), `jarvis_mqtt`, `mqtt:=true`): a BMS, a charger, a PLC report faults, states and logs as JSON (`<prefix>/devices/<device>/report`), the device as the component; their last will raises `mqtt.device.offline`; Jarvis's open faults go back out retained (`<prefix>/robots/<robot>/faults`) for HMIs and PLCs; `allow` keeps devices to their codes |
 
 ### Later (v2+)
-Fleet (Parquet to object storage) · real-robot bring-up (ARM64) · visual rule editor with live backtest · `process.restart` (systemd) and BehaviorTree.CPP actuators · Foxglove panel · Zenoh/MQTT transports for non-ROS producers.
+Fleet (Parquet to object storage) · real-robot bring-up (ARM64) · visual rule editor with live backtest · `process.restart` (systemd) and BehaviorTree.CPP actuators · Foxglove panel · Zenoh for non-ROS producers.
 
 ## Demo scenarios (Nav2 simulation)
 

@@ -254,6 +254,7 @@ ros2 jarvis mode                                # the recovery mode; DISABLED --
 ros2 jarvis maintenance lidar 2h --reason "..." # keep rules and the agent off a component (--end)
 ros2 jarvis rules                               # the rules and what they did
 ros2 jarvis rules dry-run <rule-id> [--off]     # shadow mode on (or off)
+ros2 jarvis doctor                              # is Jarvis ready? each problem with its fix
 ```
 
 Acknowledging and clearing faults and closing incidents are in the dashboard and the API, not

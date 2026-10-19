@@ -16,6 +16,7 @@ VERBS = {
     "export": "ExportVerb",
     "backtest": "BacktestVerb",
     "lint": "LintVerb",
+    "doctor": "DoctorVerb",
 }
 
 setup(

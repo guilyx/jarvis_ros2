@@ -79,4 +79,7 @@ robots, with history, a dashboard and an agent that explains what happened.
 ### Production
 - Measured against the requirements: load, soak, crash and disk-pressure tests in CI.
 - An SROS2 profile with one enclave per process, tested with security enforced.
-- Guides: integration, rules cookbook, operator, security.
+- Guides: integration, rules cookbook, operator, security, and Jarvis on a real robot.
+- ARM64: built and tested in CI on a native ARM runner; the Docker images for amd64 and arm64.
+- `ros2 jarvis doctor`: is Jarvis ready on this robot? Nodes, recovery mode, plans, rules, faults,
+  disk, recordings, clock, gateway, each problem with its fix. A systemd unit to start it at boot.

@@ -3,7 +3,7 @@ project(jarvis_bringup NONE)
 
 find_package(ament_cmake REQUIRED)
 
-install(DIRECTORY config launch security DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY config launch security systemd DESTINATION share/${PROJECT_NAME})
 install(PROGRAMS scripts/jarvis_keystore DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
@@ -18,6 +18,7 @@ if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_durability test/test_durability.py TIMEOUT 420 ENV ROS_DOMAIN_ID=70)
   ament_add_pytest_test(test_security test/test_security.py TIMEOUT 300 ENV ROS_DOMAIN_ID=60)
+  ament_add_pytest_test(test_systemd test/test_systemd.py TIMEOUT 60)
 endif()
 
 ament_package()

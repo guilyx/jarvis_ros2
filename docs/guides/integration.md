@@ -326,9 +326,10 @@ The arguments people change (`ros2 launch jarvis_bringup jarvis.launch.py --show
 | `gateway_host`, `gateway_port`, `gateway_config` | `127.0.0.1`, 8080 | Where the API and the dashboard listen; tokens, webhooks |
 | `agent_config` | | The agent's model, autonomy, redaction |
 
-On a robot that runs unattended, start the launch from systemd (or your container runtime) with
-`Restart=on-failure`: Jarvis restores its open faults, incidents and pending approvals at
-startup, and recovers the recording the crash cut short.
+On a robot that runs unattended, start the launch from systemd (`jarvis_bringup` ships a unit:
+[robot guide §3](robot.md#3-start-it-at-boot-systemd)) or your container runtime, restarted on
+failure: Jarvis restores its open faults, incidents and pending approvals at startup, and
+recovers the recording the crash cut short.
 
 ## 7. Recordings and the lake
 
@@ -384,6 +385,7 @@ in `agent.yaml` (`agent_config:=`) and put the key in the environment:
 ## 9. Check that it works
 
 ```bash
+ros2 jarvis doctor                              # every check, each problem with its fix (robot guide §8)
 ros2 jarvis faults                              # open faults (empty on a healthy robot)
 ros2 topic echo /jarvis/events --once           # the stream flows (one message per event)
 ros2 jarvis rules && ros2 jarvis plans          # what is loaded, and the recovery mode

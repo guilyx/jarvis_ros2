@@ -35,8 +35,9 @@ The [release workflow](.github/workflows/release.yml) then:
    - `ghcr.io/<owner>/jarvis-demo:X.Y.Z` and `:X.Y`: with the demo robot (target `demo`);
 3. creates the GitHub release, its notes taken from CHANGELOG.md.
 
-The images are amd64 only for now (arm64: QUALITY_DECLARATION.md, "Platform support"). The first
-time, make the packages public on GitHub (Packages → package settings → visibility).
+Each image is built for amd64 and arm64, each on a runner of that architecture, and tagged as one
+image: `docker pull` takes the robot's. The first time, make the packages public on GitHub
+(Packages → package settings → visibility).
 
 ## 3. ROS packages (bloom)
 
@@ -58,4 +59,5 @@ use the Docker image. QUALITY_DECLARATION.md tracks it.
 
 - Add a `Forthcoming` section back at the top of CHANGELOG.md (`## Forthcoming`) and of each
   `CHANGELOG.rst` (`Forthcoming` underlined with `-----------`).
-- Check the images run: `docker run --rm ghcr.io/<owner>/jarvis:X.Y.Z ros2 pkg list | grep jarvis`.
+- Check the images run: `docker run --rm ghcr.io/<owner>/jarvis:X.Y.Z ros2 pkg list | grep jarvis`,
+  and that both architectures are there: `docker buildx imagetools inspect ghcr.io/<owner>/jarvis:X.Y.Z`.

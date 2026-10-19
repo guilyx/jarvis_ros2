@@ -177,9 +177,10 @@ jobs:
           path: dashboard/playwright-report
 
   ros:
-    # Jazzy (Ubuntu 24.04) and Lyrical Luth (Ubuntu 26.04), the two LTS releases.
+    # Jazzy (Ubuntu 24.04) and Lyrical Luth (Ubuntu 26.04), the two LTS releases; and Jazzy on ARM64,
+    # what most robot computers are (Jetson, Raspberry Pi, RK3588), natively on an ARM runner.
     name: ROS 2 ${{ matrix.name }} (build + test)
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner || 'ubuntu-24.04' }}
     container: ros:${{ matrix.distro }}-ros-base
     strategy:
       fail-fast: false
@@ -187,6 +188,7 @@ jobs:
         include:
           - { distro: jazzy, name: Jazzy }
           - { distro: lyrical, name: Lyrical }
+          - { distro: jazzy, name: Jazzy arm64, runner: ubuntu-24.04-arm }
     defaults:
       run:
         shell: bash
@@ -218,8 +220,16 @@ jobs:
           colcon test-result --verbose
 
   demo:
-    name: Docker demo (build + smoke test)
-    runs-on: ubuntu-24.04
+    # The image the release publishes, on both architectures (ARM64 natively); the dashboard's e2e
+    # suite once, on amd64.
+    name: Docker demo${{ matrix.arch == 'arm64' && ' arm64' || '' }} (build + smoke test)
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -231,16 +241,22 @@ jobs:
           target: demo
           tags: jarvis_ros2:demo
           load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=demo-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=demo-${{ matrix.arch }}
       - name: Smoke test (the commands from the README)
         run: docker/demo/smoke_test.sh
+      - name: The image is for this machine
+        run: |
+          arch="$(docker image inspect jarvis_ros2:demo --format '{{.Architecture}}')"
+          [ "${arch}" = "${{ matrix.arch }}" ] || { echo "::error::built for ${arch}"; exit 1; }
       - uses: actions/setup-node@v4
+        if: matrix.arch == 'amd64'
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: dashboard/package-lock.json
       - name: Dashboard e2e against a fresh demo (e-stop latched)
+        if: matrix.arch == 'amd64'
         run: |
           docker compose down && sudo rm -rf demo-data
           docker compose up -d --no-build && ./demo wait
@@ -250,7 +266,7 @@ jobs:
         env:
           CI: "1"
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && matrix.arch == 'amd64'
         with:
           name: dashboard-e2e-demo
           path: |

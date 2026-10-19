@@ -72,7 +72,7 @@ class TestBringup(unittest.TestCase):
         # the rosout bridge) and give the black box a moment to take its batch.
         deadline = time.time() + 60.0
         while time.time() < deadline and not any(e.message == "black box warm-up" for e in cls.events):
-            cls.node.get_logger().warn("black box warm-up")
+            cls.node.get_logger().warning("black box warm-up")
             until = time.time() + 1.0
             while time.time() < until:
                 rclpy.spin_once(cls.node, timeout_sec=0.1)

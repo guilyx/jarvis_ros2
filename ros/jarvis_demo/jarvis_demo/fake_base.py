@@ -73,7 +73,7 @@ class FakeBase(Node):
                 return SetParametersResult(successful=False, reason=f"inject: one of {', '.join(INJECTIONS)}")
             if p.name == "inject" and p.value == "drain":
                 self._pct, self._docked = 12.0, ""
-                self.get_logger().warn("injected: the battery drops to 12 %, off the dock")
+                self.get_logger().warning("injected: the battery drops to 12 %, off the dock")
         return SetParametersResult(successful=True)
 
     def _tick(self):
@@ -129,7 +129,7 @@ class FakeBase(Node):
             deadline = time.monotonic() + seconds
             while time.monotonic() < deadline:
                 if goal_handle.is_cancel_requested:
-                    log.warn("DockRobot: canceled")
+                    log.warning("DockRobot: canceled")
                     goal_handle.canceled()
                     return R(success=False, error_code=R.UNKNOWN, error_msg="canceled")
                 time.sleep(0.05)

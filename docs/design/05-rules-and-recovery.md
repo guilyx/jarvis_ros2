@@ -278,7 +278,7 @@ Plan fields: `params` (`type: string | int | number | bool`, `required`, `defaul
   - outcome: `SUCCEEDED`, `FAILED`, `ABORTED`, `REJECTED`, `EXPIRED`;
   - escalation: `ESCALATED`, `LADDER_DONE`.
 
-  The event also carries `attrs.plan`, `attrs.execution_id`, `attrs.requester`, `attrs.dry_run` and, for sub-plans, `attrs.parent_id`. Only top-level, non-dry-run executions move incident states. Each event's `causation_id` is the previous event of the same execution, and the first one points at the request's cause (e.g. the `RULE_MATCH`).
+  The event also carries `attrs.plan`, `attrs.execution_id`, `attrs.requester`, `attrs.dry_run` and, for sub-plans, `attrs.parent_id`. An execution's first event also carries its arguments, `attrs.arg.<name>` (at most 16, 256 bytes each), so history tells two runs of a plan apart. Only top-level, non-dry-run executions move incident states. Each event's `causation_id` is the previous event of the same execution, and the first one points at the request's cause (e.g. the `RULE_MATCH`).
 
 ### Action catalog (v1)
 

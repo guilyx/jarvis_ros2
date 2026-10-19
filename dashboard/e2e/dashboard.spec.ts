@@ -117,6 +117,49 @@ test("a rule's changes are backtested over the robot's history", async ({ page }
   await expect(page.getByTestId("lab-same")).toBeVisible();
 });
 
+test("a rule operators keep doing by hand is drafted in the rule lab", async ({ page }) => {
+  // The suggestion itself is the gateway's (test_suggest.py): here, what the dashboard makes of one.
+  const yaml =
+    "schema: jarvis.rules/v1\nrules:\n- id: sensor-scan-stale-restart-lifecycle-node\n" +
+    "  when:\n    event: { kind: FAULT_STATE, code: sensor.scan.stale, attrs.state: ACTIVE }\n" +
+    "  then:\n  - recover: { plan: restart-lifecycle-node }\n";
+  const at = new Date(Date.now() - 30 * 60_000).toISOString();
+  await page.route("**/api/v1/rules:suggest*", (route) =>
+    route.fulfill({
+      json: {
+        hours: 168,
+        events: 40,
+        suggestions: [
+          {
+            id: "sensor-scan-stale-restart-lifecycle-node",
+            code: "sensor.scan.stale",
+            plan: "restart-lifecycle-node",
+            args: {},
+            runs: 3,
+            succeeded: 3,
+            operators: ["alice", "bob"],
+            components: ["lidar"],
+            first: at,
+            last: at,
+            median_after_s: 75,
+            evidence: [],
+            yaml,
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto("/rules");
+  await expect(page.getByTestId("suggested-count")).toHaveText("1 suggested");
+  await page.getByRole("link", { name: /Rule lab/ }).click();
+  const suggestion = page.getByTestId("lab-suggestion");
+  await expect(suggestion).toContainText("restart-lifecycle-node after sensor.scan.stale");
+  await expect(suggestion).toContainText("Run by hand 3 times by alice, bob on lidar");
+  await suggestion.getByRole("button", { name: "Draft the rule" }).click();
+  await expect(page.getByRole("textbox", { name: "Draft rules YAML" })).toHaveValue(yaml);
+  await expect(page.getByRole("combobox", { name: "Window" })).toHaveValue("1");
+});
+
 test("events open in a drawer with their causal chain", async ({ page }) => {
   await page.goto("/events");
   await expect(page.getByTestId("event-row").first()).toBeVisible();

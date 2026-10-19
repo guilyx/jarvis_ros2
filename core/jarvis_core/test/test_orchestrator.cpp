@@ -203,6 +203,14 @@ TEST_F(OrchestratorTest, RunsStepsAndVerifiesTheFaultClears)
   EXPECT_EQ(x.locks, V{"node:/relay"});
   EXPECT_EQ(
     phases(s.execution_id), (V{"STARTED", "STEP_SUCCEEDED", "STEP_SUCCEEDED", "SUCCEEDED"}));
+  // The first event says what it was asked with; the others don't repeat it.
+  const auto started = with_phase("STARTED");
+  ASSERT_EQ(started.size(), 1u);
+  EXPECT_EQ(attr(*started[0], "arg.node"), "/relay");
+  EXPECT_EQ(attr(*started[0], "arg.component"), "relay");
+  for (const auto * e : with_phase("SUCCEEDED")) {
+    EXPECT_EQ(e->attrs.count("arg.node"), 0u);
+  }
   V gates;
   for (const auto & g : x.gates) {
     EXPECT_TRUE(g.passed) << g.gate << ": " << g.detail;

@@ -242,6 +242,42 @@ class Validate(BaseModel):
     yaml: str
 
 
+class SuggestionRun(Open):
+    """One recovery an operator ran, and the fault it answered."""
+
+    at: str
+    execution_id: str
+    operator: str = ""
+    component: str = ""
+    fault_event_id: str = ""
+    after_s: float = Field(0, description="seconds from the fault going active to the operator's run")
+    outcome: str = ""
+
+
+class Suggestion(Open):
+    """A rule operators keep doing by hand: a plan, after a fault, again and again."""
+
+    id: str
+    code: str
+    plan: str
+    args: dict[str, str] = Field(default_factory=dict)
+    runs: int
+    succeeded: int = 0
+    operators: list[str] = Field(default_factory=list)
+    components: list[str] = Field(default_factory=list)
+    first: str
+    last: str
+    median_after_s: float = 0
+    evidence: list[SuggestionRun] = Field(default_factory=list)
+    yaml: str = Field(description="the draft rule, for the rule lab")
+
+
+class Suggestions(Open):
+    hours: float
+    events: int
+    suggestions: list[Suggestion] = Field(default_factory=list)
+
+
 class BacktestRequest(BaseModel):
     yaml: str
     hours: float = Field(24.0, gt=0, le=168, description="how far back to replay (at most a week)")

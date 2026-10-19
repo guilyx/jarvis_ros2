@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Backtest } from "@/api/types";
-import { asDocument, timelineOption } from "./RuleLab";
+import { asDocument, timelineOption, windowFor } from "./RuleLab";
 
 type Points = { data: { value: number[]; tip: string }[] };
 
@@ -60,5 +60,13 @@ describe("rule lab", () => {
     // Just below its rule's fire, at the same instant.
     expect(recoveries.data[0]).toMatchObject({ value: [Date.parse("2026-10-19T01:20:00Z"), 0.32] });
     expect(recoveries.data[0]!.tip).toContain("REJECTED");
+  });
+
+  it("replays a suggestion over the shortest window that holds its runs", () => {
+    const now = Date.parse("2026-10-19T12:00:00Z");
+    expect(windowFor("2026-10-19T11:30:00Z", now)).toBe(1);
+    expect(windowFor("2026-10-19T09:00:00Z", now)).toBe(6);
+    expect(windowFor("2026-10-17T12:00:00Z", now)).toBe(72);
+    expect(windowFor("2026-09-01T00:00:00Z", now)).toBe(168);
   });
 });

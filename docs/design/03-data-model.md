@@ -61,7 +61,7 @@
 | `FAULT_CLEAR` | producers, bridges | The condition is gone (the PASSED report). |
 | `FAULT_STATE` | fault manager | Episode transition (`attrs.state`, `attrs.prev_state`, `attrs.fault_id`). |
 | `RULE_MATCH` | rule engine | A rule fired. `payload` holds matched event ids and bindings. |
-| `RECOVERY` | orchestrator | Execution lifecycle (`attrs.phase`, `attrs.plan`, `attrs.execution_id`, `attrs.step`). |
+| `RECOVERY` | orchestrator | Execution lifecycle (`attrs.phase`, `attrs.plan`, `attrs.execution_id`, `attrs.step`; the first event of an execution, its args as `attrs.arg.<name>`). |
 | `INSIGHT` | agent | Analysis result (`payload` = Insight). |
 | `OPERATOR` | gateway / CLI | Human action (ack, clear, approve, trigger, mode change). `attrs.user`. |
 | `SYSTEM` | Jarvis internals | Startup, reload, suppression, loop detection, notifications (`jarvis.notify`), agent requests (`jarvis.agent.request`). |

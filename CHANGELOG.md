@@ -35,6 +35,8 @@ robots, with history, a dashboard and an agent that explains what happened.
 - The rule lab, in the dashboard: write or change a rule and see what it would have done over
   the robot's recorded history (when it fires, on which event, the recoveries it would ask for,
   what differs from the live rule) before it goes live.
+- Rule suggestions: when operators keep running the same plan by hand after the same fault, the
+  rule lab drafts the rule that would do it, and backtests it over their runs.
 
 ### History, dashboard and API
 - The lake: recordings as Parquet, queried with DuckDB; KPIs, analytics, retention with a

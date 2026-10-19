@@ -496,6 +496,31 @@ export interface BacktestRule {
   guard_blocked: number;
 }
 
+/** A rule operators keep doing by hand (GET /rules:suggest). */
+export interface Suggestion {
+  id: string;
+  code: string;
+  plan: string;
+  args: Record<string, string>;
+  runs: number;
+  succeeded: number;
+  operators: string[];
+  components: string[];
+  first: string;
+  last: string;
+  median_after_s: number; // from the fault to the operator's run
+  evidence: {
+    at: string;
+    execution_id: string;
+    operator: string;
+    component: string;
+    fault_event_id: string;
+    after_s: number;
+    outcome: string;
+  }[];
+  yaml: string; // the draft rule
+}
+
 export interface Backtest {
   success: boolean;
   message: string;

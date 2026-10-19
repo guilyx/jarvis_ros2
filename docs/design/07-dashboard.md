@@ -43,6 +43,7 @@ decimal string everywhere: a uint64 does not fit a JavaScript number. Tokens go 
 | `GET /rules` · `GET /rules/{id}` | viewer | Status and counters, fires in the window; detail adds the rule's YAML and recent matches |
 | `PATCH /rules/{id}` | admin | `enabled`, `dry_run`, `reason` |
 | `POST /rules:validate` | admin | `jarvis lint` on YAML against the loaded plans and catalog; changes nothing |
+| `GET /rules:suggest` | viewer | What operators keep doing by hand: a plan run after the same fault at least `min_runs` (2) times in the last `hours` (168), that no rule already does; with the runs behind it and a draft rule |
 | `POST /rules:backtest` | admin | Rule lab: lints a draft, then replays the last `hours` (≤ 168) of history through `jarvis backtest` with the robot's other rules and its plans in dry run; returns the draft's fires (with their cause events), per-rule counters, recoveries, and the decisions that differ from the live rule of the same id. Changes nothing |
 | `POST /rules:reload` · `POST /plans:reload` | admin | Hot reload (`validate_only`) |
 | `GET /plans` · `GET /plans/{id}` | viewer | Catalog with parameters + effectiveness in the window; detail adds latest executions |
@@ -225,7 +226,8 @@ Running
 Detail: YAML (read-only) · match history · "Try changes in the rule lab"
 Rule lab (/rules/lab): YAML draft · window (1 h – 7 d) · Backtest → fires per rule (suppressed,
 cooled down, guard blocked) · timeline · fires with their cause events · recoveries (dry run) ·
-for a rule the robot runs, the decisions that differ from live
+for a rule the robot runs, the decisions that differ from live · suggestions: what operators keep
+doing by hand, "Draft the rule"
 ```
 
 ### Analytics (medkit-style health)

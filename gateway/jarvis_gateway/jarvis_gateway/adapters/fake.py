@@ -85,6 +85,7 @@ class FakeJarvis(JarvisPort):
         self.incidents = {}  # incident_id -> {"state", "component", "title"}
         self.executions = {}  # execution_id -> execution
         self.recent = []
+        self._announced = set()  # executions whose first event (with their args) went out
         self.mode = "ENABLED"
         self.plans = [dict(p) for p in DEFAULT_PLANS]
         self.rules = [dict(r) for r in DEFAULT_RULES]
@@ -590,6 +591,10 @@ class FakeJarvis(JarvisPort):
         self._publish_executions()
 
     def _recovery(self, x, phase, severity, message, **attrs):
+        # An execution's first event says what it was asked with, as the orchestrator's does.
+        if x["execution_id"] not in self._announced:
+            self._announced.add(x["execution_id"])
+            attrs.update({f"arg.{k}": v for k, v in x["args"].items()})
         self.emit(
             "RECOVERY",
             f"jarvis.recovery.{phase.lower()}",

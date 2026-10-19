@@ -1,7 +1,14 @@
 import { Link, useParams } from "@tanstack/react-router";
 import { FileCheck2, FlaskConical, RefreshCw } from "lucide-react";
 import { useState } from "react";
-import { useReload, useRule, useRules, useSetRuleState, useValidateRules } from "@/api/queries";
+import {
+  useReload,
+  useRule,
+  useRuleSuggestions,
+  useRules,
+  useSetRuleState,
+  useValidateRules,
+} from "@/api/queries";
 import type { LintFinding, Rule } from "@/api/types";
 import {
   Empty,
@@ -99,6 +106,7 @@ function ValidateDialog() {
 
 export function Rules() {
   const rules = useRules();
+  const suggested = useRuleSuggestions().data?.suggestions.length ?? 0;
   const reload = useReload();
   const can = useCan();
   return (
@@ -108,6 +116,14 @@ export function Rules() {
           <>
             <Link to="/rules/lab" search={{}} className={buttonStyle()}>
               <FlaskConical size={14} /> Rule lab
+              {suggested ? (
+                <span
+                  className="rounded bg-sky-500/15 px-1.5 text-[11px] font-semibold text-sky-400"
+                  data-testid="suggested-count"
+                >
+                  {suggested} suggested
+                </span>
+              ) : null}
             </Link>
             <ValidateDialog />
             <Button

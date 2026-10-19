@@ -1,15 +1,24 @@
 # Copyright 2026 Erwin L.
 # SPDX-License-Identifier: Apache-2.0
-"""Stands in for the simulator's lidar when the demo runs without Gazebo: /scan_raw at 10 Hz."""
+"""Stands in for the simulator's lidar when the demo runs without Gazebo: /scan_raw at 10 Hz.
+
+A driver can hang, and only a restart of its process brings it back (the container demo,
+docs/guides/containers.md):
+
+    ros2 param set /fake_lidar inject hang    # publishes nothing until the process restarts
+"""
 
 import math
 import random
 
 import rclpy
+from rcl_interfaces.msg import ParameterDescriptor, SetParametersResult
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
+
+INJECTIONS = ("none", "hang")
 
 
 class FakeLidar(Node):
@@ -18,11 +27,25 @@ class FakeLidar(Node):
         self.declare_parameter("topic", "/scan_raw")
         self.declare_parameter("rate_hz", 10.0)
         self.declare_parameter("frame_id", "base_scan")
+        self.declare_parameter("inject", "none", ParameterDescriptor(description=" | ".join(INJECTIONS)))
+        self.add_on_set_parameters_callback(self._validate)
+        self._hung = False
         topic = self.get_parameter("topic").value
         self._pub = self.create_publisher(LaserScan, topic, qos_profile_sensor_data)
         self.create_timer(1.0 / self.get_parameter("rate_hz").value, self._publish)
 
+    def _validate(self, params):
+        for p in params:
+            if p.name == "inject" and p.value not in INJECTIONS:
+                return SetParametersResult(successful=False, reason=f"inject: one of {', '.join(INJECTIONS)}")
+            if p.name == "inject" and p.value == "hang" and not self._hung:
+                self._hung = True  # for good: only a new process publishes again
+                self.get_logger().warning("injected: the driver hangs, publishing nothing until it restarts")
+        return SetParametersResult(successful=True)
+
     def _publish(self):
+        if self._hung:
+            return
         beams = 360
         msg = LaserScan()
         msg.header.stamp = self.get_clock().now().to_msg()

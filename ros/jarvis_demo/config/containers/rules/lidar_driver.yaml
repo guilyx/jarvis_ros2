@@ -1,0 +1,25 @@
+# The container demo (containers.launch.py): the lidar driver runs in a container, not as a
+# lifecycle node. When its scans stop, the relay reports sensor.scan.stale; Jarvis restarts the
+# driver's container and checks that scans flow again. Spec: docs/guides/containers.md.
+schema: jarvis.rules/v1
+rules:
+  - id: lidar-driver-restart
+    description: The lidar went quiet. Restart the driver's container and check that scans flow again.
+    when:
+      event: { kind: FAULT_STATE, code: sensor.scan.stale, attrs.state: ACTIVE }
+    guard: { faults_inactive: [safety.estop.engaged] }
+    then:
+      - recover:
+          plan: restart-container
+          args:
+            container: lidar-driver
+            component: "{{ event.source.component }}"
+            fault: sensor.scan.stale
+    policy: { cooldown: 30s, max_fires: { count: 3, per: 10m } }
+
+  - id: escalation-notify
+    description: Tell the operators when recovery gives up on an incident.
+    when:
+      event: { kind: RECOVERY, attrs.phase: ESCALATED, attrs.dry_run: false }
+    then:
+      - notify: { channel: operators, message: "{{ event.message }}" }

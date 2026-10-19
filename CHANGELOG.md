@@ -31,6 +31,8 @@ robots, with history, a dashboard and an agent that explains what happened.
 - Actuators for lifecycle nodes, services, parameters, black-box snapshots and Nav2; and for any
   service or action, of a type named in the plan (`service.call`, `action.goal`), checked against
   the type when the plans load.
+- Drivers that aren't lifecycle nodes: Jarvis restarts their container (Docker, Podman) or systemd
+  unit, only those the recovery node allows.
 - `ros2 jarvis lint` and `backtest`: check rules before they ship, replay recordings through them.
 - The rule lab, in the dashboard: write or change a rule and see what it would have done over
   the robot's recorded history (when it fires, on which event, the recoveries it would ask for,

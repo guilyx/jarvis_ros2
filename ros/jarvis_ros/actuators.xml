@@ -14,4 +14,7 @@
   <class type="jarvis_ros::BagActuator" base_class_type="jarvis_ros::Actuator">
     <description>bag.snapshot (rosbag2 snapshot service)</description>
   </class>
+  <class type="jarvis_ros::ProcessActuator" base_class_type="jarvis_ros::Actuator">
+    <description>container.restart (Docker Engine API) and systemd.restart: what is not a lifecycle node</description>
+  </class>
 </library>

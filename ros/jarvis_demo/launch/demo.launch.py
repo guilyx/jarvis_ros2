@@ -44,6 +44,7 @@ def generate_launch_description():
             "rules": arg("rules"),
             "plans": arg("plans"),
             "recovery_mode": arg("recovery_mode"),
+            "params_overlay": arg("params_overlay"),
             "blackbox_topics": "/scan /jarvis/event_batches",
             "split_duration_s": "60",  # history (jarvis_lake) shows up within a minute
             "gateway": arg("gateway"),
@@ -77,6 +78,9 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "recovery_mode", default_value="ENABLED", description="ENABLED, DRY_RUN or DISABLED"
+            ),
+            DeclareLaunchArgument(
+                "params_overlay", default_value="", description="Parameters layered over jarvis.yaml"
             ),
             DeclareLaunchArgument(
                 "foxglove", default_value="false", description="Serve the graph to Foxglove on port 8765"

@@ -1,0 +1,5 @@
+# Layered over jarvis_bringup's jarvis.yaml (params_overlay): the one container Jarvis may restart.
+/jarvis/recovery:
+  ros__parameters:
+    containers:
+      allowed: [lidar-driver]

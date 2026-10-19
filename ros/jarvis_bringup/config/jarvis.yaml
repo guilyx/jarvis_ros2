@@ -44,6 +44,13 @@
       - jarvis_ros::GenericActuator     # service.call, action.goal: any type
       - jarvis_ros::ParamActuator
       - jarvis_ros::BagActuator
+      - jarvis_ros::ProcessActuator     # container.restart, systemd.restart: allowed ones only
+    # Nothing is restartable until listed here (globs):
+    # containers:
+    #   allowed: ["lidar-driver", "camera-*"]
+    #   socket: /var/run/docker.sock      # the Docker Engine API; Podman: /run/podman/podman.sock
+    # systemd:
+    #   allowed_units: ["lidar-driver.service"]
 
 /jarvis/bridges/diagnostics:
   ros__parameters:

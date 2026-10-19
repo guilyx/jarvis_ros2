@@ -36,6 +36,7 @@ The language in full is [05 · Rules and recovery](../design/05-rules-and-recove
   12. [One at a time: locks and queues](#12-one-at-a-time-locks-and-queues)
   13. [What the agent may do](#13-what-the-agent-may-do)
   14. [Any service or action, no actuator to write](#14-any-service-or-action-no-actuator-to-write)
+  15. [Restart a driver in a container or a systemd unit](#15-restart-a-driver-in-a-container-or-a-systemd-unit)
 - [Gotchas](#gotchas)
 
 ## Rules
@@ -546,6 +547,28 @@ plans:
 - **The type's package must be installed** where Jarvis runs (`nav2_msgs` here). The demo runs
   this plan: `ros2 launch jarvis_demo docking.launch.py`, then
   `ros2 param set /demo/base inject drain`.
+
+### 15. Restart a driver in a container or a systemd unit
+
+A driver that isn't a lifecycle node comes back by restarting its process: its container
+(`container.restart`, through the Docker Engine API) or its unit (`systemd.restart`). The shipped
+`restart-container` and `restart-systemd-unit` plans restart it and verify that the fault clears.
+Only what the recovery node allows can be restarted (`containers.allowed`,
+`systemd.allowed_units`): the [containers guide](containers.md) sets that up.
+
+```yaml
+schema: jarvis.rules/v1
+rules:
+  - id: lidar-driver-restart
+    description: The lidar went quiet. Restart the driver's container.
+    when:
+      event: { kind: FAULT_STATE, code: sensor.scan.stale, attrs.state: ACTIVE }
+    then:
+      - recover:
+          plan: restart-container
+          args: { container: lidar-driver, component: "{{ event.source.component }}", fault: sensor.scan.stale }
+    policy: { cooldown: 30s, max_fires: { count: 3, per: 10m } }
+```
 
 ## Gotchas
 

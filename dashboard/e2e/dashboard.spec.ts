@@ -98,6 +98,25 @@ test("a rule goes into dry run and back", async ({ page }) => {
   await expect(toggle).toHaveAttribute("aria-checked", before!);
 });
 
+test("a rule's changes are backtested over the robot's history", async ({ page }) => {
+  test.skip(!process.env.E2E_BASE_URL, "the fake has no jarvis tool to replay with: the demo does");
+  await page.goto("/rules");
+  const first = page.getByTestId("rule-row").first().getByRole("link");
+  const id = (await first.textContent())!.trim();
+  await first.click();
+  await page.getByRole("link", { name: "Try changes in the rule lab" }).click();
+  await expect(page.getByRole("textbox", { name: "Draft rules YAML" })).toHaveValue(
+    new RegExp(`- id: ${id}\n`),
+  );
+  await page.getByRole("button", { name: "Backtest" }).click();
+  await expect(page.getByTestId("lab-summary")).toContainText("Replayed", { timeout: 30_000 });
+  const row = page.getByTestId("lab-rule");
+  await expect(row).toContainText(id);
+  await expect(row).toContainText("replaces the live rule");
+  // Unchanged, it decides what the robot's rule decided.
+  await expect(page.getByTestId("lab-same")).toBeVisible();
+});
+
 test("events open in a drawer with their causal chain", async ({ page }) => {
   await page.goto("/events");
   await expect(page.getByTestId("event-row").first()).toBeVisible();

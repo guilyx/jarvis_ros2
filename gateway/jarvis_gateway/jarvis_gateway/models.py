@@ -242,5 +242,76 @@ class Validate(BaseModel):
     yaml: str
 
 
+class BacktestRequest(BaseModel):
+    yaml: str
+    hours: float = Field(24.0, gt=0, le=168, description="how far back to replay (at most a week)")
+
+
+class BacktestCause(Open):
+    id: str
+    kind: str
+    code: str
+    component: str = ""
+    severity: str = ""
+    message: str = ""
+    at: str = ""
+
+
+class BacktestMatch(Open):
+    at: str
+    rule: str
+    match_id: str = ""
+    cause_id: str = ""
+    cause: BacktestCause | None = None
+
+
+class BacktestDecision(Open):
+    """A decision one side made and the other didn't: the rule, on which event (none: another rule's)."""
+
+    rule: str
+    cause_id: str = ""
+    cause: BacktestCause | None = None
+
+
+class BacktestRecovery(Open):
+    at: str
+    rule: str
+    plan: str
+    args: dict[str, str] = Field(default_factory=dict)
+    state: str
+    reason: str = ""
+
+
+class BacktestRule(Open):
+    rule: str
+    fires: int = 0
+    dry_fires: int = 0
+    suppressed: int = 0
+    cooled_down: int = 0
+    guard_blocked: int = 0
+
+
+class Backtest(Open):
+    """What a draft would have done over the robot's history (POST /rules:backtest)."""
+
+    success: bool
+    message: str = ""
+    findings: list[dict[str, str]] = Field(default_factory=list)
+    events: int = 0
+    from_: str | None = Field(None, alias="from")
+    to: str | None = None
+    hours: float = 0
+    truncated: bool = False
+    replaces: list[str] = Field(default_factory=list, description="the draft's rules the robot already has")
+    rules: list[BacktestRule] = Field(default_factory=list)
+    matches: list[BacktestMatch] = Field(default_factory=list)
+    match_count: int = 0
+    recoveries: list[BacktestRecovery] = Field(default_factory=list)
+    missing: list[BacktestDecision] = Field(
+        default_factory=list, description="decided live, not by the draft"
+    )
+    extra: list[BacktestDecision] = Field(default_factory=list, description="decided by the draft, not live")
+
+
 class Reload(BaseModel):
     validate_only: bool = False

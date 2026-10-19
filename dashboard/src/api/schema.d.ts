@@ -560,6 +560,28 @@ export interface paths {
     patch: operations["set_rule_api_v1_rules__rule_id__patch"];
     trace?: never;
   };
+  "/api/v1/rules:backtest": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Backtest Rules
+     * @description Lints a draft, then replays the last `hours` of history through it, with the robot's other
+     *     rules and its plans in dry run: when the draft's rules would have fired, on what, and which
+     *     recoveries they would have asked for. Changes nothing.
+     */
+    post: operations["backtest_rules_api_v1_rules_backtest_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/rules:reload": {
     parameters: {
       query?: never;
@@ -694,6 +716,202 @@ export interface components {
        * @default
        */
       question: string;
+    };
+    /**
+     * Backtest
+     * @description What a draft would have done over the robot's history (POST /rules:backtest).
+     */
+    Backtest: {
+      /**
+       * Events
+       * @default 0
+       */
+      events: number;
+      /**
+       * Extra
+       * @description decided by the draft, not live
+       */
+      extra?: components["schemas"]["BacktestDecision"][];
+      /** Findings */
+      findings?: {
+        [key: string]: string;
+      }[];
+      /** From */
+      from?: string | null;
+      /**
+       * Hours
+       * @default 0
+       */
+      hours: number;
+      /**
+       * Match Count
+       * @default 0
+       */
+      match_count: number;
+      /** Matches */
+      matches?: components["schemas"]["BacktestMatch"][];
+      /**
+       * Message
+       * @default
+       */
+      message: string;
+      /**
+       * Missing
+       * @description decided live, not by the draft
+       */
+      missing?: components["schemas"]["BacktestDecision"][];
+      /** Recoveries */
+      recoveries?: components["schemas"]["BacktestRecovery"][];
+      /**
+       * Replaces
+       * @description the draft's rules the robot already has
+       */
+      replaces?: string[];
+      /** Rules */
+      rules?: components["schemas"]["BacktestRule"][];
+      /** Success */
+      success: boolean;
+      /** To */
+      to?: string | null;
+      /**
+       * Truncated
+       * @default false
+       */
+      truncated: boolean;
+    } & {
+      [key: string]: unknown;
+    };
+    /** BacktestCause */
+    BacktestCause: {
+      /**
+       * At
+       * @default
+       */
+      at: string;
+      /** Code */
+      code: string;
+      /**
+       * Component
+       * @default
+       */
+      component: string;
+      /** Id */
+      id: string;
+      /** Kind */
+      kind: string;
+      /**
+       * Message
+       * @default
+       */
+      message: string;
+      /**
+       * Severity
+       * @default
+       */
+      severity: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /**
+     * BacktestDecision
+     * @description A decision one side made and the other didn't: the rule, on which event (none: another rule's).
+     */
+    BacktestDecision: {
+      cause?: components["schemas"]["BacktestCause"] | null;
+      /**
+       * Cause Id
+       * @default
+       */
+      cause_id: string;
+      /** Rule */
+      rule: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /** BacktestMatch */
+    BacktestMatch: {
+      /** At */
+      at: string;
+      cause?: components["schemas"]["BacktestCause"] | null;
+      /**
+       * Cause Id
+       * @default
+       */
+      cause_id: string;
+      /**
+       * Match Id
+       * @default
+       */
+      match_id: string;
+      /** Rule */
+      rule: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /** BacktestRecovery */
+    BacktestRecovery: {
+      /** Args */
+      args?: {
+        [key: string]: string;
+      };
+      /** At */
+      at: string;
+      /** Plan */
+      plan: string;
+      /**
+       * Reason
+       * @default
+       */
+      reason: string;
+      /** Rule */
+      rule: string;
+      /** State */
+      state: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /** BacktestRequest */
+    BacktestRequest: {
+      /**
+       * Hours
+       * @description how far back to replay (at most a week)
+       * @default 24
+       */
+      hours: number;
+      /** Yaml */
+      yaml: string;
+    };
+    /** BacktestRule */
+    BacktestRule: {
+      /**
+       * Cooled Down
+       * @default 0
+       */
+      cooled_down: number;
+      /**
+       * Dry Fires
+       * @default 0
+       */
+      dry_fires: number;
+      /**
+       * Fires
+       * @default 0
+       */
+      fires: number;
+      /**
+       * Guard Blocked
+       * @default 0
+       */
+      guard_blocked: number;
+      /** Rule */
+      rule: string;
+      /**
+       * Suppressed
+       * @default 0
+       */
+      suppressed: number;
+    } & {
+      [key: string]: unknown;
     };
     /** Cancel */
     Cancel: {
@@ -2445,6 +2663,43 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Outcome"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  backtest_rules_api_v1_rules_backtest_post: {
+    parameters: {
+      query?: {
+        token?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BacktestRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Backtest"];
         };
       };
       /** @description Validation Error */

@@ -19,6 +19,9 @@ const button = cva(
   },
 );
 
+/** A button's look, for a link that acts as one. */
+export const buttonStyle = button;
+
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<typeof button>;
 
 export function Button({ className, variant, size, type = "button", ...props }: ButtonProps) {

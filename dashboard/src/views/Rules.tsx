@@ -1,5 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router";
-import { FileCheck2, RefreshCw } from "lucide-react";
+import { FileCheck2, FlaskConical, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { useReload, useRule, useRules, useSetRuleState, useValidateRules } from "@/api/queries";
 import type { LintFinding, Rule } from "@/api/types";
@@ -15,7 +15,7 @@ import {
   Td,
   Th,
 } from "@/components/domain";
-import { Button } from "@/components/ui/button";
+import { Button, buttonStyle } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/input";
@@ -106,6 +106,9 @@ export function Rules() {
       <PageHeader title="Rules">
         {can("admin") ? (
           <>
+            <Link to="/rules/lab" search={{}} className={buttonStyle()}>
+              <FlaskConical size={14} /> Rule lab
+            </Link>
             <ValidateDialog />
             <Button
               onClick={() => reload.mutate({ target: "rules", validate_only: false })}
@@ -181,7 +184,13 @@ export function RuleDetail() {
   const r = rule.data!;
   return (
     <div className="space-y-4">
-      <PageHeader title={<span className="font-mono">{r.id}</span>} />
+      <PageHeader title={<span className="font-mono">{r.id}</span>}>
+        {r.yaml ? (
+          <Link to="/rules/lab" search={{ rule: r.id }} className={buttonStyle()}>
+            <FlaskConical size={14} /> Try changes in the rule lab
+          </Link>
+        ) : null}
+      </PageHeader>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Rule" />

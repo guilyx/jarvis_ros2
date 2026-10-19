@@ -28,10 +28,26 @@ place with the lake's views, for the dashboard's Fleet page:
     GET /api/v1/fleet/history?hours=168  ->  {robots: [...], top_codes: [...], trend: [...]}
 
 It reads the uploaded Parquet at most once a minute per window (`History`), off the event loop.
+
+Watching the fleet (roadmap 9.6): nobody keeps the Fleet page open all day. With `watch`, the
+gateway looks at the robots every `period_s` by itself and alerts the webhooks of `channel` when a
+robot has been unreachable for `offline_after_s` (a blip is not offline), when it is back, when it
+refuses the fleet's rules and plans (config_from) and when it takes them again:
+
+    fleet:
+      robots: [...]
+      watch: { period_s: 30, offline_after_s: 120, channel: fleet }    # or watch: true
+
+    webhooks:
+      - { name: robots, url: https://hooks.slack.com/..., channels: [fleet], format: slack }
+
+    GET /api/v1/fleet/alerts  ->  {watching, alerts: [the last ones, newest first]}
 """
 
 import asyncio
+import collections
 import dataclasses
+import datetime
 import os
 import time
 
@@ -57,10 +73,30 @@ class Robot:
 
 
 @dataclasses.dataclass
+class Watch:
+    period_s: float = 30.0  # how often the robots are looked at
+    offline_after_s: float = 120.0  # unreachable this long is offline: a blip is not
+    channel: str = "fleet"  # the webhooks' channel the alerts go to
+
+    @classmethod
+    def load(cls, raw):
+        w = (
+            cls()
+            if raw is True
+            else cls(**{k: raw[k] for k in ("period_s", "offline_after_s", "channel") if k in raw})
+        )
+        w.period_s, w.offline_after_s, w.channel = float(w.period_s), float(w.offline_after_s), str(w.channel)
+        if w.period_s <= 0 or w.offline_after_s < 0:
+            raise ValueError("fleet.watch: period_s must be positive, offline_after_s not negative")
+        return w
+
+
+@dataclasses.dataclass
 class Settings:
     robots: list = dataclasses.field(default_factory=list)  # [Robot]
     timeout_s: float = 3.0
     history: str = ""  # where the robots upload their history (jarvis_lake.upload), if they do
+    watch: Watch | None = None  # look at the robots without anyone on the page, and alert
 
     @classmethod
     def load(cls, raw):
@@ -83,7 +119,8 @@ class Settings:
                 pafs.FileSystem.from_uri(history)
             except (ValueError, pyarrow.ArrowException) as e:
                 raise ValueError(f"fleet.history: {upload.redact(history)}: {e}") from e
-        return cls(robots=robots, timeout_s=float(raw.get("timeout_s", 3.0)), history=history)
+        watch = Watch.load(raw["watch"]) if raw.get("watch") else None
+        return cls(robots=robots, timeout_s=float(raw.get("timeout_s", 3.0)), history=history, watch=watch)
 
 
 class History:
@@ -144,6 +181,85 @@ def summarize(faults, mode="UNKNOWN"):
         "incidents": len({f["incident_id"] for f in open_faults if f.get("incident_id")}),
         "latched": sum(1 for f in open_faults if f.get("state") == "LATCHED"),
     }
+
+
+def _duration(seconds):
+    if seconds < 90:
+        return f"{seconds:.0f} s"
+    if seconds < 90 * 60:
+        return f"{seconds / 60:.0f} min"
+    return f"{seconds / 3600:.1f} h"
+
+
+class Watcher:
+    """What changed from one look at the fleet to the next, as alerts: offline (after the grace),
+    back online, rules and plans refused, taken again. The gateway looks and sends them."""
+
+    def __init__(self, watch, clock=time.time, keep=200):
+        self.watch, self.clock = watch, clock
+        self.alerts = collections.deque(maxlen=keep)  # newest last
+        self._down = {}  # robot -> since when it doesn't answer
+        self._offline = {}  # robot -> since when, once alerted
+        self._refused = {}  # robot -> the revision it refused, once alerted
+        self._n = 0
+
+    def observe(self, robots):
+        """One look (fleet.robots()): returns the alerts it raises. This gateway's own robot
+        alerts by its own rules."""
+        now, out = self.clock(), []
+        for r in robots:
+            if r.get("local"):
+                continue
+            name = r["name"]
+            if not r.get("online"):
+                since = self._down.setdefault(name, now)
+                if name not in self._offline and now - since >= self.watch.offline_after_s:
+                    self._offline[name] = since
+                    why = r.get("error") or "no answer"
+                    out.append(
+                        self._alert(
+                            r, "robot_offline", "ERROR", f"offline: {why} for {_duration(now - since)}"
+                        )
+                    )
+                continue
+            self._down.pop(name, None)
+            if name in self._offline:
+                since = self._offline.pop(name)
+                out.append(
+                    self._alert(r, "robot_online", "INFO", f"back online after {_duration(now - since)}")
+                )
+            config = r.get("config") or {}
+            refused = config.get("rejected")
+            if refused and self._refused.get(name) != refused:
+                self._refused[name] = refused
+                message = f"refused rules and plans {refused}: {config.get('error') or '?'}"
+                out.append(
+                    self._alert(r, "config_rejected", "WARN", f"{message}; still on {config.get('revision')}")
+                )
+            elif not refused and name in self._refused:
+                before = self._refused.pop(name)
+                message = f"runs rules and plans {config.get('revision')} (refused {before} before)"
+                out.append(self._alert(r, "config_accepted", "INFO", message))
+        return out
+
+    def _alert(self, robot, what, severity, message):
+        """An alert as an event of the stream: what webhooks are sent."""
+        self._n += 1
+        at = self.clock()
+        stamp = datetime.datetime.fromtimestamp(at, tz=datetime.UTC).isoformat().replace("+00:00", "Z")
+        name = robot["name"]
+        event = {
+            "id": f"fleet-{int(at * 1000)}-{self._n}",
+            "stamp": stamp,
+            "kind": "SYSTEM",
+            "code": f"jarvis.fleet.{what}",
+            "severity": severity,
+            "message": message,
+            "source": {"robot": name, "component": "fleet", "node": "", "host": ""},
+            "attrs": {"channel": self.watch.channel, "robot": name, "url": robot.get("url", "")},
+        }
+        self.alerts.append(event)
+        return event
 
 
 def config_summary(status):

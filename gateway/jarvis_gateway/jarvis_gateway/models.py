@@ -122,6 +122,16 @@ class Fleet(Open):
     robots: list[FleetRobot]
 
 
+class FleetAlerts(Open):
+    """With fleet.watch (roadmap 9.6): what happened to the robots, newest first."""
+
+    watching: bool
+    period_s: float | None = None
+    offline_after_s: float | None = None
+    channel: str = ""  # the webhooks' channel the alerts go to
+    alerts: list[dict[str, Any]] = Field(default_factory=list)  # events: jarvis.fleet.*
+
+
 class FleetHistoryRobot(Open):
     robot: str
     history_until: str | None = None  # its newest uploaded event: what is not uploaded yet is not here

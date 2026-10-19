@@ -1,11 +1,23 @@
 import { Link } from "@tanstack/react-router";
 import { ExternalLink, WifiOff } from "lucide-react";
-import { useFleet } from "@/api/queries";
+import { useFleet, useFleetAlerts } from "@/api/queries";
 import type { FleetRobot } from "@/api/types";
-import { Empty, ErrorNote, Loading, Mono, PageHeader, SeverityBadge, StateBadge } from "@/components/domain";
+import {
+  Empty,
+  ErrorNote,
+  Loading,
+  Mono,
+  PageHeader,
+  SeverityBadge,
+  StateBadge,
+  Table,
+  Td,
+  Th,
+} from "@/components/domain";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/cn";
+import { ago, dateTime, duration } from "@/lib/format";
 import { SEVERITY_STYLE } from "@/lib/severity";
 import { FleetHistory } from "./FleetHistory";
 
@@ -111,6 +123,64 @@ function RolloutCard({ r }: { r: Rollout }) {
           </div>
         ) : null}
       </CardBody>
+    </Card>
+  );
+}
+
+/** What happened to the fleet while nobody was looking (fleet.watch): the gateway's alerts. */
+function Alerts({ several }: { several: boolean }) {
+  const alerts = useFleetAlerts();
+  const a = alerts.data;
+  if (!a) return null;
+  if (!a.watching) {
+    return several ? (
+      <Empty>
+        No alerts: this gateway doesn't watch the fleet. Set <Mono>fleet.watch</Mono> and it tells the
+        webhooks when a robot goes offline or refuses the fleet's rules (docs/guides/fleet.md §6).
+      </Empty>
+    ) : null;
+  }
+  return (
+    <Card data-testid="fleet-alerts">
+      <CardHeader
+        title="Alerts"
+        actions={
+          <span className="text-xs text-muted-fg">
+            every {duration(a.period_s)}, offline after {duration(a.offline_after_s)}, to channel{" "}
+            <Mono>{a.channel}</Mono>
+          </span>
+        }
+      />
+      {a.alerts.length ? (
+        <div className="max-h-80 overflow-y-auto">
+          <Table>
+            <thead>
+              <tr>
+                <Th>when</Th>
+                <Th>robot</Th>
+                <Th />
+                <Th>what</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {a.alerts.map((e) => (
+                <tr key={e.id} data-testid="fleet-alert">
+                  <Td className="whitespace-nowrap text-xs text-muted-fg">
+                    <span title={dateTime(e.stamp)}>{ago(e.stamp)}</span>
+                  </Td>
+                  <Td className="font-medium">{e.source.robot}</Td>
+                  <Td>
+                    <SeverityBadge severity={e.severity} short />
+                  </Td>
+                  <Td className="text-sm">{e.message}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </div>
+      ) : (
+        <Empty className="py-4">Nothing happened to the fleet since the gateway started.</Empty>
+      )}
     </Card>
   );
 }
@@ -249,6 +319,7 @@ export function Fleet() {
           <RobotCard key={r.local ? "" : r.url} robot={r} />
         ))}
       </div>
+      <Alerts several={robots.length > 1} />
       {rolled ? <RolloutCard r={rolled} /> : null}
       {robots.length <= 1 ? (
         <Empty>

@@ -30,6 +30,16 @@ class Metrics:
         )
         self.lake_rows = Gauge("jarvis_lake_rows", "Events in the lake", registry=r)
         self.lake_pending = Gauge("jarvis_lake_splits_pending", "Splits not converted yet", registry=r)
+        # With fleet.watch: each listed robot, as the last look saw it.
+        self.fleet_online = Gauge(
+            "jarvis_fleet_robot_online", "1 when the robot answers", ["robot"], registry=r
+        )
+        self.fleet_refused = Gauge(
+            "jarvis_fleet_config_refused",
+            "1 when the robot refused the fleet's rules and plans",
+            ["robot"],
+            registry=r,
+        )
 
     def on_state(self, kind, payload):
         """A listener for LiveState."""
@@ -53,6 +63,15 @@ class Metrics:
             for state in ("PENDING_APPROVAL", "QUEUED", "RUNNING", "FAILED"):
                 self.executions.labels(state).set(states.get(state, 0))
             self.mode.set(1 if payload.get("mode") == "ENABLED" else 0)
+
+    def on_fleet(self, robots):
+        for robot in robots:
+            if robot.get("local"):
+                continue
+            self.fleet_online.labels(robot["name"]).set(1 if robot.get("online") else 0)
+            if robot.get("online"):
+                refused = (robot.get("config") or {}).get("rejected")
+                self.fleet_refused.labels(robot["name"]).set(1 if refused else 0)
 
     def on_delivery(self, record):
         self.notifications.labels(record["webhook"], "ok" if record.get("ok") else "failed").inc()

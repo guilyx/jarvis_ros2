@@ -244,6 +244,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/fleet/alerts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Fleet Alerts
+     * @description What the gateway saw happen to the fleet, with `fleet.watch`: robots offline and back,
+     *     rules and plans refused and taken (docs/guides/fleet.md §6). Newest first.
+     */
+    get: operations["fleet_alerts_api_v1_fleet_alerts_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/fleet/history": {
     parameters: {
       query?: never;
@@ -1201,6 +1222,29 @@ export interface components {
     Fleet: {
       /** Robots */
       robots: components["schemas"]["FleetRobot"][];
+    } & {
+      [key: string]: unknown;
+    };
+    /**
+     * FleetAlerts
+     * @description With fleet.watch (roadmap 9.6): what happened to the robots, newest first.
+     */
+    FleetAlerts: {
+      /** Alerts */
+      alerts?: {
+        [key: string]: unknown;
+      }[];
+      /**
+       * Channel
+       * @default
+       */
+      channel: string;
+      /** Offline After S */
+      offline_after_s?: number | null;
+      /** Period S */
+      period_s?: number | null;
+      /** Watching */
+      watching: boolean;
     } & {
       [key: string]: unknown;
     };
@@ -2317,6 +2361,39 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Fleet"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  fleet_alerts_api_v1_fleet_alerts_get: {
+    parameters: {
+      query?: {
+        token?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FleetAlerts"];
         };
       };
       /** @description Validation Error */

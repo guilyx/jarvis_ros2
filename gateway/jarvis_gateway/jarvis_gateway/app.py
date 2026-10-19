@@ -52,6 +52,8 @@ class Gateway:
         self.fleet_client = None  # an httpx.AsyncClient for the fleet view (tests); None: one per request
         history = settings.fleet.history if settings.fleet else ""
         self.fleet_history = fleet.History(history) if history else None
+        watch = settings.fleet.watch if settings.fleet else None
+        self.fleet_watcher = fleet.Watcher(watch) if watch else None
         self.backfilled = False
         self._tasks = []
         self._bag_cache = {}
@@ -62,6 +64,8 @@ class Gateway:
         await self.port.start(self.state)
         self._tasks.append(asyncio.create_task(self._backfill()))
         self._tasks.append(asyncio.create_task(self._trim()))
+        if self.fleet_watcher:
+            self._tasks.append(asyncio.create_task(self._watch_fleet()))
 
     async def stop(self):
         for task in self._tasks:
@@ -92,6 +96,20 @@ class Gateway:
                 return
             except Exception:  # noqa: BLE001 - the hub is not up yet: try again
                 await asyncio.sleep(2.0)
+
+    async def _watch_fleet(self):
+        """Looks at the fleet every `watch.period_s`, whoever has the page open: alerts on the
+        webhooks, the robots' state on /metrics."""
+        settings = self.settings.fleet
+        while True:
+            try:
+                robots = await fleet.robots(settings, None, self.fleet_client)
+                self.metrics.on_fleet(robots)
+                for alert in self.fleet_watcher.observe(robots):
+                    self.notifier.notify(alert)
+            except Exception:  # noqa: BLE001 - one look failed: the next one tries again
+                pass
+            await asyncio.sleep(settings.watch.period_s)
 
     async def _trim(self):
         """Forgets recent events once the lake has them (it converts a split every few minutes)."""
@@ -198,6 +216,22 @@ def create_app(settings, port, notifier=None):
             robot=gw.state.robot,
             lake=gw.lake_status(),
             config=gw.config_status(),
+        )
+
+    @api.get("/fleet/alerts", response_model=models.FleetAlerts, tags=["system"])
+    def fleet_alerts(who=Depends(viewer)):
+        """What the gateway saw happen to the fleet, with `fleet.watch`: robots offline and back,
+        rules and plans refused and taken (docs/guides/fleet.md §6). Newest first."""
+        watcher = gw.fleet_watcher
+        if not watcher:
+            return models.FleetAlerts(watching=False)
+        w = gw.settings.fleet.watch
+        return models.FleetAlerts(
+            watching=True,
+            period_s=w.period_s,
+            offline_after_s=w.offline_after_s,
+            channel=w.channel,
+            alerts=list(reversed(watcher.alerts)),
         )
 
     @api.get("/fleet", response_model=models.Fleet, tags=["system"])

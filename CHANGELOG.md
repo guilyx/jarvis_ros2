@@ -54,6 +54,8 @@ robots, with history, a dashboard and an agent that explains what happened.
 - Rules and plans from the fleet (`config_from`): each robot takes them from the fleet's storage,
   lints them, loads what passes and keeps what it had otherwise (`jarvis.config.rejected`); the
   Fleet page shows the rollout: which revision runs where, what was refused where and why.
+- Fleet alerts (`fleet.watch`): the gateway that lists the robots tells the webhooks when one goes
+  offline or comes back, or refuses the fleet's rules and plans, whoever has the page open.
 - The lake: recordings as Parquet, queried with DuckDB; KPIs, analytics, retention with a
   free-disk floor.
 - The gateway: REST API, a gap-free live stream, roles, an audit trail, webhooks, Prometheus

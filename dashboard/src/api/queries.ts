@@ -10,6 +10,7 @@ import type {
   Fault,
   FaultEpisode,
   FaultTransition,
+  FleetAlerts,
   FleetHistory,
   FleetRobot,
   Flapping,
@@ -57,6 +58,15 @@ export const useFleet = () =>
   useQuery({
     queryKey: ["fleet"],
     queryFn: () => unwrap<{ robots: FleetRobot[] }>(client.GET("/api/v1/fleet")),
+    refetchInterval: 5_000,
+    placeholderData: keepPreviousData,
+  });
+
+// What the gateway saw happen to the fleet, with fleet.watch.
+export const useFleetAlerts = () =>
+  useQuery({
+    queryKey: ["fleet-alerts"],
+    queryFn: () => unwrap<FleetAlerts>(client.GET("/api/v1/fleet/alerts")),
     refetchInterval: 5_000,
     placeholderData: keepPreviousData,
   });

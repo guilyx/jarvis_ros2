@@ -56,7 +56,11 @@ class TestTrees(unittest.TestCase):
         cls.set_params = cls.node.create_client(SetParameters, "/demo/scan_relay/set_parameters")
         list_plans = cls.node.create_client(ListPlans, "/jarvis/recovery/list_plans")
         for client in (cls.set_params, list_plans):
-            assert client.wait_for_service(timeout_sec=60.0), client.srv_name
+            if not client.wait_for_service(timeout_sec=60.0):
+                # What this node's participant discovered: a lost discovery, or a node that is gone.
+                nodes = sorted(f"{ns.rstrip('/')}/{n}" for n, ns in cls.node.get_node_names_and_namespaces())
+                services = sorted(name for name, _ in cls.node.get_service_names_and_types())
+                raise AssertionError(f"{client.srv_name} not found; nodes {nodes}; services {services}")
         # The plan loaded: bt.run found the tree and every node in it.
         deadline = time.time() + 60.0
         plans = []

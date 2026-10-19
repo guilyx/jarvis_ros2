@@ -253,7 +253,8 @@ The robots this gateway lists (`fleet` in gateway.yaml) and itself, one card eac
 need someone first: online, open faults by severity, the worst one, incidents, the recovery mode; a
 link to the robot's own dashboard; with the fleet's rules and plans (`config_from`), the revision
 each runs and the one it refused, and a rollout card across the robots (which revision runs where,
-what was refused where and why). Read-only, asked from each robot's gateway every 5 s
+what was refused where and why); with `fleet.watch`, the alerts the gateway sent (robots offline
+and back, rules refused and taken). Read-only, asked from each robot's gateway every 5 s
 ([guide](../guides/fleet.md)). Below, the fleet's **history**, from what the robots upload
 (`fleet.history`): per robot over 24 h, 7 or 30 days, confirmed faults, MTTR, incidents and
 escalations, the share recovered without a person, recovery success, how far its history goes; a

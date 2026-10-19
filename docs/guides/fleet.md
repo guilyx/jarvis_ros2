@@ -12,6 +12,7 @@ plans can come from that storage too: change a rule once, every robot takes it.
 3. [Where to run it](#3-where-to-run-it)
 4. [The fleet's history](#4-the-fleets-history)
 5. [Rules and plans from the fleet](#5-rules-and-plans-from-the-fleet)
+6. [Alerts: when nobody is looking](#6-alerts-when-nobody-is-looking)
 
 ## 1. List the robots
 
@@ -249,3 +250,38 @@ Lint before you upload, with the same check the robot makes:
 ```bash
 ros2 jarvis lint --rules config/rules --plans config/plans --catalog faults.yaml
 ```
+
+## 6. Alerts: when nobody is looking
+
+The fleet view only asks the robots while someone has it open. A robot that drops off the
+network at 3 a.m., or refuses the rules the fleet just gave it, should tell someone. With `watch`,
+the gateway that lists the robots looks at them by itself and alerts its webhooks:
+
+```yaml
+fleet:
+  robots:
+    - { name: amr-08, url: http://amr-08.local:8080 }
+    - { name: amr-09, url: http://amr-09.local:8080 }
+  watch: { period_s: 30, offline_after_s: 120, channel: fleet }   # or just: watch: true
+
+webhooks:
+  - { name: robots, url: https://hooks.slack.com/services/..., channels: [fleet], format: slack }
+```
+
+| Alert | When | Severity |
+|-------|------|----------|
+| `jarvis.fleet.robot_offline` | the robot has not answered for `offline_after_s` (a blip shorter than that is not offline), with why: unreachable, no answer, refused the token | ERROR |
+| `jarvis.fleet.robot_online` | it answers again, and for how long it was gone | INFO |
+| `jarvis.fleet.config_rejected` | it refused a revision of the fleet's rules and plans (§5), with the first error; once per revision | WARN |
+| `jarvis.fleet.config_accepted` | it runs the fleet's rules and plans again | INFO |
+
+In Slack: `[amr-09] offline: unreachable for 2 min`. A `generic` webhook gets the alert as an event
+of the stream (`source.robot`, `code`, `severity`, `message`), like a rule's `notify`. The Fleet
+page lists the last alerts (`GET /api/v1/fleet/alerts`), and the System page every delivery.
+
+`/metrics` has the robots as the last look saw them, for Prometheus and its own alerting:
+`jarvis_fleet_robot_online{robot="amr-09"}` (1 or 0) and `jarvis_fleet_config_refused{robot=...}`.
+
+Each robot still alerts about its own faults through its own rules and webhooks: the watch is for
+what a robot cannot say itself, because it is gone or because the fleet is the problem. Run one
+watching gateway per fleet (two would alert twice).

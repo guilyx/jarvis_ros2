@@ -263,7 +263,9 @@ shipped [`restart-lifecycle-node`](../../ros/jarvis_bringup/config/plans/core.ya
   you want them alongside your own.
 - **Actuators**: `/jarvis/recovery` loads the lifecycle, service, parameter and snapshot actuators.
   On a Nav2 robot add `jarvis_nav2::Nav2Actuator` to `actuators` in your `jarvis.yaml` for the
-  `nav2.*` actions. Your own: a `jarvis_ros::Actuator` pluginlib plugin, listed the same way.
+  `nav2.*` actions, and `jarvis_bt::TreeActuator` to run behavior trees (`bt.run`, the
+  [behavior-trees guide](behavior-trees.md)). Your own: a `jarvis_ros::Actuator` pluginlib plugin,
+  listed the same way.
 - **Check in CI**, on every change: `ros2 jarvis lint --rules ... --plans ... --catalog ...`
   (exit code 1 on errors), and replay real recordings through them:
   `ros2 jarvis backtest <bag> --rules ... --plans ... --expect-same`.

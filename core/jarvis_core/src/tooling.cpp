@@ -19,12 +19,14 @@ namespace jarvis_core
 
 const std::set<std::string> & default_actuator_actions()
 {
-  static const std::set<std::string> actions{
-    "lifecycle.transition",  "lifecycle.restart",   "service.trigger",
-    "service.set_bool",      "service.empty",       "service.call",
-    "action.goal",           "param.set",           "bag.snapshot",
-    "nav2.manage_lifecycle", "nav2.clear_costmaps", "nav2.cancel_navigation",
-    "nav2.navigate_to_pose", "container.restart",   "systemd.restart"};
+  static const std::set<std::string> actions{"lifecycle.transition",  "lifecycle.restart",
+                                             "service.trigger",       "service.set_bool",
+                                             "service.empty",         "service.call",
+                                             "action.goal",           "param.set",
+                                             "bag.snapshot",          "nav2.manage_lifecycle",
+                                             "nav2.clear_costmaps",   "nav2.cancel_navigation",
+                                             "nav2.navigate_to_pose", "container.restart",
+                                             "systemd.restart",       "bt.run"};
   return actions;
 }
 

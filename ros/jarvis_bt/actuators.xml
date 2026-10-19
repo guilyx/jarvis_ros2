@@ -1,0 +1,5 @@
+<library path="jarvis_bt_actuator">
+  <class type="jarvis_bt::TreeActuator" base_class_type="jarvis_ros::Actuator">
+    <description>bt.run: runs a BehaviorTree.CPP tree from bt.trees_dir as a recovery step</description>
+  </class>
+</library>

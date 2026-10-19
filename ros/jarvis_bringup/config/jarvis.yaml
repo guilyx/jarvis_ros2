@@ -45,6 +45,7 @@
       - jarvis_ros::ParamActuator
       - jarvis_ros::BagActuator
       - jarvis_ros::ProcessActuator     # container.restart, systemd.restart: allowed ones only
+      # - jarvis_bt::TreeActuator       # bt.run (jarvis_bt): behavior trees from bt.trees_dir
     # Nothing is restartable until listed here (globs):
     # containers:
     #   allowed: ["lidar-driver", "camera-*"]

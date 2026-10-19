@@ -1,0 +1,34 @@
+# The behavior-tree demo (launch/trees.launch.py): the lidar relay is restarted by a behavior tree,
+# jarvis_bt's restart_lifecycle_node.xml, behind the plan's gates and lock. Spec:
+# docs/guides/behavior-trees.md.
+schema: jarvis.plans/v1
+plans:
+  - id: restart-with-tree
+    description: Restart a managed node with a behavior tree, gently first (reactivate), then all the way (cleanup, configure, activate).
+    params:
+      node: { type: string, required: true, pattern: "^/", description: absolute node name }
+      component: { type: string, required: true, description: the component its faults are about }
+      fault: { type: string, default: "*", description: code glob of the faults that must clear }
+    locks: ["node:{{ params.node }}"]
+    allowed_requesters: [RULE, OPERATOR, AGENT, PLAN]
+    agent_policy: supervised
+    preconditions: { faults_inactive: [safety.estop.engaged] }
+    max_attempts: { count: 5, per: 1h }
+    timeout: 90s
+    steps:
+      - id: tree
+        action: bt.run
+        with:
+          tree: restart_lifecycle_node.xml
+          blackboard:
+            change_state: "{{ params.node }}/change_state"
+            fault: "{{ params.fault }}"
+            component: "{{ params.component }}"
+            wait: 4
+        timeout: 60s
+      - id: verify
+        action: wait_for
+        with: { fault: { code: "{{ params.fault }}", component: "{{ params.component }}" }, state: CLEARED }
+        timeout: 15s
+    on_failure:
+      - escalate: operator

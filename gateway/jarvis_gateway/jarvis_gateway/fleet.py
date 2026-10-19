@@ -12,7 +12,9 @@ others, and its dashboard shows them side by side; a click opens the robot's own
     GET /api/v1/fleet  ->  {"robots": [{name, url, online, robot, status, mode, faults, worst, ...}]}
 
 The gateway asks each robot's gateway (its health, open faults and recovery mode) when asked, all
-at once, within `timeout_s`; a robot that doesn't answer is shown offline, with why. A token (a
+at once, within `timeout_s`; a robot that doesn't answer is shown offline, with why. A robot that
+takes its rules and plans from the fleet (config_from, roadmap 9.4) says which revision it runs and
+which it refused: the dashboard shows a rollout across the robots (roadmap 9.5). A token (a
 viewer's is enough) comes from the environment variable `token_env`, so it stays out of the file.
 This gateway's own robot comes first, from its own state.
 
@@ -144,6 +146,23 @@ def summarize(faults, mode="UNKNOWN"):
     }
 
 
+def config_summary(status):
+    """A robot's rules and plans at a glance, from config_sync's status (None without config_from):
+    the revision it runs, the one it refused and why."""
+    if not status:
+        return None
+    rejected = status.get("rejected") or {}
+    errors = rejected.get("errors") or []
+    return {
+        "revision": status.get("revision"),
+        "state": status.get("state", ""),
+        "source": status.get("source", ""),
+        "since": status.get("applied_at"),
+        "rejected": rejected.get("revision") if rejected else None,
+        "error": errors[0] if errors else "",
+    }
+
+
 async def _robot(client, robot, timeout):
     """One robot, from its gateway."""
     headers = {"Authorization": f"Bearer {robot.token}"} if robot.token else {}
@@ -166,6 +185,7 @@ async def _robot(client, robot, timeout):
             "status": h.get("status", ""),
             "connected": bool(h.get("connected")),
             "latency_ms": round((time.monotonic() - started) * 1000),
+            "config": config_summary(h.get("config")),
             **summarize(faults.json().get("faults"), recoveries.json().get("mode", "UNKNOWN")),
         }
     except httpx.HTTPStatusError as e:

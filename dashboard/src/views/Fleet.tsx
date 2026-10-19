@@ -4,7 +4,7 @@ import { useFleet } from "@/api/queries";
 import type { FleetRobot } from "@/api/types";
 import { Empty, ErrorNote, Loading, Mono, PageHeader, SeverityBadge, StateBadge } from "@/components/domain";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
+import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/cn";
 import { SEVERITY_STYLE } from "@/lib/severity";
 import { FleetHistory } from "./FleetHistory";
@@ -16,6 +16,103 @@ export function fleetOrder(a: FleetRobot, b: FleetRobot): number {
   const rank = (r: FleetRobot) =>
     !r.online ? 0 : r.faults.CRITICAL ? 1 : r.faults.ERROR ? 2 : r.faults.WARN ? 3 : r.faults.total ? 4 : 5;
   return rank(a) - rank(b) || a.name.localeCompare(b.name);
+}
+
+export interface Rollout {
+  source: string;
+  revisions: { revision: string; robots: string[] }[]; // most robots first
+  refused: { revision: string; robots: string[]; error: string }[];
+  own: string[]; // online, with their own rules and plans (no config_from)
+}
+
+const group = <T,>(items: T[], key: (t: T) => string) => {
+  const out = new Map<string, T[]>();
+  for (const t of items) out.set(key(t), [...(out.get(key(t)) ?? []), t]);
+  return [...out.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+};
+
+/** The fleet's rules and plans across the robots that take them: which revision runs where, what
+ * was refused where and why. Null when no robot takes them from the fleet. */
+export function rollout(robots: FleetRobot[]): Rollout | null {
+  const online = robots.filter((r) => r.online);
+  const taking = online.filter((r) => r.config);
+  if (!taking.length) return null;
+  const names = (rs: FleetRobot[]) => rs.map((r) => r.name).sort();
+  return {
+    source: taking[0]!.config!.source,
+    revisions: group(taking, (r) => r.config!.revision ?? "none").map(([revision, rs]) => ({
+      revision,
+      robots: names(rs),
+    })),
+    refused: group(
+      taking.filter((r) => r.config!.rejected),
+      (r) => r.config!.rejected!,
+    ).map(([revision, rs]) => ({ revision, robots: names(rs), error: rs[0]!.config!.error })),
+    own: names(online.filter((r) => !r.config)),
+  };
+}
+
+function Robots({ names }: { names: string[] }) {
+  return (
+    <span className="flex flex-wrap gap-1">
+      {names.map((n) => (
+        <span key={n} className="rounded bg-muted px-1.5 py-0.5 text-xs ring-1 ring-border">
+          {n}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** Which revision of the fleet's rules and plans runs where (docs/guides/fleet.md §5). */
+function RolloutCard({ r }: { r: Rollout }) {
+  return (
+    <Card data-testid="fleet-rollout">
+      <CardHeader
+        title="Rules and plans"
+        actions={
+          <span className="text-xs text-muted-fg">
+            from <Mono>{r.source}</Mono>
+          </span>
+        }
+      />
+      <CardBody className="space-y-2 text-sm">
+        {r.revisions.map((v) => (
+          <div key={v.revision} className="flex items-center gap-3" data-testid="fleet-rollout-revision">
+            <span className="w-24 shrink-0 text-muted-fg">running</span>
+            <Mono className="w-32 shrink-0">{v.revision}</Mono>
+            <span className="w-20 shrink-0 text-muted-fg">
+              {v.robots.length} robot{v.robots.length === 1 ? "" : "s"}
+            </span>
+            <Robots names={v.robots} />
+          </div>
+        ))}
+        {r.refused.map((v) => (
+          <div key={v.revision} className="flex items-start gap-3" data-testid="fleet-rollout-refused">
+            <span className="w-24 shrink-0 text-amber-500">refused</span>
+            <Mono className="w-32 shrink-0 text-amber-500">{v.revision}</Mono>
+            <span className="w-20 shrink-0 text-muted-fg">
+              {v.robots.length} robot{v.robots.length === 1 ? "" : "s"}
+            </span>
+            <div className="min-w-0 space-y-1">
+              <Robots names={v.robots} />
+              <Mono className="block break-all text-xs text-muted-fg">{v.error}</Mono>
+            </div>
+          </div>
+        ))}
+        {r.own.length ? (
+          <div className="flex items-center gap-3 text-muted-fg">
+            <span className="w-24 shrink-0">their own</span>
+            <span className="w-32 shrink-0" />
+            <span className="w-20 shrink-0">
+              {r.own.length} robot{r.own.length === 1 ? "" : "s"}
+            </span>
+            <Robots names={r.own} />
+          </div>
+        ) : null}
+      </CardBody>
+    </Card>
+  );
 }
 
 function Counts({ robot }: { robot: FleetRobot }) {
@@ -88,6 +185,19 @@ function RobotCard({ robot }: { robot: FleetRobot }) {
               </div>
             </div>
           ) : null}
+          {robot.config ? (
+            <div className="truncate text-xs text-muted-fg" data-testid="fleet-config">
+              rules and plans <Mono>{robot.config.revision ?? "none"}</Mono>
+              {robot.config.rejected ? (
+                <span className="text-amber-500" title={robot.config.error}>
+                  {" "}
+                  · refused <Mono>{robot.config.rejected}</Mono>
+                </span>
+              ) : ["offline", "empty", "waiting"].includes(robot.config.state) ? (
+                <span className="text-amber-500"> · {robot.config.state}</span>
+              ) : null}
+            </div>
+          ) : null}
           {robot.status && robot.status !== "ok" ? (
             <div className="text-xs text-amber-400">Jarvis is {robot.status} on this robot</div>
           ) : null}
@@ -124,6 +234,7 @@ export function Fleet() {
   const robots = [...(fleet.data?.robots ?? [])].sort(fleetOrder);
   const offline = robots.filter((r) => !r.online).length;
   const faulted = robots.filter((r) => r.online && r.faults.total).length;
+  const rolled = rollout(robots);
   return (
     <div className="space-y-4">
       <PageHeader title="Fleet">
@@ -138,6 +249,7 @@ export function Fleet() {
           <RobotCard key={r.local ? "" : r.url} robot={r} />
         ))}
       </div>
+      {rolled ? <RolloutCard r={rolled} /> : null}
       {robots.length <= 1 ? (
         <Empty>
           Only this robot. List the others under <Mono>fleet:</Mono> in the gateway's settings

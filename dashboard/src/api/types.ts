@@ -465,6 +465,17 @@ export interface FleetRobot {
   } | null;
   incidents: number;
   latched: number;
+  config?: FleetConfig | null; // with config_from: the fleet's rules and plans it runs; else its own
+}
+
+/** A robot's rules and plans from the fleet (roadmap 9.4), at a glance. */
+export interface FleetConfig {
+  revision: string | null; // what it runs
+  state: string; // in-sync, applied, rejected, offline, empty, waiting, settling
+  source: string;
+  since: number | null; // when it loaded what it runs (unix seconds)
+  rejected: string | null; // the revision it refused
+  error: string; // why: the first error
 }
 
 export interface Delivery {

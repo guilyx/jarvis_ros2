@@ -197,12 +197,14 @@ def create_app(settings, port, notifier=None):
             last_event_age_s=age,
             robot=gw.state.robot,
             lake=gw.lake_status(),
+            config=gw.config_status(),
         )
 
     @api.get("/fleet", response_model=models.Fleet, tags=["system"])
     async def fleet_view(who=Depends(viewer)):
         """This robot and the robots of `fleet` in gateway.yaml, each from its own gateway: online,
-        open faults by severity, the worst one, the recovery mode (docs/guides/fleet.md)."""
+        open faults by severity, the worst one, the recovery mode, the rules and plans it runs
+        (docs/guides/fleet.md)."""
         own = {
             "name": gw.state.robot or "this robot",
             "url": "",
@@ -211,6 +213,7 @@ def create_app(settings, port, notifier=None):
             "robot": gw.state.robot,
             "status": status(),
             "connected": gw.port.connected,
+            "config": fleet.config_summary(gw.config_status()),
             **fleet.summarize(gw.state.faults, (gw.state.executions or {}).get("mode", "UNKNOWN")),
         }
         settings = gw.settings.fleet or fleet.Settings()

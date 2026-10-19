@@ -193,6 +193,14 @@ function api(role: "viewer" | "operator") {
               },
               incidents: 2,
               latched: 1,
+              config: {
+                revision: "4f1c2a9e0b7d",
+                state: "rejected",
+                source: "s3://fleet/config",
+                since: null,
+                rejected: "9b2e41c07d3a",
+                error: "rules/lidar.yaml: rule 'lidar': recovers with unknown plan 'restart-lidar'",
+              },
             },
             {
               name: "amr-3",
@@ -425,6 +433,18 @@ describe("dashboard", () => {
       "http://amr-2:8080",
     );
     expect(within(cards[2]!).getByText("No open faults")).toBeInTheDocument();
+    // amr-2 takes the fleet's rules and plans, and refused the latest.
+    expect(within(cards[1]!).getByTestId("fleet-config")).toHaveTextContent(
+      "rules and plans 4f1c2a9e0b7d · refused 9b2e41c07d3a",
+    );
+    const rollout = screen.getByTestId("fleet-rollout");
+    expect(within(rollout).getByTestId("fleet-rollout-revision")).toHaveTextContent(
+      "4f1c2a9e0b7d1 robotamr-2",
+    );
+    expect(within(rollout).getByTestId("fleet-rollout-refused")).toHaveTextContent(
+      "unknown plan 'restart-lidar'",
+    );
+    expect(within(rollout).getByText("their own")).toBeInTheDocument(); // bot-7
   });
 
   it("shows the history going off the robot, and when it is behind", async () => {

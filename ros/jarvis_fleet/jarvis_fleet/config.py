@@ -309,7 +309,9 @@ class Syncer:
             raise
         if errors:
             self._back(previous, loading)
-        return errors
+        # The nodes name files as they read them, through `active`: as at the source instead.
+        active = f"{self.store.active}/"
+        return [e.replace(active, "") for e in errors]
 
     def _back(self, previous, reload):
         """`active` back to `previous`, loaded again if the new one was (in part: plans first)."""

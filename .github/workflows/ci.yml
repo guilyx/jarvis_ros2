@@ -109,6 +109,13 @@ jobs:
       - name: Coverage (in the job summary)
         if: ${{ !cancelled() }} # also when the tests fail the coverage floor
         run: '{ echo "### Lake coverage"; coverage report --format=markdown; } >>"$GITHUB_STEP_SUMMARY"'
+      - name: Rules and plans from the fleet's storage (jarvis_fleet's sync, without ROS, on S3)
+        run: PYTHONPATH=lake/jarvis_lake:ros/jarvis_fleet pytest -q ros/jarvis_fleet/test
+        env:
+          JARVIS_TEST_S3: s3://jarvis-ci/config?endpoint_override=127.0.0.1:5055&scheme=http&region=us-east-1&allow_bucket_creation=true
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_EC2_METADATA_DISABLED: "true"
 
   gateway:
     name: Gateway (ROS-free, fake Jarvis)

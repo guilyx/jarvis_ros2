@@ -103,6 +103,30 @@
       </profiles>
     </enclave>
 
+    <enclave path="/jarvis/config">
+      <profiles>
+        <profile ns="/jarvis" node="config">
+          <topics publish="ALLOW">
+            <topic>/jarvis/ingest</topic>
+            <topic>/diagnostics</topic>
+            <topic>/rosout</topic>
+            <topic>/parameter_events</topic>
+          </topics>
+          <topics subscribe="ALLOW">
+            <topic>/jarvis/faults</topic>
+            <topic>/parameter_events</topic>
+          </topics>
+          <services request="ALLOW">
+            <service>/jarvis/recovery/reload</service>
+            <service>/jarvis/rule_engine/reload</service>
+          </services>
+          <services reply="ALLOW">
+            <service>/jarvis/config/*</service>
+          </services>
+        </profile>
+      </profiles>
+    </enclave>
+
     <enclave path="/jarvis/medkit">
       <profiles>
         <profile ns="/jarvis/bridges" node="medkit">

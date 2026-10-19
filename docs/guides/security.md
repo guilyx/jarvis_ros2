@@ -24,6 +24,7 @@ enclave of its own, with what it uses and nothing else:
 |---------|---------|-----|
 | `/jarvis/container` | the core: event hub, fault manager, rules, recovery, bridges, recorder, black box | publish `/jarvis/**` (the stream, faults, executions), serve Jarvis' services and actions, read any topic and call any service or action (it records, bridges and watches the robot, and recoveries act on it) |
 | `/jarvis/lake` | `jarvis-lake` | publish `/jarvis/ingest` and diagnostics; read `/jarvis/faults` and closed splits |
+| `/jarvis/config` | `config_sync` (`config_from`) | publish `/jarvis/ingest` and diagnostics; read `/jarvis/faults`; ask the rule engine and the recovery orchestrator to reload |
 | `/jarvis/gateway` | `jarvis-gateway` | read the stream; call the commands operators make (ack, clear, recover, modes, rules) and the agent |
 | `/jarvis/agent` | `jarvis-agent` | publish insights on `/jarvis/ingest`; serve `analyze`; ask for recoveries |
 | `/jarvis/launch` | `ros2 launch` itself | load the components into the container |

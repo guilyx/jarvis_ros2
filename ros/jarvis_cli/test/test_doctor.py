@@ -14,6 +14,7 @@ from jarvis_cli.verb.doctor import (
     clock_check,
     disk_check,
     faults_check,
+    fleet_config_check,
     gateway_check,
     lifecycle_check,
     mode_check,
@@ -119,3 +120,16 @@ def test_report():
         "1 problem(s), 1 warning(s).",
     ]
     assert render("h", [Check("event hub", OK, "active")]).endswith("All good.")
+
+
+def test_fleet_config():
+    status = {"source": "s3://fleet/config", "revision": "4f1c2a9e0b7d", "state": "in-sync", "message": ""}
+    ok = fleet_config_check(status, running=True)
+    assert ok.status == OK and ok.detail == "rules and plans 4f1c2a9e0b7d from s3://fleet/config"
+    refused = fleet_config_check(
+        {**status, "state": "rejected", "message": "rules and plans 9b2e rejected: ...; still on 4f1c"}, True
+    )
+    assert refused.status == WARN and "rejected" in refused.detail and "jarvis.config.rejected" in refused.fix
+    assert "jarvis.env" in fleet_config_check({**status, "state": "offline"}, True).fix
+    stopped = fleet_config_check(status, running=False)
+    assert stopped.status == WARN and "not running" in stopped.detail

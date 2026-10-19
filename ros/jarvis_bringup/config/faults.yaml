@@ -76,6 +76,13 @@ faults:
       until the disk runs short.
     severity: WARN
     heal: { on_clear: true }
+  - code: jarvis.config.rejected
+    description: >-
+      The rules and plans the fleet gives this robot (config_from) were refused: they fail
+      `jarvis lint`, or the rule engine or the recovery orchestrator would not load them. The robot
+      keeps running the rules and plans it had.
+    severity: WARN
+    heal: { on_clear: true }
 
 correlation:
   # Inner servers abort first; the navigator's abort is the fault worth showing.

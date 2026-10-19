@@ -103,6 +103,11 @@ class Gateway:
     def lake_status(self):
         return storage.read_json(self.history.lake.layout.status, None)
 
+    def config_status(self):
+        """Where the robot's rules and plans come from, with config_from (jarvis_fleet): else None."""
+        root = pathlib.Path(self.settings.data_dir).expanduser()
+        return storage.read_json(root / "config" / "status.json", None)
+
     def maintenance(self):
         """The components under maintenance now, from the recovery node's snapshot."""
         now = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%S")
@@ -231,7 +236,8 @@ def create_app(settings, port, notifier=None):
 
     @api.get("/system", tags=["system"])
     def system(who=Depends(viewer)):
-        """Jarvis' own health: lifecycle states of the watched nodes, the lake, notifications."""
+        """Jarvis' own health: lifecycle states of the watched nodes, the lake, where the rules and
+        plans come from, notifications."""
         states = gw.history.events(codes=["ros.lifecycle.*.state"], limit=500)
         components = {}
         for e in reversed(states):  # oldest first, so the newest wins
@@ -251,6 +257,7 @@ def create_app(settings, port, notifier=None):
             "stream_clients": len(gw.clients),
             "components": components,
             "lake": gw.lake_status(),
+            "config": gw.config_status(),
             "notifications": list(gw.notifier.deliveries),
             "webhooks": [w.name for w in settings.webhooks],
         }

@@ -4,12 +4,14 @@ Every robot keeps its own Jarvis and gateway: its faults, rules, recoveries and 
 the robot, and work without a network. To see several robots at once, one gateway lists the others,
 and its dashboard's **Fleet** view shows them side by side, the ones that need someone first; a
 click opens a robot's own dashboard. Their history, uploaded to object storage, answers questions
-across the fleet: which fault costs the most, on which robots, since when.
+across the fleet: which fault costs the most, on which robots, since when. And their rules and
+plans can come from that storage too: change a rule once, every robot takes it.
 
 1. [List the robots](#1-list-the-robots)
 2. [What the fleet view shows](#2-what-the-fleet-view-shows)
 3. [Where to run it](#3-where-to-run-it)
 4. [The fleet's history](#4-the-fleets-history)
+5. [Rules and plans from the fleet](#5-rules-and-plans-from-the-fleet)
 
 ## 1. List the robots
 
@@ -170,4 +172,70 @@ then point the gateway there (never at a real fleet's storage: it is made up):
 
 ```bash
 ros2 run jarvis_lake jarvis-lake demo-history file:///tmp/fleet --robots amr-7,amr-8,amr-9 --days 7
+```
+
+## 5. Rules and plans from the fleet
+
+Ten robots, one rule to change: keep the rules and plans in one place, and each robot takes
+them from there. The robot checks what it gets before it loads it, and keeps what it runs when
+it can't reach the place or doesn't like what it finds.
+
+### Set it up
+
+Put the files in the fleet's storage, shared or per robot:
+
+```
+s3://acme-robots/config/rules/lidar.yaml              every robot's
+s3://acme-robots/config/plans/dock.yaml
+s3://acme-robots/config/robots/amr-07/rules/lidar.yaml   amr-07's lidar is different
+```
+
+Then start each robot with:
+
+```bash
+ros2 launch jarvis_bringup jarvis.launch.py robot_id:=amr-07 \
+    config_from:='s3://acme-robots/config'    # or file:///mnt/fleet/config, an S3 API with ?endpoint_override=...
+```
+
+(On a robot started by systemd: in `JARVIS_LAUNCH_ARGS`, credentials in `jarvis.env`, as for
+the history.) The URI is read as the history's target is (§4), with the same credentials;
+the robot only reads, so its key needs `s3:GetObject` and `s3:ListBucket` on the prefix, no
+more. Each robot looks every `config_period_s` (60 s).
+
+The files are layered by name: the robot's own (its `rules` and `plans` launch arguments) at
+the bottom, the shared ones over them, the robot's directory on top. A file replaces the one of
+the same name below it, the others add to it: ship `plans/dock.yaml` and the robot keeps its
+generic plans too; ship a `rules/core.yaml` with `rules: []` and the robot's `core.yaml` is gone.
+Files that are not YAML (a README) are skipped.
+
+### What the robot does with a new revision
+
+A revision is the set of files, hashed. When the source has a new one:
+
+1. **It settles.** The robot reads it again 5 s later, and goes on only if it is the same: a
+   rule and its new plan half-way through an upload are not a revision.
+2. **`jarvis lint` passes it**: the rules, the plans and the fault catalog fit together (a rule
+   asking for a plan nobody has is refused here).
+3. **The recovery orchestrator and the rule engine check it** with what only they know (the
+   actuators the robot has, their allowlists), without loading it yet.
+4. **They load it**, plans first. If anything fails, the robot goes back to the revision before
+   and loads that again.
+
+A refused revision raises `jarvis.config.rejected` (WARN,
+[runbook](../../ros/jarvis_bringup/config/runbooks/jarvis.config.rejected.md)) with the first
+error, and is not tried again until the source changes. Fix the files, or put the old ones back:
+the fault clears once the robot runs what the source has. Each revision loaded is on the record
+(`jarvis.config.applied`, with the revision before), so the history shows when a rule changed on
+which robot.
+
+The robot keeps its versions under `<data_dir>/config` (`active` is what runs, `versions/` the
+last five, refused ones too, to look at or go back to by hand). It boots on the last revision
+it accepted, offline too. A source that is unreachable, or empty (a wrong prefix, a wiped one),
+changes nothing. The dashboard's System page shows where the rules and plans come from, the
+revision that runs, the last look and what was refused, with every error.
+
+Lint before you upload, with the same check the robot makes:
+
+```bash
+ros2 jarvis lint --rules config/rules --plans config/plans --catalog faults.yaml
 ```

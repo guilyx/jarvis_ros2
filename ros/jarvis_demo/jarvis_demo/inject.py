@@ -99,8 +99,13 @@ def parameter_client(node, relay):
 
 
 def set_inject(node, relay, value):
-    future = parameter_client(node, relay).set_parameters([Parameter("inject", value=value)])
-    rclpy.spin_until_future_complete(node, future, timeout_sec=10.0)
+    # The relay can miss a request sent while discovery is still matching its reply writer to us:
+    # the reply never comes. Ask again (setting a parameter twice is harmless).
+    for _ in range(3):
+        future = parameter_client(node, relay).set_parameters([Parameter("inject", value=value)])
+        rclpy.spin_until_future_complete(node, future, timeout_sec=5.0)
+        if future.done() and future.result() is not None:
+            break
     result = future.result()
     if result is None or not result.results[0].successful:
         raise RuntimeError(f"could not set inject={value} on {relay}")

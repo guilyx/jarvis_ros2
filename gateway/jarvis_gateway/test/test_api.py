@@ -70,6 +70,16 @@ def test_system_lists_lifecycle_states(gw):
     s = gw.get("/api/v1/system")
     assert s["components"]["/jarvis/event_hub"]["state"] == "active"
     assert s["connected"] and s["events_received"] == 2
+    assert s["config"] is None  # rules and plans from the launch, not the fleet
+
+
+def test_system_says_where_the_rules_and_plans_come_from(make_gateway, tmp_path):
+    # config_sync's status (jarvis_fleet), with config_from.
+    status = {"source": "s3://fleet/config", "state": "rejected", "revision": "4f1c2a9e0b7d"}
+    path = tmp_path / "data" / "config" / "status.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(status))
+    assert make_gateway().get("/api/v1/system")["config"] == status
 
 
 # -- events ----------------------------------------------------------------------------------------

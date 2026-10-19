@@ -11,6 +11,7 @@ This declares the quality of the Jarvis packages against the ROS 2 quality categ
 | `jarvis_reporter` | C++ header and Python client library |
 | `jarvis_medkit` | Python ROS node: ros2_medkit's faults into Jarvis (optional) |
 | `jarvis_mqtt` | Python ROS node: devices that don't run ROS, over MQTT (optional) |
+| `jarvis_fleet` | Python ROS node: rules and plans from the fleet's storage (optional) |
 | `jarvis_cli`, `jarvis_bringup`, `jarvis_demo` | `ros2 jarvis`, launch and configuration, the demo |
 | `jarvis_lake`, `jarvis_gateway`, `jarvis_agent` | Python services |
 | `jarvis_mcp` | Python client of the gateway (MCP server for AI assistants), standard library only |

@@ -754,7 +754,8 @@ export interface paths {
     };
     /**
      * System
-     * @description Jarvis' own health: lifecycle states of the watched nodes, the lake, notifications.
+     * @description Jarvis' own health: lifecycle states of the watched nodes, the lake, where the rules and
+     *     plans come from, notifications.
      */
     get: operations["system_api_v1_system_get"];
     put?: never;

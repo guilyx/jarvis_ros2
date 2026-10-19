@@ -108,7 +108,8 @@ and summarized at the end. A package moves up once its gaps close.
 
 - [x] **Tier 1 of ROS 2 Jazzy and Lyrical Luth**: Ubuntu 24.04 and 26.04 on amd64, both built and
   tested in CI on every change.
-- [ ] **arm64** (most robot computers): builds, but not tested in CI yet.
+- [x] **arm64** (most robot computers): ROS 2 Jazzy built and tested in CI on a native ARM64
+  runner, and the Docker demo's smoke test; the release images are amd64 and arm64.
 - [ ] **A second RMW in CI**: CI runs Fast DDS (the default); the SROS2 test also passes on
   Cyclone DDS, outside CI.
 
@@ -125,4 +126,4 @@ and summarized at the end. A package moves up once its gaps close.
 2. A generated C++ API reference.
 3. clang-tidy or CodeQL in CI.
 4. rosdep keys (or vendored packages) for the Python services' dependencies.
-5. arm64 and a second RMW in CI.
+5. A second RMW in CI.

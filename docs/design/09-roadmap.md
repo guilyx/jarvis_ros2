@@ -112,8 +112,15 @@ Where it goes from here (October 2026): robots run more than Nav2 (vendor driver
 | 8.7 ✔ | Behavior trees ([guide](../guides/behavior-trees.md), `jarvis_bt`): `bt.run` runs a BehaviorTree.CPP 4 tree as a recovery step, from the recovery node's `bt.trees_dir`, with its blackboard from the step, behind the plan's gates, lock, timeout and audit; the step's message says what each named branch did and why the last failure failed. Jarvis nodes for any tree: `JarvisCallService` and `JarvisSendGoal` (any service or action, types by name), `JarvisFaultActive` and `JarvisWaitFaultCleared` (Jarvis's open faults); also a BT plugin library (`jarvis_bt_nodes`) for a robot's own trees, e.g. Nav2's. Ships `restart_lifecycle_node.xml`; the demo's tree scenario (`trees.launch.py`) |
 | 8.8 ✔ | Build a rule ([operator guide](../guides/operator.md#7-rules)): a rule from a form in the rule lab, no YAML. A fault and its state (or any event), on a component, optionally N times within a window; not while a safety fault is open; run a plan (its arguments filled from the fault), notify, open or escalate the incident, ask the agent; per component, cooldown, rate limit, shadow mode on by default. The YAML is shown as it is built, backtested as if live, and opens in the YAML editor for what the form doesn't cover |
 
+### M9 — On real robots
+Jarvis has run on laptops, in CI and in Docker. Robots are ARM64 boards that boot unattended, with a disk that fills, a clock that may not be set, and a team that needs to know Jarvis is ready before the robot drives off.
+
+| PR | Content |
+|----|---------|
+| 9.1 ✔ | Robot bring-up ([guide](../guides/robot.md)): ARM64 built and tested in CI on a native ARM runner (ROS 2 Jazzy, and the Docker demo's smoke test); release images for amd64 and arm64 under one tag, each built natively; a systemd unit and its settings file (`jarvis_bringup/systemd`: its own user, after the time sync, SIGINT then 30 s, restart on failure); `ros2 jarvis doctor`: the nodes and their lifecycle state, the recovery mode, plans, rules, open faults, the data disk, the recorder, the clock's sync and the gateway, each problem with its fix, exit code 1 on a problem, `--json` |
+
 ### Later (v2+)
-Fleet (Parquet to object storage) · real-robot bring-up (ARM64) · Foxglove panel · Zenoh for non-ROS producers.
+Fleet (Parquet to object storage) · Foxglove panel · Zenoh for non-ROS producers.
 
 ## Demo scenarios (Nav2 simulation)
 
@@ -144,7 +151,7 @@ Each scenario is a `launch_testing` case (nightly with Gazebo) and a recorded ba
 | Agent | pytest + `FakeLLM`; eval suite | Harness checks, policy, budgets; quality via evals |
 | Gateway | pytest + httpx + WS client | API contract, auth, resume protocol |
 | UI | Vitest + Playwright | Views, approval flow, live updates |
-| Performance | Google Benchmark + soak scripts | NFR-1…5 on x86 (ARM64 later) |
+| Performance | Google Benchmark + soak scripts | NFR-1…5 on x86 (ARM64: functional tests in CI, not benchmarked) |
 
 ## Definition of done (every PR)
 - [ ] CI green (lint, build, tests, sanitizers where applicable)

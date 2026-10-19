@@ -3,7 +3,7 @@
 <package format="3">
   <name>jarvis_cli</name>
   <version>0.1.0</version>
-  <description>`ros2 jarvis`: faults, rules, recovery, approvals, the kill switch, bag export and backtests.</description>
+  <description>`ros2 jarvis`: faults, rules, recovery, approvals, the kill switch, bag export, backtests and the doctor.</description>
   <maintainer email="erwin.lejeune15@gmail.com">Erwin L.</maintainer>
   <license>Apache-2.0</license>
   <url type="website">https://github.com/guilyx/jarvis_ros2</url>
@@ -12,6 +12,8 @@
 
   <exec_depend>jarvis_core</exec_depend>
   <exec_depend>jarvis_interfaces</exec_depend>
+  <exec_depend>lifecycle_msgs</exec_depend>
+  <exec_depend>rcl_interfaces</exec_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>ros2cli</exec_depend>
   <exec_depend>rosbag2_py</exec_depend>

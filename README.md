@@ -128,6 +128,7 @@ ros2 jarvis recover restart-lifecycle-node -a node=/scan_relay -a component=lida
 ros2 jarvis mode DISABLED            # kill switch (DRY_RUN: decide everything, move nothing)
 ros2 jarvis maintenance lidar 2h    # working on it: rules and the agent keep off, pages silenced
 ros2 jarvis executions --steps       # what runs, what waits for approval, what just finished
+ros2 jarvis doctor                   # is Jarvis ready on this robot? each problem with its fix
 ```
 
 Before shipping rules, check them and replay a recording through them:
@@ -301,6 +302,7 @@ both. A nightly soak runs the stack for 15 minutes at 500 events/s
 | For | Guide |
 |-----|-------|
 | Putting Jarvis on your robot | [docs/guides/integration.md](docs/guides/integration.md) |
+| The robot computer: ARM64, Docker, systemd, disk, clock, `ros2 jarvis doctor` | [docs/guides/robot.md](docs/guides/robot.md) |
 | Rules and recovery plans, ready to copy | [docs/guides/rules-cookbook.md](docs/guides/rules-cookbook.md) |
 | The people on shift | [docs/guides/operator.md](docs/guides/operator.md) |
 | Production security: SROS2, TLS, single sign-on, what a model sees | [docs/guides/security.md](docs/guides/security.md) |

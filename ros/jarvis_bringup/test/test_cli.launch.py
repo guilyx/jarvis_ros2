@@ -3,7 +3,9 @@
 """`ros2 jarvis` (jarvis_cli) against a running Jarvis (event hub, fault manager, rule engine,
 recovery). Here rather than in jarvis_cli: the gateway uses jarvis_cli, and the bringup the gateway."""
 
+import json
 import pathlib
+import re
 import subprocess
 import tempfile
 import time
@@ -104,6 +106,22 @@ class TestCli(unittest.TestCase):
         self.assertIn("maintenance of thing ended", jarvis("maintenance", "thing", "--end").stdout)
         self.assertIn("nothing under maintenance", jarvis("maintenance").stdout)
         self.assertEqual(jarvis("maintenance", "thing", "--end", check=False).returncode, 1)
+
+    def test_4c_doctor(self):
+        out = jarvis("doctor", "--no-gateway", check=False)
+        self.assertIn("Jarvis doctor · test-bot", out.stdout)
+        for name in ("event hub", "fault manager", "rule engine", "recovery"):
+            self.assertRegex(out.stdout, rf"✓ {name}\s+active", out.stdout)
+        self.assertRegex(out.stdout, r"✓ recovery mode\s+ENABLED")
+        self.assertRegex(out.stdout, r"✓ plans\s+\d+ loaded")
+        self.assertRegex(out.stdout, r"✓ rules\s+\d+ loaded")
+        # This test runs no recorder: a problem, with what to do, and the exit code says so.
+        self.assertRegex(out.stdout, r"✗ recordings\s+the recorder is not running")
+        self.assertEqual(out.returncode, 1, out.stdout)
+        report = json.loads(jarvis("doctor", "--no-gateway", "--json", check=False).stdout)
+        self.assertEqual(report["robot"], "test-bot")
+        self.assertEqual(report["problems"], 1, report)
+        self.assertTrue(re.match(r"\w+", report["arch"]))
 
     def test_5_services_and_errors(self):
         self.assertIn("rules are valid", jarvis("rules", "reload", "--check").stdout)

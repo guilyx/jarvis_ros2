@@ -1,0 +1,45 @@
+# Jarvis on a robot, started at boot and restarted if it dies (docs/guides/robot.md):
+#
+#   share=$(ros2 pkg prefix jarvis_bringup)/share/jarvis_bringup/systemd
+#   sudo useradd --system --home-dir /var/lib/jarvis --shell /usr/sbin/nologin jarvis
+#   sudo install -D -m 644 "$share/jarvis.env" /etc/jarvis/jarvis.env   # then edit it
+#   sudo install -m 644 "$share/jarvis.service" /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now jarvis
+#   ros2 jarvis doctor
+#
+# Changes go in /etc/jarvis/jarvis.env, or `systemctl edit jarvis` for the unit itself.
+[Unit]
+Description=Jarvis: fault detection and recovery for this robot
+Documentation=https://github.com/guilyx/jarvis_ros2/blob/main/docs/guides/robot.md
+# Event times come from this clock: start after the time sync (docs/guides/robot.md §5).
+Wants=network-online.target
+After=network-online.target time-sync.target
+
+[Service]
+Type=exec
+User=jarvis
+Group=jarvis
+EnvironmentFile=/etc/jarvis/jarvis.env
+# /var/lib/jarvis, owned by the jarvis user: recordings, black boxes, the lake, fault state. The
+# nodes' log files in /var/log/jarvis; their output in the journal (journalctl -u jarvis).
+StateDirectory=jarvis
+LogsDirectory=jarvis
+Environment=ROS_LOG_DIR=/var/log/jarvis
+WorkingDirectory=/var/lib/jarvis
+ExecStart=/bin/bash -c 'source "${ROS_SETUP}" && exec ros2 launch jarvis_bringup jarvis.launch.py \
+  robot_id:="${JARVIS_ROBOT_ID}" data_dir:="${JARVIS_DATA}" ${JARVIS_LAUNCH_ARGS}'
+# SIGINT to ros2 launch, like Ctrl-C: it stops the nodes and the recorder finalizes its MCAP
+# files. What is left after 30 s gets SIGKILL, which loses at most the last chunk (the lake and
+# the fault state recover on the next start).
+KillSignal=SIGINT
+KillMode=mixed
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

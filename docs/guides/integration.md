@@ -1,6 +1,6 @@
 # Putting Jarvis on your robot
 
-From a working ROS 2 Jazzy robot to Jarvis recording its faults, restarting what hangs, and
+From a working ROS 2 robot (Jazzy or Lyrical Luth) to Jarvis recording its faults, restarting what hangs, and
 showing all of it in a dashboard. Each step works on its own: stop after the first three and you
 already have fault records, incidents, history and the dashboard; rules and recovery come next.
 

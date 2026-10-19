@@ -93,8 +93,8 @@ Where it is going next (October 2026): ROS 2 Lyrical Luth, the new LTS (May 2026
 
 | PR | Content |
 |----|---------|
-| 7.1 | QoS watchdog: a subscription whose QoS its publisher cannot match gets nothing, silently. `ros.topic.qos_incompatible` per topic, from the QoS of every endpoint on the graph (rmw's own check), with which pair and why; it clears once they match |
-| 7.2 | ROS 2 Lyrical Luth (LTS): the ROS packages built and tested on Lyrical in CI, the Docker image on either distro |
+| 7.1 ✔ | QoS watchdog: a subscription whose QoS its publisher cannot match gets nothing, silently. `ros.topic.qos_incompatible` per topic, from the QoS of every endpoint on the graph (rmw's own check), with which pair and why; it clears once they match |
+| 7.2 ✔ | ROS 2 Lyrical Luth (LTS): the ROS packages built and tested on Lyrical in CI (Ubuntu 26.04, Python 3.14), next to Jazzy. The Docker image stays on Jazzy (`ROS_DISTRO` builds another) |
 | 7.3 | VDA 5050: Jarvis's open faults as the `errors` of a robot's VDA 5050 state (MQTT), for the fleet manager |
 | 7.4 | Fleet view: one dashboard over several robots' gateways (read-only), faults and incidents side by side |
 

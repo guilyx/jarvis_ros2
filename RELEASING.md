@@ -46,6 +46,7 @@ and add the repository to `rosdistro`; then for each release:
 
 ```bash
 bloom-release --rosdistro jazzy --track jazzy jarvis_ros2     # --new-track the first time
+bloom-release --rosdistro lyrical --track lyrical jarvis_ros2
 ```
 
 bloom reads each `package.xml` and `CHANGELOG.rst`. The three Python services (`jarvis_lake`,

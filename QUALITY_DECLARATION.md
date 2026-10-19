@@ -93,7 +93,7 @@ and summarized at the end. A package moves up once its gaps close.
 
 ## 5. Dependencies
 
-- [x] **Direct ROS dependencies** are released ROS 2 Jazzy packages (rclcpp, rclpy, rosbag2,
+- [x] **Direct ROS dependencies** are released ROS 2 Jazzy and Lyrical packages (rclcpp, rclpy, rosbag2,
   lifecycle, Nav2's interfaces, sros2 ...).
 - [x] **Non-ROS C++ dependencies**: yaml-cpp and nlohmann-json, through their rosdep keys.
 - [ ] **Non-ROS Python dependencies.** The Python services pin their dependencies by version in
@@ -105,7 +105,8 @@ and summarized at the end. A package moves up once its gaps close.
 
 ## 6. Platform support
 
-- [x] **Tier 1 of ROS 2 Jazzy**: Ubuntu 24.04 on amd64, tested in CI on every change.
+- [x] **Tier 1 of ROS 2 Jazzy and Lyrical Luth**: Ubuntu 24.04 and 26.04 on amd64, both built and
+  tested in CI on every change.
 - [ ] **arm64** (most robot computers): builds, but not tested in CI yet.
 - [ ] **A second RMW in CI**: CI runs Fast DDS (the default); the SROS2 test also passes on
   Cyclone DDS, outside CI.

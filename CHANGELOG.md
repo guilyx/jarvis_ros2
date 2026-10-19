@@ -7,8 +7,8 @@ schemas, the rule and plan languages or the API is a new major version.
 
 ## Forthcoming
 
-The first release: record, manage and recover from faults on ROS 2 Jazzy robots, with history,
-a dashboard and an agent that explains what happened.
+The first release: record, manage and recover from faults on ROS 2 Jazzy and Lyrical Luth
+robots, with history, a dashboard and an agent that explains what happened.
 
 ### Record and manage faults
 - One event stream for everything Jarvis knows: faults, rule matches, recovery steps, insights,

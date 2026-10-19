@@ -599,6 +599,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/rules:suggest": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Suggest Rules
+     * @description The rules operators keep doing by hand: a plan they ran, after the same fault, at least
+     *     `min_runs` times in the last `hours`, that no rule of the robot already does. Each comes with
+     *     the runs behind it and a draft rule for the rule lab.
+     */
+    get: operations["suggest_rules_api_v1_rules_suggest_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/rules:validate": {
     parameters: {
       query?: never;
@@ -1434,6 +1456,100 @@ export interface components {
       top_codes: {
         [key: string]: unknown;
       }[];
+    } & {
+      [key: string]: unknown;
+    };
+    /**
+     * Suggestion
+     * @description A rule operators keep doing by hand: a plan, after a fault, again and again.
+     */
+    Suggestion: {
+      /** Args */
+      args?: {
+        [key: string]: string;
+      };
+      /** Code */
+      code: string;
+      /** Components */
+      components?: string[];
+      /** Evidence */
+      evidence?: components["schemas"]["SuggestionRun"][];
+      /** First */
+      first: string;
+      /** Id */
+      id: string;
+      /** Last */
+      last: string;
+      /**
+       * Median After S
+       * @default 0
+       */
+      median_after_s: number;
+      /** Operators */
+      operators?: string[];
+      /** Plan */
+      plan: string;
+      /** Runs */
+      runs: number;
+      /**
+       * Succeeded
+       * @default 0
+       */
+      succeeded: number;
+      /**
+       * Yaml
+       * @description the draft rule, for the rule lab
+       */
+      yaml: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /**
+     * SuggestionRun
+     * @description One recovery an operator ran, and the fault it answered.
+     */
+    SuggestionRun: {
+      /**
+       * After S
+       * @description seconds from the fault going active to the operator's run
+       * @default 0
+       */
+      after_s: number;
+      /** At */
+      at: string;
+      /**
+       * Component
+       * @default
+       */
+      component: string;
+      /** Execution Id */
+      execution_id: string;
+      /**
+       * Fault Event Id
+       * @default
+       */
+      fault_event_id: string;
+      /**
+       * Operator
+       * @default
+       */
+      operator: string;
+      /**
+       * Outcome
+       * @default
+       */
+      outcome: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /** Suggestions */
+    Suggestions: {
+      /** Events */
+      events: number;
+      /** Hours */
+      hours: number;
+      /** Suggestions */
+      suggestions?: components["schemas"]["Suggestion"][];
     } & {
       [key: string]: unknown;
     };
@@ -2737,6 +2853,41 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Outcome"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  suggest_rules_api_v1_rules_suggest_get: {
+    parameters: {
+      query?: {
+        hours?: number;
+        min_runs?: number;
+        token?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Suggestions"];
         };
       };
       /** @description Validation Error */

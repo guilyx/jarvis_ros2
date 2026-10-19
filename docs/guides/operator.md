@@ -149,6 +149,15 @@ same rule engine, with its other rules and its plans in dry run. You see:
   Unchanged, a rule makes the same decisions, event for event: that is how you know the replay
   can be trusted.
 
+**Suggestions.** When operators keep running the same plan by hand after the same fault, the rule
+lab says so: *What your operators keep doing by hand* lists the plan, the fault, how many times,
+by whom, on which components and how long after the fault they acted (the last 7 days, two runs
+or more, and nothing a rule already does). *Draft the rule* writes the rule that would have done
+it, with what came from the fault as templates (`{{ event.source.component }}`,
+`{{ event.attrs.node }}`), and backtests it over those runs. A run counts when it answered an open
+fault: the fault of its incident (a plan run from the fault's page), else the fault its args name.
+The **Rules** page shows how many there are.
+
 Nothing changes on the robot. To deploy the rule, put it in the robot's rules directory
 (`rules:=`) and *Reload from disk*. The draft is checked like *Validate YAML…* first: a draft
 with errors isn't replayed. Your last draft stays in this browser.

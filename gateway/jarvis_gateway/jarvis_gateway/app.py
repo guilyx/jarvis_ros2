@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from jarvis_lake import model, storage
 
-from jarvis_gateway import __version__, auth, backtest, bags, fleet, models, sovd, stream, vda5050
+from jarvis_gateway import __version__, auth, backtest, bags, fleet, models, sovd, stream, suggest, vda5050
 from jarvis_gateway.catalog import Catalog
 from jarvis_gateway.history import History
 from jarvis_gateway.metrics import Metrics
@@ -477,6 +477,17 @@ def create_app(settings, port, notifier=None):
     async def validate(body: models.Validate, who=Depends(admin)):
         """Checks rules YAML with `jarvis lint` against the loaded plans and catalog. Changes nothing."""
         return await asyncio.to_thread(_lint, settings, body.yaml)
+
+    @api.get("/rules:suggest", response_model=models.Suggestions, tags=["rules"])
+    async def suggest_rules(
+        who=Depends(viewer),
+        hours: float = Query(168, gt=0, le=24 * 30),
+        min_runs: int = Query(2, ge=2, le=100),
+    ):
+        """The rules operators keep doing by hand: a plan they ran, after the same fault, at least
+        `min_runs` times in the last `hours`, that no rule of the robot already does. Each comes with
+        the runs behind it and a draft rule for the rule lab."""
+        return await asyncio.to_thread(suggest.suggest, gw.history, hours, settings.lint_rules_dir, min_runs)
 
     @api.post("/rules:backtest", response_model=models.Backtest, tags=["rules"])
     async def backtest_rules(body: models.BacktestRequest, who=Depends(admin)):

@@ -19,6 +19,9 @@ namespace
 {
 
 constexpr const char * kSchema = "jarvis.recovery.state/v1";
+// The args on an execution's first event (arg.<name>): the hub allows 32 attributes per event.
+constexpr std::size_t kMaxArgAttrs = 16;
+constexpr std::size_t kMaxArgAttrBytes = 256;
 
 std::string upper(std::string_view text)
 {
@@ -438,6 +441,17 @@ void Orchestrator::emit(
   }
   if (!x.ladder_of.empty()) {
     e.attrs["ladder_of"] = x.ladder_of;
+  }
+  // An execution's first event says what it was asked with, so its history tells two runs of a
+  // plan apart (and the rule lab can draft a rule from what operators ran).
+  if (x.last_event_id.empty()) {
+    std::size_t n = 0;
+    for (const auto & [k, v] : x.args) {
+      if (n++ == kMaxArgAttrs) {
+        break;
+      }
+      e.attrs["arg." + k] = v.size() > kMaxArgAttrBytes ? v.substr(0, kMaxArgAttrBytes) : v;
+    }
   }
   for (auto & [k, v] : extra) {
     e.attrs[k] = std::move(v);

@@ -2,6 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { ApiError, client, unwrap } from "./client";
 import type {
   Backtest,
+  Suggestion,
   Bag,
   ComponentHealth,
   ExecutionRecord,
@@ -395,6 +396,16 @@ export const useValidateRules = () =>
       unwrap<Outcome & { data: { findings: LintFinding[] } }>(
         client.POST("/api/v1/rules:validate", { body: { yaml } }),
       ),
+  });
+
+export const useRuleSuggestions = (hours = 168) =>
+  useQuery({
+    queryKey: ["rule-suggestions", hours],
+    queryFn: () =>
+      unwrap<{ hours: number; events: number; suggestions: Suggestion[] }>(
+        client.GET("/api/v1/rules:suggest", { params: { query: { hours } } }),
+      ),
+    staleTime: 60_000,
   });
 
 export const useBacktestRules = () =>

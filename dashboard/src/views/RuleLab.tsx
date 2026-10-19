@@ -1,8 +1,8 @@
 import { Link, useSearch } from "@tanstack/react-router";
-import { FlaskConical } from "lucide-react";
+import { FlaskConical, WandSparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useBacktestRules, useRule } from "@/api/queries";
-import type { Backtest, BacktestCause, BacktestMatch, BacktestRecovery } from "@/api/types";
+import { useBacktestRules, useRule, useRuleSuggestions } from "@/api/queries";
+import type { Backtest, BacktestCause, BacktestMatch, BacktestRecovery, Suggestion } from "@/api/types";
 import { Chart, chartColors, type ChartOption } from "@/components/Chart";
 import {
   Empty,
@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Label, Select, Textarea } from "@/components/ui/input";
 import { useCan } from "@/lib/auth";
-import { clock, dateTime, toMs } from "@/lib/format";
+import { ago, clock, dateTime, duration, toMs } from "@/lib/format";
 import { useTheme } from "@/lib/theme";
 
 export interface RuleLabSearch {
@@ -55,6 +55,12 @@ export function asDocument(rule: string): string {
   const lines = rule.trimEnd().split("\n");
   const body = lines.map((l, i) => (i === 0 ? `  - ${l}` : l ? `    ${l}` : ""));
   return ["schema: jarvis.rules/v1", "rules:", ...body].join("\n") + "\n";
+}
+
+/** The shortest window that replays everything since `iso` (the oldest run of a suggestion). */
+export function windowFor(iso: string, now = Date.now()): number {
+  const age = (now - (toMs(iso) ?? now)) / 3_600_000;
+  return (WINDOWS.find((w) => w.hours >= age + 0.05) ?? WINDOWS[WINDOWS.length - 1]!).hours;
 }
 
 function readDraft(): string | null {
@@ -391,6 +397,45 @@ function Results({ b }: { b: Backtest }) {
   );
 }
 
+/** What operators keep doing by hand, as rules to draft (GET /rules:suggest, the last 7 days). */
+function Suggestions({ onDraft }: { onDraft: (s: Suggestion) => void }) {
+  const suggestions = useRuleSuggestions();
+  const list = suggestions.data?.suggestions ?? [];
+  if (!list.length) return null;
+  return (
+    <Card data-testid="lab-suggestions">
+      <CardHeader
+        title="What your operators keep doing by hand"
+        actions={<span className="text-xs text-muted-fg">last 7 days</span>}
+      />
+      <ul className="divide-y divide-border">
+        {list.map((s) => (
+          <li
+            key={s.id}
+            className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+            data-testid="lab-suggestion"
+          >
+            <div className="min-w-0 space-y-0.5">
+              <div className="text-sm">
+                <Mono className="text-fg">{s.plan}</Mono> <span className="text-muted-fg">after</span>{" "}
+                <Mono>{s.code}</Mono>
+              </div>
+              <div className="text-xs text-muted-fg">
+                Run by hand {s.runs} times by {s.operators.join(", ") || "operators"}
+                {s.components.length ? ` on ${s.components.join(", ")}` : ""} · {s.succeeded} succeeded ·{" "}
+                {duration(s.median_after_s)} after the fault (median) · last {ago(s.last)}
+              </div>
+            </div>
+            <Button onClick={() => onDraft(s)}>
+              <WandSparkles size={14} /> Draft the rule
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 export function RuleLab() {
   const search = useSearch({ from: "/rules/lab" });
   const from = useRule(search.rule ?? "");
@@ -412,6 +457,14 @@ export function RuleLab() {
     saveDraft(text);
     backtest.mutate({ yaml: text, hours });
   };
+  // A suggestion: its draft, backtested over the window its runs are in.
+  const draft = (s: Suggestion) => {
+    const h = windowFor(s.first);
+    setText(s.yaml);
+    setHours(h);
+    saveDraft(s.yaml);
+    if (can("admin")) backtest.mutate({ yaml: s.yaml, hours: h });
+  };
   const b = backtest.data;
   const findings = b?.findings ?? [];
 
@@ -429,6 +482,7 @@ export function RuleLab() {
         replayed through the same engine, with the robot's other rules and its plans in dry run. Nothing
         changes on the robot; to deploy, put the rule in the robot's rules directory and reload.
       </p>
+      <Suggestions onDraft={draft} />
       <Card>
         <CardBody className="space-y-3">
           <Textarea

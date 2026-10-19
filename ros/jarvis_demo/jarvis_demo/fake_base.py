@@ -163,6 +163,10 @@ def main(args=None):
         executor.spin()
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except RuntimeError:
+        # SIGINT can shut ROS down while a message is being taken (rclpy on Lyrical raises then).
+        if rclpy.ok():
+            raise
     finally:
         node.destroy_node()
         rclpy.try_shutdown()

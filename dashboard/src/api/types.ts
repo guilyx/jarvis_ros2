@@ -491,8 +491,26 @@ export interface SystemInfo {
   stream_clients: number;
   components: Record<string, { state: string; since: string }>;
   lake: LakeStatus | null;
+  config?: ConfigStatus | null; // with config_from: the rules and plans from the fleet
   notifications: Delivery[];
   webhooks: string[];
+}
+
+/** Where the robot's rules and plans come from, with config_from (docs/guides/fleet.md §5). */
+export interface ConfigStatus {
+  source: string; // without credentials
+  robot: string;
+  state: "starting" | "in-sync" | "settling" | "applied" | "rejected" | "offline" | "empty" | "waiting";
+  message: string;
+  revision: string | null; // what the rule engine and the recovery orchestrator run
+  files: { rules?: string[]; plans?: string[] };
+  from_fleet: { rules?: string[]; plans?: string[] }; // the files the fleet gives; the others are the robot's own
+  applied_at: number | null; // unix seconds
+  last_check_at: number | null;
+  last_error: string;
+  rejected: { revision: string | null; at: number; errors: string[] } | null;
+  warnings: string[]; // jarvis lint's, on what runs
+  ignored: string[]; // files at the source that are no rule or plan file
 }
 
 export type Role = "viewer" | "operator" | "admin";

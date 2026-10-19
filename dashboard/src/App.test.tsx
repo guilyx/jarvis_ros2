@@ -252,6 +252,26 @@ function api(role: "viewer" | "operator") {
           components: {},
           notifications: [],
           webhooks: [],
+          config: {
+            source: "s3://fleet/config",
+            robot: "bot-7",
+            state: "rejected",
+            message:
+              "rules and plans 9b2e41c07d3a rejected: rules/lidar.yaml: rule 'lidar' ...; still on 4f1c2a9e0b7d",
+            revision: "4f1c2a9e0b7d",
+            files: { rules: ["lidar.yaml", "nav.yaml"], plans: ["core.yaml"] },
+            from_fleet: { rules: ["lidar.yaml", "nav.yaml"], plans: [] },
+            applied_at: Date.now() / 1000 - 3600,
+            last_check_at: Date.now() / 1000 - 30,
+            last_error: "",
+            rejected: {
+              revision: "9b2e41c07d3a",
+              at: Date.now() / 1000 - 600,
+              errors: ["rules/lidar.yaml: rule 'lidar': recovers with unknown plan 'restart-lidar'"],
+            },
+            warnings: [],
+            ignored: [],
+          },
           lake: {
             rows: 1200,
             upload: {
@@ -416,6 +436,18 @@ describe("dashboard", () => {
     expect(waiting).toHaveTextContent("(behind)");
     expect(screen.getByText(/OSError: unreachable/)).toBeInTheDocument();
     expect(screen.getByText("2 file(s)")).toBeInTheDocument(); // lost before upload
+  });
+
+  it("shows the rules and plans from the fleet, and what it refused", async () => {
+    api("viewer");
+    renderApp("/system");
+    const card = await screen.findByTestId("fleet-config");
+    expect(within(card).getByText("s3://fleet/config")).toBeInTheDocument();
+    expect(within(card).getByText("4f1c2a9e0b7d")).toBeInTheDocument();
+    expect(within(card).getByText("2 file(s): all from the fleet")).toBeInTheDocument();
+    expect(within(card).getByText("1 file(s): none from the fleet")).toBeInTheDocument();
+    expect(within(card).getByTestId("fleet-config-state")).toHaveClass("text-amber-500");
+    expect(within(card).getByTestId("fleet-config-errors")).toHaveTextContent("unknown plan 'restart-lidar'");
   });
 
   it("shows the fleet's history: the worst robot first, what costs the fleet most", async () => {

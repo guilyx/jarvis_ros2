@@ -18,6 +18,9 @@ The gateway (jarvis_gateway) serves the API, live stream and dashboard on gatewa
 (jarvis_agent) analyzes incidents and failed recoveries through it and publishes insights.
 
 Rules and plans are directories of YAML files (`rules`, `plans`); the defaults ship generic ones.
+A fleet keeps them in one place: `config_from:=s3://bucket/config` (or file:///mnt/share), and the
+robot loads what passes `jarvis lint`, keeping what it had otherwise (jarvis_fleet, under
+<data_dir>/config; `rules` and `plans` are then the robot's own, the fleet's files go over them).
 
 A robot that runs ros2_medkit: `medkit:=true` reports the faults its fault manager confirms to Jarvis
 (jarvis_medkit; docs/guides/integration.md). Devices that don't run ROS (a BMS, a charger, a PLC):
@@ -47,6 +50,11 @@ ARGUMENTS = {
     "catalog": (str(SHARE / "config" / "faults.yaml"), "Fault catalog (jarvis.faults/v1)"),
     "rules": (str(SHARE / "config" / "rules"), "Directory of rules (jarvis.rules/v1)"),
     "plans": (str(SHARE / "config" / "plans"), "Directory of recovery plans (jarvis.plans/v1)"),
+    "config_from": (
+        "",
+        "Take rules and plans from the fleet's storage: s3://bucket/prefix, file:///mnt/share",
+    ),
+    "config_period_s": ("60", "How often the robot looks for new rules and plans at config_from"),
     "recovery": ("true", "Run the rule engine and the recovery orchestrator"),
     "recovery_mode": ("ENABLED", "Initial recovery mode: ENABLED, DRY_RUN or DISABLED"),
     "params_file": (str(SHARE / "config" / "jarvis.yaml"), "Parameters of the Jarvis components"),
@@ -128,6 +136,17 @@ def _setup(context):
     state = {"state_dir": str(data_dir / "state")}
     fast = [{"use_intra_process_comms": True}]
 
+    rules, plans = arg["rules"], arg["plans"]
+    fleet_config = bool(arg["config_from"]) and _flag(arg["recovery"])
+    if fleet_config:
+        # The rule engine and the recovery orchestrator load the version config_sync makes active;
+        # the launch's rules and plans are the robot's own (the fleet's files go over them), and
+        # the first version on a first start.
+        from jarvis_fleet import config as fleet
+
+        active = fleet.Store(data_dir / "config").seed(rules, plans)
+        rules, plans = str(active / "rules"), str(active / "plans")
+
     nodes = [
         ComposableNode(
             package="jarvis_ros",
@@ -154,7 +173,7 @@ def _setup(context):
                 plugin="jarvis_ros::RuleEngineNode",
                 name="rule_engine",
                 namespace="jarvis",
-                parameters=[*files, {**common, **state, "rules_dir": arg["rules"]}],
+                parameters=[*files, {**common, **state, "rules_dir": rules}],
                 extra_arguments=fast,
             ),
             ComposableNode(
@@ -164,7 +183,7 @@ def _setup(context):
                 namespace="jarvis",
                 parameters=[
                     *files,
-                    {**common, **state, "plans_dir": arg["plans"], "mode": arg["recovery_mode"]},
+                    {**common, **state, "plans_dir": plans, "mode": arg["recovery_mode"]},
                 ],
                 extra_arguments=fast,
             ),
@@ -297,6 +316,29 @@ def _setup(context):
                 output="screen",
             )
         )
+    if fleet_config:
+        processes.append(
+            Node(
+                package="jarvis_fleet",
+                executable="config_sync",
+                name="config",
+                namespace="jarvis",
+                additional_env=enclave("config"),
+                arguments=[
+                    "--source",
+                    arg["config_from"],
+                    "--robot",
+                    arg["robot_id"],
+                    "--data-dir",
+                    str(data_dir),
+                    "--catalog",
+                    arg["catalog"],
+                    "--period",
+                    arg["config_period_s"],
+                ],
+                output="screen",
+            )
+        )
     if _flag(arg["gateway"]):
         config = ["--config", arg["gateway_config"]] if arg["gateway_config"] else []
         if arg["gateway_dashboard"]:
@@ -321,9 +363,9 @@ def _setup(context):
                     "--runbooks",  # the runbooks of the codes Jarvis' bridges raise
                     str(SHARE / "config" / "runbooks"),
                     "--rules",  # the rule lab backtests drafts with the robot's rules and plans
-                    arg["rules"],
+                    rules,
                     "--plans",
-                    arg["plans"],
+                    plans,
                 ],
                 output="screen",
             )

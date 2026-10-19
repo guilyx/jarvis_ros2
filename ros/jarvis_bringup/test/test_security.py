@@ -147,3 +147,15 @@ def test_the_gateway_enclave_allows_what_the_gateway_calls():
     assert not missing, f"add to the gateway's enclave in {POLICY.name}: {missing}"
     for action in ("/jarvis/recovery/execute", "/jarvis/agent/analyze"):
         assert any(fnmatch.fnmatchcase(action, a) for a in calls), action
+
+
+def test_the_config_enclave_allows_the_reloads_config_sync_asks_for():
+    # config_sync reloads plans and rules through the container's services, nothing else.
+    from jarvis_fleet.sync import RELOADS
+
+    enclave = ET.parse(POLICY).find(".//enclave[@path='/jarvis/config']")
+    allowed = [e.text for e in enclave.findall(".//services[@request='ALLOW']/service")]
+    assert sorted(allowed) == sorted(name for _, name in RELOADS)
+    container = ET.parse(POLICY).find(".//enclave[@path='/jarvis/container']")
+    served = [e.text for e in container.findall(".//services[@reply='ALLOW']/service")]
+    assert all(any(fnmatch.fnmatchcase(s, a) for a in served) for s in allowed)

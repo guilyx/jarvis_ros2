@@ -109,6 +109,7 @@ Everything Jarvis keeps is under one directory (`data_dir`, `$JARVIS_DATA`):
 | `blackbox/` | what happened just before a fault: the black box's snapshots |
 | `lake/` | the closed recordings as Parquet: history, analytics, backtests |
 | `state/` | open faults, rule history, waiting approvals: what survives a restart |
+| `config/` | with `config_from`: the rules and plans from the fleet, the revision that runs, the ones before |
 
 Put it on the robot's biggest disk, an SSD rather than an SD card (the recorder writes all
 day). The lake keeps `lake_min_free_gib` free (1 GiB) by deleting the oldest data first, and
@@ -119,6 +120,8 @@ happens. A day of recordings is what your robot publishes on `/jarvis/**` and
 A disk can fail, or be swapped with the computer. To keep the history beyond the robot, the
 lake uploads it to object storage or a share as it goes (`lake_upload_to`, in
 `JARVIS_LAUNCH_ARGS`; credentials in `jarvis.env`): [fleet guide §4](fleet.md#4-the-fleets-history).
+Its rules and plans can come from there too, so a fleet changes a rule once
+(`config_from`): [fleet guide §5](fleet.md#5-rules-and-plans-from-the-fleet).
 
 ## 5. The clock
 
@@ -190,6 +193,7 @@ don't count), so a provisioning script can stop on it; `--json` gives the same r
 | faults | none latched | `jarvis.storage.low` is a problem; a latched fault waits for a person |
 | data | 5 GiB free or more | under 5 GiB a warning, under 1 GiB a problem (the lake is deleting recordings) |
 | recordings | the recorder runs | how many recordings are kept |
+| fleet config | with `config_from`: the robot runs what the fleet gives | a refused revision, an unreachable or empty source, `config_sync` not running: warnings, the robot runs the rules and plans it had |
 | clock | synchronized | `timedatectl` or `chronyc`, whichever the robot has |
 | gateway | `/api/v1/health` says ok | `--no-gateway` on a robot without one; `--gateway URL` for another address |
 

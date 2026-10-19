@@ -2,7 +2,7 @@ import { Download } from "lucide-react";
 import type { ReactNode } from "react";
 import { getToken } from "@/api/client";
 import { useAudit, useBags, useSystem } from "@/api/queries";
-import type { UploadStatus } from "@/api/types";
+import type { ConfigStatus, UploadStatus } from "@/api/types";
 import {
   Empty,
   ErrorNote,
@@ -39,6 +39,62 @@ function uploadRows(up: UploadStatus): [ReactNode, ReactNode][] {
     ["upload error", up.last_error ? `${up.last_error} (retrying ${when(up.retry_at)})` : "—"],
     ...(up.lost ? ([["lost before upload", `${up.lost} file(s)`]] as [ReactNode, ReactNode][]) : []),
   ];
+}
+
+/** The rules and plans the fleet gives this robot (config_from): what runs, what was refused. */
+function FleetConfig({ c }: { c: ConfigStatus }) {
+  const when = (t: number | null) => (t ? ago(new Date(t * 1000).toISOString()) : "—");
+  const kind = (k: "rules" | "plans") => {
+    const all = c.files[k]?.length ?? 0;
+    const fleet = c.from_fleet[k]?.length ?? 0;
+    return `${all} file(s): ${fleet === all ? "all" : fleet || "none"} from the fleet`;
+  };
+  const trouble = ["rejected", "offline", "empty", "waiting"].includes(c.state);
+  return (
+    <Card data-testid="fleet-config">
+      <CardHeader title="Rules and plans" />
+      <CardBody className="space-y-3">
+        <KeyValues
+          rows={[
+            ["from", <Mono key="s">{c.source}</Mono>],
+            ["running", <Mono key="r">{c.revision ?? "—"}</Mono>],
+            ["rules", kind("rules")],
+            ["plans", kind("plans")],
+            ["loaded", when(c.applied_at)],
+            ["last look", when(c.last_check_at)],
+            [
+              "state",
+              <span
+                key="m"
+                data-testid="fleet-config-state"
+                className={trouble ? "text-amber-500" : undefined}
+              >
+                {c.message || c.state}
+              </span>,
+            ],
+            ...(c.warnings.length
+              ? ([["lint warnings", c.warnings.length]] as [ReactNode, ReactNode][])
+              : []),
+          ]}
+        />
+        {c.rejected ? (
+          <div className="rounded-md bg-amber-500/10 p-3 text-sm ring-1 ring-amber-500/30">
+            <div className="mb-1 font-medium">
+              Refused {c.rejected.revision ? <Mono>{c.rejected.revision}</Mono> : "the source"}{" "}
+              <span className="font-normal text-muted-fg">{when(c.rejected.at)}</span>
+            </div>
+            <ul className="space-y-0.5" data-testid="fleet-config-errors">
+              {c.rejected.errors.map((e, i) => (
+                <li key={i}>
+                  <Mono className="break-all">{e}</Mono>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </CardBody>
+    </Card>
+  );
 }
 
 export function System() {
@@ -139,6 +195,7 @@ export function System() {
           )}
         </Card>
       </div>
+      {s?.config ? <FleetConfig c={s.config} /> : null}
       <Card>
         <CardHeader
           title="Notifications"

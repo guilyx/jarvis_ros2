@@ -34,6 +34,7 @@ CORE = [
     ("recovery", "/jarvis/recovery"),
 ]
 RECORDER = "/jarvis/recorder"
+CONFIG_SYNC = "/jarvis/config"  # with config_from (jarvis_fleet)
 EXPECTED = [node for _, node in CORE] + [RECORDER]
 GIB = 1024**3
 
@@ -162,6 +163,28 @@ def recording_check(running, bags):
     return Check("recordings", OK, "recording" + (f", {bags} recording(s) kept" if bags is not None else ""))
 
 
+def fleet_config_check(status, running):
+    """`status`: config_sync's status.json (<data_dir>/config), with config_from; `running`: whether
+    /jarvis/config is on the graph."""
+    name, where = "fleet config", status.get("source", "?")
+    if not running:
+        return Check(
+            name,
+            WARN,
+            f"config_sync is not running: rules and plans {status.get('revision')}, nothing new from {where}",
+            "see jarvis.launch.py's log (/jarvis/config)",
+        )
+    state, message = status.get("state", "?"), status.get("message", "")
+    if state in ("in-sync", "applied", "settling", "starting"):
+        return Check(name, OK, f"rules and plans {status.get('revision')} from {where}")
+    fix = {
+        "rejected": "fix the files at the source: runbook jarvis.config.rejected",
+        "offline": "the network to the source, and the credentials in jarvis.env",
+        "empty": f"config_from's prefix: no rules/ nor plans/ under {where}",
+    }.get(state, "see jarvis.launch.py's log (/jarvis/config)")
+    return Check(name, WARN, message or state, fix)
+
+
 def clock_check(timedatectl=None, chrony=None):
     """`timedatectl`: `timedatectl show -p NTPSynchronized --value`; `chrony`: `chronyc tracking`."""
     fix = "install chrony (or systemd-timesyncd) and point it at your time source"
@@ -247,18 +270,26 @@ def _gateway(url):
         return None, f"not reachable ({getattr(e, 'reason', e)})"
 
 
-def _graph(n, wait=5.0):
-    """The nodes on the graph, once Jarvis's are all there or after `wait`. Discovery usually takes
-    well under a second, but a lost announcement waits for the next one (every 3 s with Fast DDS):
-    a shorter wait would call a running node missing."""
+def _graph(n, wait=5.0, expected=EXPECTED):
+    """The nodes on the graph, once the expected ones are all there or after `wait`. Discovery
+    usually takes well under a second, but a lost announcement waits for the next one (every 3 s
+    with Fast DDS): a shorter wait would call a running node missing."""
     deadline = time.monotonic() + wait
     names = set()
     while time.monotonic() < deadline:
         rclpy.spin_once(n, timeout_sec=0.1)
         names = {f"{ns.rstrip('/')}/{name}" for name, ns in n.get_node_names_and_namespaces()}
-        if all(node in names for node in EXPECTED):
+        if all(node in names for node in expected):
             break
     return names
+
+
+def _config_status(data_dir):
+    """config_sync's status, with config_from: else None."""
+    try:
+        return json.loads((Path(data_dir).expanduser() / "config" / "status.json").read_text())
+    except (OSError, ValueError, TypeError):
+        return None
 
 
 class DoctorVerb(VerbExtension):
@@ -308,6 +339,9 @@ class DoctorVerb(VerbExtension):
                 state_dir = _parameter(n, "/jarvis/fault_manager", "state_dir")
             else:
                 checks.append(unknown("faults", "/jarvis/fault_manager"))
+            config = _config_status(args.data_dir or (state_dir and Path(state_dir).parent))
+            if config is not None and CONFIG_SYNC not in graph:
+                graph |= _graph(n, expected=[CONFIG_SYNC])  # not one of those the first look waits for
         if args.data_dir or state_dir:
             data_dir = Path(args.data_dir or Path(state_dir).parent).expanduser()
             local = data_dir.is_dir()
@@ -321,6 +355,8 @@ class DoctorVerb(VerbExtension):
             else None
         )
         checks.append(recording_check(RECORDER in graph, bags))
+        if config is not None:
+            checks.append(fleet_config_check(config, CONFIG_SYNC in graph))
         timedatectl = _run(["timedatectl", "show", "-p", "NTPSynchronized", "--value"])
         checks.append(
             clock_check(timedatectl or None, None if timedatectl else _run(["chronyc", "tracking"]))

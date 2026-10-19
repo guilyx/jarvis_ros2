@@ -74,7 +74,7 @@ coalesced writes take a variable time, and fixed sleeps are what made the first 
 
 ## Definition of done (every PR)
 
-- [ ] CI green: lint, core with sanitizers, schemas, Jazzy build and tests
+- [ ] CI green: lint, core with sanitizers, schemas, Jazzy and Lyrical builds and tests
 - [ ] New behavior is tested at the lowest layer that can test it (core first)
 - [ ] Docs and ADRs updated if behavior or contracts changed
 - [ ] No `rclcpp` / `rclpy` in `core/`

@@ -67,7 +67,7 @@ kill switch, rules and analytics.
 
 ## From source
 
-ROS 2 Jazzy, from the root of this repository:
+ROS 2 Jazzy or Lyrical Luth (both LTS, both tested in CI), from the root of this repository:
 
 ```bash
 rosdep install --from-paths core ros --ignore-src -y

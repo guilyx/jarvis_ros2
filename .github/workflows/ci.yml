@@ -177,9 +177,16 @@ jobs:
           path: dashboard/playwright-report
 
   ros:
-    name: ROS 2 Jazzy (build + test)
+    # Jazzy (Ubuntu 24.04) and Lyrical Luth (Ubuntu 26.04), the two LTS releases.
+    name: ROS 2 ${{ matrix.name }} (build + test)
     runs-on: ubuntu-24.04
-    container: ros:jazzy-ros-base
+    container: ros:${{ matrix.distro }}-ros-base
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { distro: jazzy, name: Jazzy }
+          - { distro: lyrical, name: Lyrical }
     defaults:
       run:
         shell: bash
@@ -188,25 +195,26 @@ jobs:
       - name: Install dependencies
         run: |
           apt-get update
-          rosdep update --rosdistro jazzy
-          rosdep install --from-paths core ros lake gateway agent --ignore-src -y --rosdistro jazzy
+          rosdep update --rosdistro ${{ matrix.distro }}
+          rosdep install --from-paths core ros lake gateway agent --ignore-src -y --rosdistro ${{ matrix.distro }}
           apt-get install -y --no-install-recommends python3-pip
-          pip3 install --break-system-packages -r lake/jarvis_lake/requirements.txt \
+          # --ignore-installed: next to Debian's copies (Ubuntu 26.04's pip can't upgrade them).
+          pip3 install --break-system-packages --ignore-installed -r lake/jarvis_lake/requirements.txt \
             -r gateway/jarvis_gateway/requirements.txt -r agent/jarvis_agent/requirements.txt
       - name: Build
         run: |
-          source /opt/ros/jazzy/setup.bash
+          source /opt/ros/${{ matrix.distro }}/setup.bash
           colcon build --event-handlers console_cohesion+ \
             --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo
       - name: Test
         run: |
-          source /opt/ros/jazzy/setup.bash
-          export ROS_LOCALHOST_ONLY=1 ROS_DOMAIN_ID=42
+          source /opt/ros/${{ matrix.distro }}/setup.bash
+          export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST ROS_DOMAIN_ID=42
           colcon test --event-handlers console_cohesion+ --return-code-on-test-failure
       - name: Test results
         if: always()
         run: |
-          source /opt/ros/jazzy/setup.bash
+          source /opt/ros/${{ matrix.distro }}/setup.bash
           colcon test-result --verbose
 
   demo:

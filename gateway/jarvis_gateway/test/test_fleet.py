@@ -9,7 +9,9 @@ import httpx
 import pytest
 from jarvis_gateway import fleet as fleet_module
 from jarvis_gateway.adapters.fake import FakeJarvis
-from jarvis_gateway.fleet import Robot, Settings, summarize
+from jarvis_gateway.config import Webhook
+from jarvis_gateway.fleet import Robot, Settings, Watch, Watcher, summarize
+from jarvis_gateway.notifier import Notifier
 from jarvis_lake import demo_history
 
 
@@ -193,3 +195,104 @@ def test_an_unreadable_history_is_an_error_with_why(make_gateway, tmp_path, monk
     )
     with pytest.raises(ValueError, match="fleet.history"):
         Settings.load({"history": "nope://x"})
+
+
+def test_watch_settings():
+    assert Settings.load({"robots": []}).watch is None
+    assert Settings.load({"robots": [], "watch": True}).watch == Watch()
+    w = Settings.load(
+        {"robots": [], "watch": {"period_s": 5, "offline_after_s": 60, "channel": "robots"}}
+    ).watch
+    assert (w.period_s, w.offline_after_s, w.channel) == (5.0, 60.0, "robots")
+    with pytest.raises(ValueError, match="period_s"):
+        Settings.load({"robots": [], "watch": {"period_s": 0}})
+
+
+def look(name, online=True, error="", rejected=None, revision="4f1c", local=False):
+    config = {"revision": revision, "rejected": rejected, "error": "unknown plan" if rejected else ""}
+    return {
+        "name": name,
+        "url": f"http://{name}",
+        "online": online,
+        "error": error,
+        "local": local,
+        "config": config,
+    }
+
+
+def test_the_watcher_alerts_on_what_changed():
+    now = [1000.0]
+    w = Watcher(Watch(offline_after_s=60, channel="robots"), clock=lambda: now[0])
+    codes = lambda alerts: [(a["source"]["robot"], a["code"].rsplit(".", 1)[1]) for a in alerts]  # noqa: E731
+
+    assert w.observe([look("me", local=True, online=False), look("amr-2"), look("amr-3")]) == []
+    # amr-3 drops out: nothing until the grace is over, then once.
+    now[0] += 10
+    assert w.observe([look("amr-2"), look("amr-3", online=False, error="unreachable")]) == []
+    now[0] += 60
+    (offline,) = w.observe([look("amr-2"), look("amr-3", online=False, error="unreachable")])
+    assert codes([offline]) == [("amr-3", "robot_offline")]
+    assert offline["severity"] == "ERROR" and offline["message"] == "offline: unreachable for 60 s"
+    assert offline["attrs"]["channel"] == "robots" and offline["source"]["component"] == "fleet"
+    now[0] += 600
+    assert w.observe([look("amr-2"), look("amr-3", online=False)]) == []
+    (back,) = w.observe([look("amr-2"), look("amr-3")])
+    assert codes([back]) == [("amr-3", "robot_online")] and back["message"] == "back online after 11 min"
+
+    # A blip shorter than the grace is not offline.
+    w.observe([look("amr-2", online=False), look("amr-3")])
+    now[0] += 30
+    assert w.observe([look("amr-2"), look("amr-3")]) == []
+
+    # Rules and plans refused: once per revision; taken again.
+    (refused,) = w.observe([look("amr-2", rejected="9b2e"), look("amr-3")])
+    assert codes([refused]) == [("amr-2", "config_rejected")] and refused["severity"] == "WARN"
+    assert refused["message"] == "refused rules and plans 9b2e: unknown plan; still on 4f1c"
+    assert w.observe([look("amr-2", rejected="9b2e"), look("amr-3")]) == []
+    assert codes(w.observe([look("amr-2", rejected="77aa"), look("amr-3")])) == [("amr-2", "config_rejected")]
+    (taken,) = w.observe([look("amr-2", revision="5d0c"), look("amr-3")])
+    assert taken["message"] == "runs rules and plans 5d0c (refused 77aa before)"
+    assert [a["id"] for a in w.alerts] == sorted(
+        {a["id"] for a in w.alerts}, key=[a["id"] for a in w.alerts].index
+    )
+
+
+def test_the_gateway_watches_the_fleet_and_alerts_the_webhooks(make_gateway):
+    sent = []
+    hook = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: sent.append(r) or httpx.Response(200)))
+    notifier = Notifier(
+        [Webhook("robots", "http://chat/hook", channels=["fleet"], format="slack")], client=hook
+    )
+    amr2 = make_gateway(fake=FakeJarvis(robot="amr-2", step_s=0.01))
+    fleet = Settings.load(
+        {
+            "robots": [{"name": "amr-2", "url": "http://amr-2"}, {"name": "amr-4", "url": "http://amr-4"}],
+            "watch": {"period_s": 0.1, "offline_after_s": 0.5},
+        }
+    )
+    ops = make_gateway(fleet=fleet, notifier=notifier)
+    ops.gateway.fleet_client = httpx.AsyncClient(transport=Hosts({"amr-2": amr2.client.app}))
+
+    def alerted():
+        a = ops.get("/api/v1/fleet/alerts")
+        return a if a["alerts"] and sent else None
+
+    alerts = ops.wait(alerted)
+    assert alerts["watching"] and alerts["channel"] == "fleet" and alerts["offline_after_s"] == 0.5
+    assert [(a["source"]["robot"], a["code"]) for a in alerts["alerts"]] == [
+        ("amr-4", "jarvis.fleet.robot_offline")
+    ]
+    assert json.loads(sent[0].content)["text"].startswith("[amr-4] offline: unreachable for ")
+    metrics = ops.client.get("/metrics").text
+    assert 'jarvis_fleet_robot_online{robot="amr-4"} 0.0' in metrics
+    assert 'jarvis_fleet_robot_online{robot="amr-2"} 1.0' in metrics
+
+
+def test_no_watch_no_alerts(gw):
+    assert gw.get("/api/v1/fleet/alerts") == {
+        "watching": False,
+        "period_s": None,
+        "offline_after_s": None,
+        "channel": "",
+        "alerts": [],
+    }

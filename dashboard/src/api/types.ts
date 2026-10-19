@@ -468,6 +468,15 @@ export interface FleetRobot {
   config?: FleetConfig | null; // with config_from: the fleet's rules and plans it runs; else its own
 }
 
+/** GET /api/v1/fleet/alerts: what the gateway saw happen to the fleet (fleet.watch, roadmap 9.6). */
+export interface FleetAlerts {
+  watching: boolean;
+  period_s: number | null;
+  offline_after_s: number | null;
+  channel: string; // the webhooks' channel the alerts go to
+  alerts: JarvisEvent[]; // jarvis.fleet.robot_offline, robot_online, config_rejected, config_accepted
+}
+
 /** A robot's rules and plans from the fleet (roadmap 9.4), at a glance. */
 export interface FleetConfig {
   revision: string | null; // what it runs

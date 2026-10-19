@@ -216,6 +216,28 @@ function api(role: "viewer" | "operator") {
         });
       case "/api/v1/plans":
         return json({ mode: "ENABLED", plans: [] });
+      case "/api/v1/fleet/alerts":
+        if (role === "viewer")
+          return json({ watching: false, period_s: null, offline_after_s: null, channel: "", alerts: [] });
+        return json({
+          watching: true,
+          period_s: 30,
+          offline_after_s: 120,
+          channel: "fleet",
+          alerts: [
+            {
+              id: "fleet-2",
+              seq: "",
+              stamp: new Date(Date.now() - 60_000).toISOString(),
+              kind: "SYSTEM",
+              code: "jarvis.fleet.robot_offline",
+              severity: "ERROR",
+              message: "offline: unreachable for 2 min",
+              source: { robot: "amr-3", component: "fleet", node: "", host: "" },
+              attrs: { channel: "fleet", robot: "amr-3" },
+            },
+          ],
+        });
       case "/api/v1/fleet/history":
         if (role === "viewer") return json({ detail: "no fleet history here" }, 404);
         return json({
@@ -445,6 +467,7 @@ describe("dashboard", () => {
       "unknown plan 'restart-lidar'",
     );
     expect(within(rollout).getByText("their own")).toBeInTheDocument(); // bot-7
+    expect(await screen.findByText(/this gateway doesn't watch the fleet/)).toBeInTheDocument();
   });
 
   it("shows the history going off the robot, and when it is behind", async () => {
@@ -468,6 +491,15 @@ describe("dashboard", () => {
     expect(within(card).getByText("1 file(s): none from the fleet")).toBeInTheDocument();
     expect(within(card).getByTestId("fleet-config-state")).toHaveClass("text-amber-500");
     expect(within(card).getByTestId("fleet-config-errors")).toHaveTextContent("unknown plan 'restart-lidar'");
+  });
+
+  it("shows what happened to the fleet, or how to have the gateway watch it", async () => {
+    api("operator");
+    renderApp("/fleet");
+    const alerts = await screen.findByTestId("fleet-alerts");
+    expect(within(alerts).getByTestId("fleet-alert")).toHaveTextContent("amr-3");
+    expect(within(alerts).getByTestId("fleet-alert")).toHaveTextContent("offline: unreachable for 2 min");
+    expect(within(alerts).getByText("fleet")).toBeInTheDocument(); // the channel
   });
 
   it("shows the fleet's history: the worst robot first, what costs the fleet most", async () => {

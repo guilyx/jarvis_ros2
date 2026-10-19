@@ -1,6 +1,7 @@
 # Copyright 2026 Erwin L.
 # SPDX-License-Identifier: Apache-2.0
-"""Delivers `notify` actions of rules (events `jarvis.notify`) to webhooks, with retries.
+"""Delivers `notify` actions of rules (events `jarvis.notify`) and the fleet's alerts (fleet.Watcher)
+to webhooks, with retries.
 
 A webhook takes the channels it listens to (`*` for all). `slack` posts {"text": ...}; `generic`
 posts the event as it is on the stream. Failures are retried with exponential backoff and kept in a
@@ -29,7 +30,12 @@ class Notifier:
 
     def on_event(self, event):
         """A listener for LiveState: schedules delivery of notify events (on the event loop)."""
-        if event.get("code") != NOTIFY_CODE or not self.webhooks:
+        if event.get("code") == NOTIFY_CODE:
+            self.notify(event)
+
+    def notify(self, event):
+        """Schedules delivery of an event to the webhooks of its channel (attrs.channel)."""
+        if not self.webhooks:
             return
         task = asyncio.get_running_loop().create_task(self.deliver(event))
         self._tasks.add(task)

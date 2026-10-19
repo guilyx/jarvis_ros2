@@ -232,7 +232,8 @@ export interface paths {
     /**
      * Fleet View
      * @description This robot and the robots of `fleet` in gateway.yaml, each from its own gateway: online,
-     *     open faults by severity, the worst one, the recovery mode (docs/guides/fleet.md).
+     *     open faults by severity, the worst one, the recovery mode, the rules and plans it runs
+     *     (docs/guides/fleet.md).
      */
     get: operations["fleet_view_api_v1_fleet_get"];
     put?: never;
@@ -1203,6 +1204,35 @@ export interface components {
     } & {
       [key: string]: unknown;
     };
+    /**
+     * FleetConfig
+     * @description Its rules and plans, with config_from (roadmap 9.4).
+     */
+    FleetConfig: {
+      /**
+       * Error
+       * @default
+       */
+      error: string;
+      /** Rejected */
+      rejected?: string | null;
+      /** Revision */
+      revision?: string | null;
+      /** Since */
+      since?: number | null;
+      /**
+       * Source
+       * @default
+       */
+      source: string;
+      /**
+       * State
+       * @default
+       */
+      state: string;
+    } & {
+      [key: string]: unknown;
+    };
     /** FleetHistory */
     FleetHistory: {
       /** Bucket S */
@@ -1299,6 +1329,7 @@ export interface components {
     };
     /** FleetRobot */
     FleetRobot: {
+      config?: components["schemas"]["FleetConfig"] | null;
       /**
        * Connected
        * @default false
@@ -1365,6 +1396,10 @@ export interface components {
     };
     /** Health */
     Health: {
+      /** Config */
+      config?: {
+        [key: string]: unknown;
+      } | null;
       /** Connected */
       connected: boolean;
       /** Executions Snapshot */

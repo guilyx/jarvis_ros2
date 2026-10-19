@@ -207,12 +207,14 @@ def test_reverting_the_source_to_what_runs_ends_the_rejection(robot, fleet):
 
 def test_what_the_nodes_refuse_switches_back_before_anything_loads(robot, fleet):
     nodes = Nodes(robot)
-    nodes.check_errors = ["plans: rollout.yaml: plan 'p' step 'r' (container.restart): 'x' not allowed"]
+    nodes.check_errors = [
+        f"plans: {robot.active}/plans/rollout.yaml: plan 'p' step 'r' (container.restart): 'x' not allowed"
+    ]
     s = syncer(robot, fleet, nodes)
     first = robot.current()
     write(fleet / "plans" / "rollout.yaml", PLAN.format(id="p"))
     result = apply(s)
-    assert result.state == "rejected" and "not allowed" in result.message
+    assert result.state == "rejected" and "plans: plans/rollout.yaml: plan 'p'" in result.message
     assert robot.current() == first
     assert [validate_only for validate_only, _ in nodes.calls] == [True]
 

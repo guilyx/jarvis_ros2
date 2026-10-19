@@ -3,6 +3,8 @@
 """The fleet view: a robot at a glance, the settings, and GET /api/v1/fleet over real gateways (on
 the fake Jarvis), one that wants a token and one that is down; and the fleet's uploaded history."""
 
+import json
+
 import httpx
 import pytest
 from jarvis_gateway import fleet as fleet_module
@@ -106,6 +108,42 @@ def test_the_fleet_view(make_gateway, monkeypatch):
     assert not three["online"] and three["error"] == "refused the token"
     # A viewer may look.
     assert ops.client.get("/api/v1/fleet", headers={"Authorization": "Bearer v-token"}).status_code == 200
+
+
+def test_a_rollout_across_the_fleet(make_gateway, tmp_path):
+    """Each robot says which revision of the fleet's rules and plans it runs, and which it refused."""
+
+    def robot(name, **status):
+        data = tmp_path / name
+        (data / "config").mkdir(parents=True)
+        base = {"source": "s3://fleet/config", "state": "in-sync", "revision": "4f1c2a9e0b7d"}
+        (data / "config" / "status.json").write_text(json.dumps({**base, **status}))
+        return make_gateway(fake=FakeJarvis(robot=name, step_s=0.01), data_dir=str(data))
+
+    amr2 = robot("amr-2")
+    amr3 = robot(
+        "amr-3",
+        state="rejected",
+        rejected={"revision": "9b2e41c07d3a", "at": 1.0, "errors": ["rules/lidar.yaml: unknown plan", "x"]},
+    )
+    plain = make_gateway(fake=FakeJarvis(robot="amr-4", step_s=0.01), data_dir=str(tmp_path / "amr-4"))
+    fleet = Settings.load([{"name": n, "url": f"http://{n}"} for n in ("amr-2", "amr-3", "amr-4")])
+    ops = make_gateway(fleet=fleet, data_dir=str(tmp_path / "ops"))
+    ops.gateway.fleet_client = httpx.AsyncClient(
+        transport=Hosts({"amr-2": amr2.client.app, "amr-3": amr3.client.app, "amr-4": plain.client.app})
+    )
+    own, two, three, four = ops.get("/api/v1/fleet")["robots"]
+    assert own["config"] is None and four["config"] is None  # their own rules and plans
+    assert two["config"]["revision"] == "4f1c2a9e0b7d" and two["config"]["rejected"] is None
+    assert three["config"] == {
+        "revision": "4f1c2a9e0b7d",
+        "state": "rejected",
+        "source": "s3://fleet/config",
+        "since": None,
+        "rejected": "9b2e41c07d3a",
+        "error": "rules/lidar.yaml: unknown plan",
+    }
+    assert amr3.get("/api/v1/health")["config"]["rejected"]["revision"] == "9b2e41c07d3a"
 
 
 def test_no_fleet_is_this_robot_alone(gw):

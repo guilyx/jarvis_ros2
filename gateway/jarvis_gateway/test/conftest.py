@@ -59,7 +59,7 @@ def make_gateway(tmp_path):
 
     def make(fake=None, notifier=None, client_host="testclient", **settings):
         fake = fake or FakeJarvis(step_s=0.01)
-        s = Settings(data_dir=str(tmp_path / "data"), tokens=dict(TOKENS), **settings)
+        s = Settings(**{"data_dir": str(tmp_path / "data"), "tokens": dict(TOKENS), **settings})
         client = TestClient(create_app(s, fake, notifier), client=(client_host, 50000))
         client.__enter__()
         started.append(client)

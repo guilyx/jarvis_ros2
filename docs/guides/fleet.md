@@ -47,6 +47,7 @@ One card per robot, this one included, worst first: offline, then by their worst
 | Open faults by severity, incidents | Its open faults (muted symptoms left out) |
 | The worst fault: code, component, message | The most severe, a latched one first |
 | Recovery mode | `ENABLED`, `DRY_RUN` or `DISABLED`: is Jarvis allowed to act there |
+| Rules and plans | With `config_from` (§5): the revision it runs, and the one it refused |
 
 The gateway asks every robot when the view refreshes (every 5 s), all at once, and gives each 3 s
 (`fleet: {robots: [...], timeout_s: 3}` to change it). Nothing is copied or kept: close the view and
@@ -233,6 +234,15 @@ last five, refused ones too, to look at or go back to by hand). It boots on the 
 it accepted, offline too. A source that is unreachable, or empty (a wrong prefix, a wiped one),
 changes nothing. The dashboard's System page shows where the rules and plans come from, the
 revision that runs, the last look and what was refused, with every error.
+
+### Watch a rollout
+
+The Fleet page has a **Rules and plans** card as soon as one robot takes them from the fleet:
+which revision runs on which robots, which revision was refused where and the first error, and
+the robots that run their own. Upload, and watch the robots move to the new revision within a
+period (or see which one refused it, and why: often its own file under `robots/<robot>/`). Each
+robot's card says the same in one line. `GET /api/v1/fleet` has it per robot (`config`), and each
+robot's `GET /api/v1/health` has its whole status.
 
 Lint before you upload, with the same check the robot makes:
 

@@ -89,6 +89,17 @@ class Faults(Open):
     history: list[dict[str, Any]] | None = None
 
 
+class FleetConfig(Open):
+    """Its rules and plans, with config_from (roadmap 9.4)."""
+
+    revision: str | None = None  # what it runs
+    state: str = ""  # in-sync, applied, rejected, offline, empty, waiting, settling
+    source: str = ""  # where it takes them (without credentials)
+    since: float | None = None  # when it loaded what it runs (unix seconds)
+    rejected: str | None = None  # the revision it refused
+    error: str = ""  # why: the first error
+
+
 class FleetRobot(Open):
     name: str
     url: str = ""
@@ -104,6 +115,7 @@ class FleetRobot(Open):
     worst: dict[str, str] | None = None
     incidents: int = 0
     latched: int = 0
+    config: FleetConfig | None = None  # None: its rules and plans are its own (no config_from)
 
 
 class Fleet(Open):
@@ -232,6 +244,7 @@ class Health(Open):
     last_event_age_s: float | None = None
     robot: str = ""
     lake: dict[str, Any] | None = None
+    config: dict[str, Any] | None = None  # with config_from: where the rules and plans come from
 
 
 # -- commands --------------------------------------------------------------------------------------

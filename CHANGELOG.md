@@ -32,6 +32,9 @@ robots, with history, a dashboard and an agent that explains what happened.
   service or action, of a type named in the plan (`service.call`, `action.goal`), checked against
   the type when the plans load.
 - `ros2 jarvis lint` and `backtest`: check rules before they ship, replay recordings through them.
+- The rule lab, in the dashboard: write or change a rule and see what it would have done over
+  the robot's recorded history (when it fires, on which event, the recoveries it would ask for,
+  what differs from the live rule) before it goes live.
 
 ### History, dashboard and API
 - The lake: recordings as Parquet, queried with DuckDB; KPIs, analytics, retention with a

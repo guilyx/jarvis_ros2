@@ -296,6 +296,10 @@ def _setup(context):
                     arg["catalog"],
                     "--runbooks",  # the runbooks of the codes Jarvis' bridges raise
                     str(SHARE / "config" / "runbooks"),
+                    "--rules",  # the rule lab backtests drafts with the robot's rules and plans
+                    arg["rules"],
+                    "--plans",
+                    arg["plans"],
                 ],
                 output="screen",
             )

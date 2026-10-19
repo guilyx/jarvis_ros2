@@ -136,6 +136,23 @@ failed actions. A rule can be switched off, or into **dry run** (it decides with
 useful to watch a new rule before trusting it). *Validate YAML…* checks a rule before it goes
 in; *Reload from disk* loads the rules files again. Every change is recorded with your name.
 
+**Rule lab** (admins; *Rules → Rule lab*, or *Try changes in the rule lab* on a rule) answers
+"what would this rule have done?" before it goes live. Write a rule, or change one, choose how far
+back (the last hour to 7 days) and *Backtest*: the robot's recorded events are replayed through the
+same rule engine, with its other rules and its plans in dry run. You see:
+
+- how often it would have fired, and how often its rate limit, cooldown or guard held it back;
+- when, on a timeline, and on which event (a click opens it);
+- the recoveries it would have asked for, and what the gates and the plan would have made of
+  them;
+- for a rule the robot already runs, every decision that differs from what it decided live.
+  Unchanged, a rule makes the same decisions, event for event: that is how you know the replay
+  can be trusted.
+
+Nothing changes on the robot. To deploy the rule, put it in the robot's rules directory
+(`rules:=`) and *Reload from disk*. The draft is checked like *Validate YAML…* first: a draft
+with errors isn't replayed. Your last draft stays in this browser.
+
 ## 8. Asking the agent
 
 The agent analyses incidents at ERROR or worse and failed recoveries by itself, and posts an

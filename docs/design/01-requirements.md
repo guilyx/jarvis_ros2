@@ -25,7 +25,8 @@
 - Not a time-series database for high-rate signals (use rosbag2/MCAP; Jarvis links to snapshots).
 - No fleet backend in v1. The schema is fleet-ready (`robot` id on every event), but v1 targets **one robot**.
 - No real hardware in v1: the robot is **simulated** (Gazebo + Nav2 TurtleBot 4). Real-robot bring-up comes later.
-- No visual rule editor in v1 (read-only YAML view plus validation API; editor in v2).
+- No visual rule editor in v1: rules are YAML (a read-only view, validation, and the rule lab's draft
+  with backtest); a visual editor in v2.
 
 ## 3. Personas
 

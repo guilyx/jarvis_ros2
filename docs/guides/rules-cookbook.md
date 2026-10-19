@@ -12,7 +12,8 @@ ros2 jarvis backtest ~/.local/share/jarvis/bags/jarvis_<stamp> --rules my_rules/
 
 `lint` parses everything and cross-checks rules against plans (unknown plan, a plan that refuses
 rules, missing or unknown arguments) and the catalog. `backtest` replays a recording through the
-same engine the robot runs and lists every decision. Every recipe on this page is linted in CI,
+same engine the robot runs and lists every decision. On a running robot, the dashboard's
+[rule lab](operator.md#7-rules) does both on its history: paste the recipe, *Backtest*. Every recipe on this page is linted in CI,
 next to the shipped plans (`core/jarvis_core/test/test_tooling.cpp`, `EveryCookbookRecipeIsClean`):
 no errors, no warnings.
 

@@ -449,6 +449,71 @@ export interface LintFinding {
   message: string;
 }
 
+// -- the rule lab (POST /rules:backtest) ------------------------------------------------------------
+
+export interface BacktestCause {
+  id: string;
+  kind: string;
+  code: string;
+  component: string;
+  severity: string;
+  message: string;
+  at: string;
+}
+
+export interface BacktestMatch {
+  at: string;
+  rule: string;
+  match_id: string;
+  cause_id: string;
+  cause?: BacktestCause | null; // null: the cause was another rule's event, emitted in the replay
+  dry_run?: boolean;
+}
+
+/** A decision one side made and the other didn't. No cause: it was another rule's event. */
+export interface BacktestDecision {
+  rule: string;
+  cause_id: string;
+  cause?: BacktestCause | null;
+}
+
+export interface BacktestRecovery {
+  at: string;
+  rule: string;
+  plan: string;
+  args?: Record<string, string>;
+  execution_id?: string;
+  state: string;
+  reason: string;
+}
+
+export interface BacktestRule {
+  rule: string;
+  fires: number;
+  dry_fires: number;
+  suppressed: number;
+  cooled_down: number;
+  guard_blocked: number;
+}
+
+export interface Backtest {
+  success: boolean;
+  message: string;
+  findings?: LintFinding[];
+  events: number;
+  from?: string | null;
+  to?: string | null;
+  hours: number;
+  truncated: boolean;
+  replaces?: string[]; // the draft's rules the robot already has: compared with what they did live
+  rules?: BacktestRule[];
+  matches?: BacktestMatch[];
+  match_count: number;
+  recoveries?: BacktestRecovery[];
+  missing?: BacktestDecision[]; // decided live, not by the draft
+  extra?: BacktestDecision[]; // decided by the draft, not live
+}
+
 // -- the agent (schemas/insight.schema.json) --------------------------------------------------------
 
 export interface InsightHypothesis {

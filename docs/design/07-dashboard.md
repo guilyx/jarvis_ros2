@@ -43,6 +43,7 @@ decimal string everywhere: a uint64 does not fit a JavaScript number. Tokens go 
 | `GET /rules` · `GET /rules/{id}` | viewer | Status and counters, fires in the window; detail adds the rule's YAML and recent matches |
 | `PATCH /rules/{id}` | admin | `enabled`, `dry_run`, `reason` |
 | `POST /rules:validate` | admin | `jarvis lint` on YAML against the loaded plans and catalog; changes nothing |
+| `POST /rules:backtest` | admin | Rule lab: lints a draft, then replays the last `hours` (≤ 168) of history through `jarvis backtest` with the robot's other rules and its plans in dry run; returns the draft's fires (with their cause events), per-rule counters, recoveries, and the decisions that differ from the live rule of the same id. Changes nothing |
 | `POST /rules:reload` · `POST /plans:reload` | admin | Hot reload (`validate_only`) |
 | `GET /plans` · `GET /plans/{id}` | viewer | Catalog with parameters + effectiveness in the window; detail adds latest executions |
 | `POST /recoveries` | operator | Run a plan (`plan_id, args, dry_run, rationale, correlation_id`) → 202 `{execution_id, state}` |
@@ -221,7 +222,10 @@ Running
 │ lidar-stale-restart           │   ●     │   ○     │ 11         │ 09:14:03     │ —              │
 │ wifi-then-localization        │   ●     │   ●     │ 2 (shadow) │ 09:21:40     │ —              │
 └───────────────────────────────┴─────────┴─────────┴────────────┴──────────────┴────────────────┘
-Detail: YAML (read-only v1, editor v2) · match history · backtest results
+Detail: YAML (read-only) · match history · "Try changes in the rule lab"
+Rule lab (/rules/lab): YAML draft · window (1 h – 7 d) · Backtest → fires per rule (suppressed,
+cooled down, guard blocked) · timeline · fires with their cause events · recoveries (dry run) ·
+for a rule the robot runs, the decisions that differ from live
 ```
 
 ### Analytics (medkit-style health)

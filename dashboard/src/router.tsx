@@ -11,6 +11,7 @@ import { IncidentTimeline } from "@/views/IncidentTimeline";
 import { Incidents, type IncidentsSearch } from "@/views/Incidents";
 import { Overview } from "@/views/Overview";
 import { ExecutionDetail, Recovery, type RecoverySearch } from "@/views/Recovery";
+import { RuleLab, type RuleLabSearch } from "@/views/RuleLab";
 import { RuleDetail, Rules } from "@/views/Rules";
 import { System } from "@/views/System";
 
@@ -70,6 +71,12 @@ const routes = [
   }),
   createRoute({ getParentRoute: () => root, path: "/recovery/$executionId", component: ExecutionDetail }),
   createRoute({ getParentRoute: () => root, path: "/rules", component: Rules }),
+  createRoute({
+    getParentRoute: () => root,
+    path: "/rules/lab",
+    component: RuleLab,
+    validateSearch: (s: Record<string, unknown>): RuleLabSearch => ({ rule: str(s.rule) }),
+  }),
   createRoute({ getParentRoute: () => root, path: "/rules/$ruleId", component: RuleDetail }),
   createRoute({
     getParentRoute: () => root,

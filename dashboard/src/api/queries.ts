@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, client, unwrap } from "./client";
 import type {
+  Backtest,
   Bag,
   ComponentHealth,
   ExecutionRecord,
@@ -225,6 +226,7 @@ export const useRule = (id: string) =>
       unwrap<Rule & { yaml: string; matches: RuleMatch[] }>(
         client.GET("/api/v1/rules/{rule_id}", { params: { path: { rule_id: id } } }),
       ),
+    enabled: !!id,
   });
 
 // -- history and analytics ------------------------------------------------------------------------------
@@ -393,6 +395,12 @@ export const useValidateRules = () =>
       unwrap<Outcome & { data: { findings: LintFinding[] } }>(
         client.POST("/api/v1/rules:validate", { body: { yaml } }),
       ),
+  });
+
+export const useBacktestRules = () =>
+  useMutation({
+    mutationFn: ({ yaml, hours }: { yaml: string; hours: number }) =>
+      unwrap<Backtest>(client.POST("/api/v1/rules:backtest", { body: { yaml, hours } })),
   });
 
 export const useReload = () =>

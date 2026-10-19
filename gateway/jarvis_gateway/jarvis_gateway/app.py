@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from jarvis_lake import model, storage
 
-from jarvis_gateway import __version__, auth, bags, fleet, models, sovd, stream, vda5050
+from jarvis_gateway import __version__, auth, backtest, bags, fleet, models, sovd, stream, vda5050
 from jarvis_gateway.catalog import Catalog
 from jarvis_gateway.history import History
 from jarvis_gateway.metrics import Metrics
@@ -477,6 +477,23 @@ def create_app(settings, port, notifier=None):
     async def validate(body: models.Validate, who=Depends(admin)):
         """Checks rules YAML with `jarvis lint` against the loaded plans and catalog. Changes nothing."""
         return await asyncio.to_thread(_lint, settings, body.yaml)
+
+    @api.post("/rules:backtest", response_model=models.Backtest, tags=["rules"])
+    async def backtest_rules(body: models.BacktestRequest, who=Depends(admin)):
+        """Lints a draft, then replays the last `hours` of history through it, with the robot's other
+        rules and its plans in dry run: when the draft's rules would have fired, on what, and which
+        recoveries they would have asked for. Changes nothing."""
+        lint = await asyncio.to_thread(_lint, settings, body.yaml)
+        findings = lint.data.get("findings", [])
+        if not lint.success:
+            return {"success": False, "message": lint.message or "the draft has errors", "findings": findings}
+        try:
+            report = await asyncio.to_thread(
+                backtest.run, settings, gw.history, body.yaml, body.hours, gw.state.robot
+            )
+        except backtest.BacktestError as e:
+            raise HTTPException(503, str(e)) from e
+        return {"success": True, "message": lint.message, "findings": findings, **report}
 
     @api.post("/rules:reload", response_model=models.Outcome, tags=["rules"])
     async def reload_rules(body: models.Reload, who=Depends(admin)):

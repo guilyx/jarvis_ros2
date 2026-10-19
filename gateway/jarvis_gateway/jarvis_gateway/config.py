@@ -19,7 +19,8 @@
       default_role: viewer          # signed in, in no listed group (null: refused)
     catalog: /path/to/faults.yaml   # the fault manager's catalog: descriptions and runbooks
     runbooks: [/path/to/runbooks]   # more <code>.md runbooks (besides runbooks/ next to the catalog)
-    lint: { plans_dir: ..., catalog: ... }        # what POST /rules:validate checks rules against
+    lint: { rules_dir: ..., plans_dir: ..., catalog: ... }   # what POST /rules:validate and
+                                    # /rules:backtest check a draft against (--rules, --plans)
     cors_origins: [http://localhost:3000]         # browser apps served elsewhere (a SOVD web UI)
     vda5050: { version: "3.0", errors: [...] }   # Jarvis's faults as VDA 5050 errors (vda5050.py)
     fleet:                          # other robots' gateways, side by side in the dashboard (fleet.py)
@@ -70,6 +71,7 @@ class Settings:
     jarvis_bin: str = os.environ.get("JARVIS_BIN", "jarvis")
     catalog: str = ""  # the fault catalog (jarvis.faults/v1): what codes mean, their runbooks
     runbooks: list = dataclasses.field(default_factory=list)  # directories of <code>.md runbooks
+    lint_rules_dir: str = ""  # the robot's rules: a backtested draft runs with them
     lint_plans_dir: str = ""
     lint_catalog: str = ""  # default: catalog
     tls_cert: str = ""
@@ -107,6 +109,7 @@ class Settings:
                 s.tokens[str(t["token"])] = _principal(t["name"], t["role"])
             s.webhooks = [Webhook(**w) for w in raw.get("webhooks") or []]
             lint = raw.get("lint") or {}
+            s.lint_rules_dir = lint.get("rules_dir", "")
             s.lint_plans_dir = lint.get("plans_dir", "")
             s.lint_catalog = lint.get("catalog", "")
             tls = raw.get("tls") or {}

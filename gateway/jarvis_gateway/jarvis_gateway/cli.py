@@ -47,6 +47,8 @@ def parser():
     p.add_argument(
         "--runbooks", action="append", metavar="DIR", help="a directory of <code>.md runbooks (repeatable)"
     )
+    p.add_argument("--rules", metavar="DIR", help="the robot's rules: drafts are backtested with them")
+    p.add_argument("--plans", metavar="DIR", help="the robot's plans: drafts are checked against them")
     p.add_argument("--namespace", default="/jarvis", help="Jarvis' ROS namespace")
     p.add_argument("--fake", action="store_true", help="an in-memory Jarvis instead of ROS")
     p.add_argument("--scenario", action="store_true", help="with --fake: make things happen")
@@ -88,6 +90,8 @@ def settings_from(args):
         tls_key=args.tls_key,
         catalog=args.catalog,
         runbooks=args.runbooks,
+        lint_rules_dir=args.rules,
+        lint_plans_dir=args.plans,
     )
     if bool(s.tls_cert) != bool(s.tls_key):
         raise SystemExit("jarvis-gateway: TLS needs both a certificate and its key")

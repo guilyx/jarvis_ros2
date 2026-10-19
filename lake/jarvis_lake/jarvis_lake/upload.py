@@ -62,12 +62,30 @@ def behind_message(status):
     """What `jarvis.upload.behind` says, from an uploader's status: None while it keeps up."""
     if not status or not status.get("behind"):
         return None
-    hours = status["oldest_pending_s"] / 3600
-    error = f"; last error: {status['last_error']}" if status.get("last_error") else ""
+    error = status.get("last_error") or ""
+    if len(error) > 120:
+        error = "…" + error[-119:]  # the end of an S3 error says what happened
     return (
         f"history is not leaving the robot: {status['pending_files']} file(s), "
-        f"{status['pending_bytes'] / 2**20:.1f} MiB, waiting for up to {hours:.1f} h{error}"
+        f"{_size(status['pending_bytes'])}, the oldest waiting {_age(status['oldest_pending_s'])}"
+        + (f"; last error: {error}" if error else "")
     )
+
+
+def _size(n):
+    for unit in ("bytes", "KiB", "MiB"):
+        if n < 1024:
+            return f"{n:.0f} {unit}" if unit == "bytes" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} GiB"
+
+
+def _age(seconds):
+    if seconds < 90:
+        return f"{seconds:.0f} s"
+    if seconds < 90 * 60:
+        return f"{seconds / 60:.0f} min"
+    return f"{seconds / 3600:.1f} h"
 
 
 def robot_name(robot):

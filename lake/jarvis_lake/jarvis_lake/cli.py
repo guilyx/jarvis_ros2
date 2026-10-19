@@ -157,10 +157,15 @@ def cmd_kpis(args):
 
 
 def cmd_status(args):
+    """The lake now; the upload as the running service last reported it (its errors, its retries),
+    else as --upload-to sees it from here."""
     the_lake = _lake(args)
     status = the_lake.status()
+    service = storage.read_json(the_lake.layout.status, {})
     uploader = _uploader(args, the_lake)
-    if uploader:
+    if service.get("upload"):
+        status["upload"] = service["upload"] | {"reported_at": service.get("updated_at")}
+    elif uploader:
         status["upload"] = uploader.status()
     _print(status)
     return 0

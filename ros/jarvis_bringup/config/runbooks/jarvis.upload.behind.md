@@ -12,8 +12,9 @@ robot keeps working and keeps its history; retention keeps what waits, until the
 
 ## Check
 
-1. `ros2 run jarvis_lake jarvis-lake --upload-to <target> status`: the `upload` section has how many files wait,
-   since when, and the last error (also on the dashboard's System page).
+1. `ros2 run jarvis_lake jarvis-lake status`: the `upload` section, as the lake last reported it,
+   has how many files wait, since when, the last error and the next try (also on the dashboard's
+   System page).
 2. The network from the robot to the target: `curl -sI https://<endpoint>` (or `ls` the share).
 3. The credentials the lake runs with: `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (or the
    AWS config file, an instance role), the bucket name and its region, the policy allowing

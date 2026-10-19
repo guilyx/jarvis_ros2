@@ -136,7 +136,14 @@ def test_behind_after_the_max_lag(data_dir, target):
     status = up.status()
     assert status["behind"] and status["oldest_pending_s"] >= 7200
     message = upload.behind_message(status)
-    assert message.startswith("history is not leaving the robot: 2 file(s)") and "2.0 h" in message
+    assert message.startswith("history is not leaving the robot: 2 file(s), ")
+    assert "KiB, the oldest waiting 2.0 h" in message and "last error" not in message
+    long_error = "b1_0.parquet: OSError: When initiating ... " + "x" * 200 + ": Could not connect to server"
+    message = upload.behind_message(status | {"last_error": long_error, "oldest_pending_s": 75})
+    assert "the oldest waiting 75 s; last error: …" in message and message.endswith(
+        "Could not connect to server"
+    )
+    assert upload.behind_message(status | {"oldest_pending_s": 600}).endswith("the oldest waiting 10 min")
     up.run()
     assert upload.behind_message(up.status()) is None
     assert upload.behind_message(None) is None
@@ -228,6 +235,12 @@ def test_the_cli_uploads_and_queries_the_fleet(data_dir, target, capsys):
     assert "uploaded 2 of 2 file(s)" in capsys.readouterr().out
     assert cli.main([*common, "status"]) == 0
     assert json.loads(capsys.readouterr().out)["upload"]["pending_files"] == 0
+    # With a running service, its own report: what it tried, what failed, when it retries.
+    service = {"updated_at": 1.0, "upload": {"pending_files": 3, "last_error": "offline"}}
+    (data_dir / "lake" / "status.json").write_text(json.dumps(service))
+    assert cli.main(["--data-dir", str(data_dir), "status"]) == 0
+    reported = json.loads(capsys.readouterr().out)["upload"]
+    assert reported == {"pending_files": 3, "last_error": "offline", "reported_at": 1.0}
     assert cli.main(["fleet", target]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert lines[0].split() == [

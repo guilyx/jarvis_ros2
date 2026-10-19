@@ -5,6 +5,7 @@ import { Agent, type AgentSearch } from "@/views/Agent";
 import { Analytics, type AnalyticsSearch } from "@/views/Analytics";
 import { Events, type EventsSearch } from "@/views/Events";
 import { FaultDetail } from "@/views/FaultDetail";
+import { Fleet } from "@/views/Fleet";
 import { Faults, type FaultsSearch } from "@/views/Faults";
 import { IncidentTimeline } from "@/views/IncidentTimeline";
 import { Incidents, type IncidentsSearch } from "@/views/Incidents";
@@ -87,6 +88,7 @@ const routes = [
       incident: typeof s.incident === "string" && s.incident ? s.incident : undefined,
     }),
   }),
+  createRoute({ getParentRoute: () => root, path: "/fleet", component: Fleet }),
   createRoute({ getParentRoute: () => root, path: "/system", component: System }),
 ] as const;
 

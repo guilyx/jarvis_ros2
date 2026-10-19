@@ -222,6 +222,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/fleet": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Fleet View
+     * @description This robot and the robots of `fleet` in gateway.yaml, each from its own gateway: online,
+     *     open faults by severity, the worst one, the recovery mode (docs/guides/fleet.md).
+     */
+    get: operations["fleet_view_api_v1_fleet_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/health": {
     parameters: {
       query?: never;
@@ -864,6 +885,74 @@ export interface components {
             [key: string]: unknown;
           }[]
         | null;
+    } & {
+      [key: string]: unknown;
+    };
+    /** Fleet */
+    Fleet: {
+      /** Robots */
+      robots: components["schemas"]["FleetRobot"][];
+    } & {
+      [key: string]: unknown;
+    };
+    /** FleetRobot */
+    FleetRobot: {
+      /**
+       * Connected
+       * @default false
+       */
+      connected: boolean;
+      /** Error */
+      error?: string | null;
+      /** Faults */
+      faults?: {
+        [key: string]: number;
+      };
+      /**
+       * Incidents
+       * @default 0
+       */
+      incidents: number;
+      /**
+       * Latched
+       * @default 0
+       */
+      latched: number;
+      /** Latency Ms */
+      latency_ms?: number | null;
+      /**
+       * Local
+       * @default false
+       */
+      local: boolean;
+      /**
+       * Mode
+       * @default UNKNOWN
+       */
+      mode: string;
+      /** Name */
+      name: string;
+      /** Online */
+      online: boolean;
+      /**
+       * Robot
+       * @default
+       */
+      robot: string;
+      /**
+       * Status
+       * @default
+       */
+      status: string;
+      /**
+       * Url
+       * @default
+       */
+      url: string;
+      /** Worst */
+      worst?: {
+        [key: string]: string;
+      } | null;
     } & {
       [key: string]: unknown;
     };
@@ -1617,6 +1706,39 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Outcome"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  fleet_view_api_v1_fleet_get: {
+    parameters: {
+      query?: {
+        token?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Fleet"];
         };
       };
       /** @description Validation Error */

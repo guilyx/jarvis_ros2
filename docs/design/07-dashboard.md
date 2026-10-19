@@ -240,6 +240,12 @@ time, flapping faults (3+ confirm-clear cycles), recovery effectiveness per plan
 
 - Jarvis component lifecycle states, ingest rate, drops/suppressions, queue depth, recorder health and disk usage (bags, lake), lake conversion lag, rule-engine latency, agent status. This mirrors `/diagnostics` (hardware_id `jarvis`).
 
+### View 9 — Fleet
+The robots this gateway lists (`fleet` in gateway.yaml) and itself, one card each, the ones that
+need someone first: online, open faults by severity, the worst one, incidents, the recovery mode; a
+link to the robot's own dashboard. Read-only, asked from each robot's gateway every 5 s
+([guide](../guides/fleet.md)).
+
 ## 3. UX principles
 
 - **Live by default, pausable.** New rows never jump the list under the cursor.

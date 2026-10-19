@@ -89,6 +89,27 @@ class Faults(Open):
     history: list[dict[str, Any]] | None = None
 
 
+class FleetRobot(Open):
+    name: str
+    url: str = ""
+    online: bool
+    local: bool = False  # this gateway's own robot
+    robot: str = ""
+    status: str = ""
+    connected: bool = False
+    latency_ms: int | None = None
+    error: str | None = None
+    mode: str = "UNKNOWN"
+    faults: dict[str, int] = Field(default_factory=dict)
+    worst: dict[str, str] | None = None
+    incidents: int = 0
+    latched: int = 0
+
+
+class Fleet(Open):
+    robots: list[FleetRobot]
+
+
 class Vda5050Error(Open):
     errorType: str
     errorLevel: str

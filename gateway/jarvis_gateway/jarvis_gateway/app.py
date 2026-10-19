@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from jarvis_lake import model, storage
 
-from jarvis_gateway import __version__, auth, bags, models, sovd, stream, vda5050
+from jarvis_gateway import __version__, auth, bags, fleet, models, sovd, stream, vda5050
 from jarvis_gateway.catalog import Catalog
 from jarvis_gateway.history import History
 from jarvis_gateway.metrics import Metrics
@@ -48,6 +48,7 @@ class Gateway:
         self.notifier = notifier or Notifier(settings.webhooks, on_delivery=self.metrics.on_delivery)
         self.clients = set()
         self.started_at = time.time()
+        self.fleet_client = None  # an httpx.AsyncClient for the fleet view (tests); None: one per request
         self.backfilled = False
         self._tasks = []
         self._bag_cache = {}
@@ -158,17 +159,19 @@ def create_app(settings, port, notifier=None):
 
     # -- who and how -------------------------------------------------------------------------------
 
+    def status():
+        snapshots = gw.state.faults is not None and gw.state.executions is not None
+        if gw.port.connected and snapshots:
+            return "ok"
+        return "degraded" if time.time() - gw.started_at > 30 else "starting"
+
     @api.get("/health", response_model=models.Health, tags=["system"])
     def health():
         age = None
         if gw.state.last_event_monotonic is not None:
             age = round(time.monotonic() - gw.state.last_event_monotonic, 3)
-        snapshots = gw.state.faults is not None and gw.state.executions is not None
-        status = "ok" if gw.port.connected and snapshots else "starting"
-        if time.time() - gw.started_at > 30 and status != "ok":
-            status = "degraded"
         return models.Health(
-            status=status,
+            status=status(),
             connected=gw.port.connected,
             faults_snapshot=gw.state.faults is not None,
             executions_snapshot=gw.state.executions is not None,
@@ -176,6 +179,23 @@ def create_app(settings, port, notifier=None):
             robot=gw.state.robot,
             lake=gw.lake_status(),
         )
+
+    @api.get("/fleet", response_model=models.Fleet, tags=["system"])
+    async def fleet_view(who=Depends(viewer)):
+        """This robot and the robots of `fleet` in gateway.yaml, each from its own gateway: online,
+        open faults by severity, the worst one, the recovery mode (docs/guides/fleet.md)."""
+        own = {
+            "name": gw.state.robot or "this robot",
+            "url": "",
+            "local": True,
+            "online": True,
+            "robot": gw.state.robot,
+            "status": status(),
+            "connected": gw.port.connected,
+            **fleet.summarize(gw.state.faults, (gw.state.executions or {}).get("mode", "UNKNOWN")),
+        }
+        settings = gw.settings.fleet or fleet.Settings()
+        return {"robots": await fleet.robots(settings, own, gw.fleet_client)}
 
     @api.get("/me", response_model=models.Me, tags=["system"])
     def me(who=Depends(viewer)):

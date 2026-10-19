@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from jarvis_lake import model, storage
 
-from jarvis_gateway import __version__, auth, bags, models, sovd, stream
+from jarvis_gateway import __version__, auth, bags, models, sovd, stream, vda5050
 from jarvis_gateway.catalog import Catalog
 from jarvis_gateway.history import History
 from jarvis_gateway.metrics import Metrics
@@ -305,6 +305,16 @@ def create_app(settings, port, notifier=None):
         if text is None:
             raise HTTPException(404, f"no runbook for '{code}'")
         return {"code": code, "markdown": text}
+
+    @api.get("/vda5050/errors", response_model=models.Vda5050Errors, tags=["faults"])
+    def vda5050_errors(who=Depends(viewer)):
+        """Jarvis's open root-cause faults as VDA 5050 error objects, for the robot's VDA 5050 adapter
+        to merge into the `errors` of its state (docs/guides/vda5050.md)."""
+        settings = gw.settings.vda5050 or vda5050.Settings()
+        return {
+            "version": settings.version,
+            "errors": vda5050.errors(gw.state.faults, settings, gw.catalog.runbook),
+        }
 
     @api.post("/faults/{fault_id}:ack", response_model=models.Outcome, tags=["faults"])
     async def ack(fault_id: str, body: models.Note, who=Depends(operator)):

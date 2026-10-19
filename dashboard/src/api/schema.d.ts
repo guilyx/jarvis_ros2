@@ -633,6 +633,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/vda5050/errors": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Vda5050 Errors
+     * @description Jarvis's open root-cause faults as VDA 5050 error objects, for the robot's VDA 5050 adapter
+     *     to merge into the `errors` of its state (docs/guides/vda5050.md).
+     */
+    get: operations["vda5050_errors_api_v1_vda5050_errors_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1126,6 +1147,35 @@ export interface components {
       msg: string;
       /** Error Type */
       type: string;
+    };
+    /** Vda5050Error */
+    Vda5050Error: {
+      /**
+       * Errordescription
+       * @default
+       */
+      errorDescription: string;
+      /** Errorhint */
+      errorHint?: string | null;
+      /** Errorlevel */
+      errorLevel: string;
+      /** Errorreferences */
+      errorReferences?: {
+        [key: string]: string;
+      }[];
+      /** Errortype */
+      errorType: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /** Vda5050Errors */
+    Vda5050Errors: {
+      /** Errors */
+      errors: components["schemas"]["Vda5050Error"][];
+      /** Version */
+      version: string;
+    } & {
+      [key: string]: unknown;
     };
   };
   responses: never;
@@ -2449,6 +2499,39 @@ export interface operations {
         };
         content: {
           "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  vda5050_errors_api_v1_vda5050_errors_get: {
+    parameters: {
+      query?: {
+        token?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Vda5050Errors"];
         };
       };
       /** @description Validation Error */

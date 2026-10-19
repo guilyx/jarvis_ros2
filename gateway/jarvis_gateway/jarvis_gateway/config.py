@@ -21,6 +21,7 @@
     runbooks: [/path/to/runbooks]   # more <code>.md runbooks (besides runbooks/ next to the catalog)
     lint: { plans_dir: ..., catalog: ... }        # what POST /rules:validate checks rules against
     cors_origins: [http://localhost:3000]         # browser apps served elsewhere (a SOVD web UI)
+    vda5050: { version: "3.0", errors: [...] }   # Jarvis's faults as VDA 5050 errors (vda5050.py)
 
 Tokens can also come from $JARVIS_GATEWAY_TOKENS ("token:name:role,..."), to keep them out of files.
 docs/guides/security.md puts TLS and single sign-on together.
@@ -73,6 +74,7 @@ class Settings:
     tls_key: str = ""
     proxy_auth: object = None  # jarvis_gateway.auth.ProxyAuth
     cors_origins: list = dataclasses.field(default_factory=list)
+    vda5050: object = None  # jarvis_gateway.vda5050.Settings
 
     @classmethod
     def load(cls, path=None, **overrides):
@@ -108,6 +110,10 @@ class Settings:
             s.tls_cert, s.tls_key = str(tls.get("cert", "")), str(tls.get("key", ""))
             if bool(s.tls_cert) != bool(s.tls_key):
                 raise ValueError(f"{path}: tls needs both cert and key")
+            if "vda5050" in raw:
+                from jarvis_gateway.vda5050 import Settings as Vda5050
+
+                s.vda5050 = Vda5050.load(raw["vda5050"])
             if raw.get("proxy_auth"):
                 from jarvis_gateway.auth import ProxyAuth
 

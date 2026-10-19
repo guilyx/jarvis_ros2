@@ -50,6 +50,8 @@ robots, with history, a dashboard and an agent that explains what happened.
   its tokens and audit trail, and requests recoveries through the gates only if allowed.
 - SOVD clients (the ros2_medkit web UI, its Foxglove panel) list, follow and clear Jarvis's faults:
   the gateway serves them on a SOVD-style API at `/sovd/api/v1`.
+- Fleet managers that speak VDA 5050 see Jarvis's faults in the robot's state: the gateway serves
+  them as VDA 5050 errors, with levels and the runbook's first fix as a hint.
 - A robot that runs ros2_medkit keeps it: `medkit:=true` brings the faults its fault manager
   confirms into Jarvis (`jarvis_medkit`), for Jarvis's rules, recovery and agent.
 

@@ -16,6 +16,7 @@
 #include <jarvis_interfaces/srv/decide_approval.hpp>
 #include <jarvis_interfaces/srv/list_plans.hpp>
 #include <jarvis_interfaces/srv/reload_config.hpp>
+#include <jarvis_interfaces/srv/set_maintenance.hpp>
 #include <jarvis_interfaces/srv/set_recovery_mode.hpp>
 #include <map>
 #include <memory>
@@ -46,6 +47,7 @@ using jarvis_interfaces::srv::CancelExecution;
 using jarvis_interfaces::srv::DecideApproval;
 using jarvis_interfaces::srv::ListPlans;
 using jarvis_interfaces::srv::ReloadConfig;
+using jarvis_interfaces::srv::SetMaintenance;
 using jarvis_interfaces::srv::SetRecoveryMode;
 using GoalHandle = rclcpp_action::ServerGoalHandle<ExecuteRecovery>;
 
@@ -161,6 +163,17 @@ public:
         }
         auto r =
           orch_->set_mode(*m, req->operator_name, req->reason, req->cancel_running, now_ns(*this));
+        res->success = r.success;
+        res->message = r.message;
+        apply(std::move(r.effects));
+      });
+    maintenance_srv_ = create_service<SetMaintenance>(
+      "~/set_maintenance", [this](
+                             const std::shared_ptr<SetMaintenance::Request> req,
+                             std::shared_ptr<SetMaintenance::Response> res) {
+        auto r = orch_->set_maintenance(
+          req->component, static_cast<jarvis_core::Duration>(req->duration_s * 1e9),
+          req->operator_name, req->reason, now_ns(*this));
         res->success = r.success;
         res->message = r.message;
         apply(std::move(r.effects));
@@ -653,6 +666,15 @@ private:
     for (auto it = history.end() - static_cast<std::ptrdiff_t>(keep); it != history.end(); ++it) {
       msg.recent.push_back(to_msg(*it));
     }
+    for (const auto & [component, m] : orch_->maintenance()) {
+      jarvis_interfaces::msg::Maintenance w;
+      w.component = component;
+      w.since = to_msg_time(m.since);
+      w.until = to_msg_time(m.until);
+      w.operator_name = m.by;
+      w.reason = m.reason;
+      msg.maintenance.push_back(w);
+    }
     executions_pub_->publish(msg);
   }
 
@@ -714,6 +736,7 @@ private:
   rclcpp::Subscription<FaultArray>::SharedPtr faults_sub_;
   rclcpp_action::Server<ExecuteRecovery>::SharedPtr action_server_;
   rclcpp::Service<SetRecoveryMode>::SharedPtr mode_srv_;
+  rclcpp::Service<SetMaintenance>::SharedPtr maintenance_srv_;
   rclcpp::Service<DecideApproval>::SharedPtr decide_srv_;
   rclcpp::Service<CancelExecution>::SharedPtr cancel_srv_;
   rclcpp::Service<ReloadConfig>::SharedPtr reload_srv_;

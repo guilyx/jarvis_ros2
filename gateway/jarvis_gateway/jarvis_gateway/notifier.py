@@ -17,8 +17,10 @@ NOTIFY_CODE = "jarvis.notify"
 
 
 class Notifier:
-    def __init__(self, webhooks, client=None, sleep=asyncio.sleep, on_delivery=None):
+    def __init__(self, webhooks, client=None, sleep=asyncio.sleep, on_delivery=None, silenced=None):
         self.webhooks = list(webhooks)
+        # silenced(event) -> why a notification is not sent (its component is under maintenance), or None
+        self.silenced = silenced or (lambda event: None)
         self._client = client
         self._sleep = sleep
         self._on_delivery = on_delivery or (lambda record: None)
@@ -35,6 +37,11 @@ class Notifier:
 
     async def deliver(self, event):
         channel = (event.get("attrs") or {}).get("channel", "default")
+        if why := self.silenced(event):
+            record = {"webhook": "", "channel": channel, "event_id": event.get("id"), "attempts": 0}
+            record.update(ok=False, status=None, error=f"silenced: {why}", silenced=True, at=time.time())
+            self.deliveries.append(record)
+            return
         hooks = [w for w in self.webhooks if "*" in w.channels or channel in w.channels]
         await asyncio.gather(*(self._send(w, event, channel) for w in hooks))
 

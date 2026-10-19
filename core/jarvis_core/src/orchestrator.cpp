@@ -216,6 +216,23 @@ RecoveryRequest to_request(const RequestRecovery & r)
 
 // -- JSON -----------------------------------------------------------------------------------------
 
+void to_json(nlohmann::json & j, const Maintenance & m)
+{
+  j = {
+    {"component", m.component}, {"since", ts_json(m.since)}, {"until", ts_json(m.until)},
+    {"operator", m.by},         {"reason", m.reason},
+  };
+}
+
+void from_json(const nlohmann::json & j, Maintenance & m)
+{
+  m.component = j.at("component").get<std::string>();
+  m.since = ts_from(j.value("since", nlohmann::json(nullptr)));
+  m.until = ts_from(j.at("until"));
+  m.by = j.value("operator", "");
+  m.reason = j.value("reason", "");
+}
+
 void to_json(nlohmann::json & j, const Execution & x)
 {
   nlohmann::json gates = nlohmann::json::array();
@@ -724,6 +741,19 @@ void Orchestrator::admit(Live & l, Timestamp at, Effects & out)
           detail = "agent, autonomous";
         }
         break;
+    }
+  }
+  if (x.requester == Requester::Rule || x.requester == Requester::Agent) {
+    if (const auto c = x.args.find("component"); c != x.args.end()) {
+      if (const auto m = maintenance_.find(c->second); m != maintenance_.end()) {
+        return reject(
+          l, "requester",
+          with_note(
+            c->second + " is under maintenance until " + format_iso8601(m->second.until) + " (" +
+              operator_or_default(m->second.by) + "): only operators act on it",
+            m->second.reason),
+          at, out);
+      }
     }
   }
   set_gate(l, "requester", true, detail);
@@ -1380,6 +1410,7 @@ void Orchestrator::fire_timer(Live & l, Timestamp at, Effects & out)
 Effects Orchestrator::advance_to(Timestamp now)
 {
   Effects out;
+  expire_maintenance(now, out);
   for (;;) {
     Live * due = nullptr;
     Timestamp when = 0;
@@ -1403,6 +1434,11 @@ Effects Orchestrator::advance_to(Timestamp now)
 std::optional<Timestamp> Orchestrator::next_deadline() const
 {
   std::optional<Timestamp> best;
+  for (const auto & [component, m] : maintenance_) {
+    if (!best || m.until < *best) {
+      best = m.until;
+    }
+  }
   for (const auto & [id, l] : live_) {
     if (const auto t = timer_of(l); t && (!best || *t < *best)) {
       best = t;
@@ -1581,6 +1617,83 @@ void Orchestrator::collect()
 
 // -- persistence ----------------------------------------------------------------------------------
 
+CommandResult Orchestrator::set_maintenance(
+  const std::string & component, Duration duration, const std::string & operator_name,
+  const std::string & reason, Timestamp now)
+{
+  CommandResult r;
+  r.effects = advance_to(now);
+  const std::string who = operator_or_default(operator_name);
+  if (component.empty()) {
+    r.message = "which component?";
+    return r;
+  }
+  if (duration < 0 || duration > 7 * 24 * kHour) {
+    r.message = "maintenance lasts at most a week";
+    return r;
+  }
+  if (duration == 0) {
+    const auto it = maintenance_.find(component);
+    if (it == maintenance_.end()) {
+      r.message = component + " is not under maintenance";
+      return r;
+    }
+    const Maintenance ended = it->second;
+    maintenance_.erase(it);
+    maintenance_event(
+      ended, false, who, reason.empty() ? "ended by " + who : reason, now, r.effects);
+    r.success = true;
+    r.message = "maintenance of " + component + " ended";
+    return r;
+  }
+  Maintenance m{component, now, now + duration, who, reason};
+  if (const auto it = maintenance_.find(component); it != maintenance_.end()) {
+    m.since = it->second.since;  // renewed: still the same window of work
+  }
+  maintenance_[component] = m;
+  maintenance_event(m, true, who, reason, now, r.effects);
+  r.success = true;
+  r.message = component + " under maintenance until " + format_iso8601(m.until);
+  return r;
+}
+
+void Orchestrator::expire_maintenance(Timestamp now, Effects & out)
+{
+  for (auto it = maintenance_.begin(); it != maintenance_.end();) {
+    if (it->second.until <= now) {
+      const Maintenance ended = it->second;
+      it = maintenance_.erase(it);
+      maintenance_event(ended, false, "", "expired", now, out);
+    } else {
+      ++it;
+    }
+  }
+}
+
+void Orchestrator::maintenance_event(
+  const Maintenance & m, bool started, const std::string & who, const std::string & why,
+  Timestamp at, Effects & out)
+{
+  Event e = make_event(
+    Kind::Operator, started ? "jarvis.maintenance.started" : "jarvis.maintenance.ended",
+    Severity::Info,
+    started ? with_note(
+                m.component + " under maintenance until " + format_iso8601(m.until) + " by " + who,
+                m.reason)
+            : "maintenance of " + m.component + " ended: " + why,
+    at);
+  e.source.component = m.component;
+  e.attrs["component"] = m.component;
+  e.attrs["until"] = format_iso8601(m.until);
+  e.attrs["operator"] = started ? m.by : (who.empty() ? std::string() : who);
+  if (!m.reason.empty()) {
+    e.attrs["reason"] = m.reason;
+  }
+  out.emplace_back(EmitEvent{std::move(e)});
+  out.emplace_back(ExecutionsChanged{});  // the snapshot carries the windows
+  out.emplace_back(PersistState{});
+}
+
 nlohmann::json Orchestrator::snapshot() const
 {
   nlohmann::json attempts = nlohmann::json::object();
@@ -1595,11 +1708,13 @@ nlohmann::json Orchestrator::snapshot() const
   for (const auto & x : live()) {
     executions.push_back(x);
   }
+  nlohmann::json maintenance = nlohmann::json::array();
+  for (const auto & [component, m] : maintenance_) {
+    maintenance.push_back(m);
+  }
   return {
-    {"schema", kSchema},
-    {"mode", to_string(mode_)},
-    {"attempts", attempts},
-    {"executions", executions},
+    {"schema", kSchema},        {"mode", to_string(mode_)},   {"attempts", attempts},
+    {"executions", executions}, {"maintenance", maintenance},
   };
 }
 
@@ -1612,6 +1727,12 @@ Effects Orchestrator::restore(const nlohmann::json & state, Timestamp now)
   if (const auto m = parse_recovery_mode(state.value("mode", "ENABLED"))) {
     mode_ = *m;
   }
+  maintenance_.clear();
+  for (const auto & j : state.value("maintenance", nlohmann::json::array())) {
+    auto m = j.get<Maintenance>();
+    maintenance_[m.component] = m;
+  }
+  expire_maintenance(now, out);  // a window that ended while Jarvis was down
   attempts_.clear();
   const auto attempts = state.value("attempts", nlohmann::json::object());
   for (const auto & [key, list] : attempts.items()) {

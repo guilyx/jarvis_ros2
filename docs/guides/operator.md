@@ -128,6 +128,35 @@ Switching to `DISABLED` from the dashboard lets running plans finish; to stop th
 `ros2 jarvis mode DISABLED --cancel-running --reason "..."`. The mode survives restarts. The kill
 switch stops *Jarvis'* recoveries; it doesn't stop the robot: that's the e-stop.
 
+### Maintenance: hands off one component
+
+Working on one part of the robot (recalibrating the lidar, swapping a gripper)? Put that
+component under maintenance instead of switching everything off. **Maintenance** in the header
+(operators), or the wrench on one of its faults: the component, how long (15 minutes to a day here,
+up to a week from the API or the command line) and why.
+
+Until it ends:
+- **Rules and the agent keep off it.** A recovery they ask for with that `component` is refused
+  at the requester gate: "lidar is under maintenance until 14:32 (alice): only operators act on it".
+- **Operators still act**: you run plans on it as usual (when done, restart what you stopped).
+- **Notifications about it are silenced**: a rule's `notify` on an event of that component is not
+  sent (it is not queued either). **System → Notifications** lists each one, in amber, with why.
+- Faults are still raised and recorded: the robot's history stays true.
+
+A banner on every page says what is under maintenance, until when, who and why; **End** stops it
+early. A window ends by itself at its time, survives restarts of Jarvis, and starting it again
+renews it. Starting and ending are on the record (`jarvis.maintenance.started` / `.ended`, kind
+`OPERATOR`). From the command line:
+
+```bash
+ros2 jarvis maintenance lidar 30m --reason "recalibrating"   # 90s, 30m, 2h, 1d
+ros2 jarvis maintenance                                      # what is under maintenance
+ros2 jarvis maintenance lidar --end
+```
+
+"Component" is `source.component` on the events: what the fault rows show, and the `component`
+argument of the shipped plans.
+
 ## 7. Rules
 
 **Rules** (admins) shows what each rule did over the last day: fires, dry-run ("shadow") fires,
@@ -184,8 +213,8 @@ default (the history itself, in the lake, much longer).
 
 ## 10. What was done, by whom
 
-Every acknowledgement, clear, closed incident, mode change, rule change, approval, rejection,
-cancellation and plan run by a person is an event with their name: **System → Audit trail**, the
+Every acknowledgement, clear, closed incident, mode change, maintenance window, rule change,
+approval, rejection, cancellation and plan run by a person is an event with their name: **System → Audit trail**, the
 *Operator* lane of an incident's timeline, or **Events** filtered on kind `OPERATOR`. Names come
 from your token or your sign-in; from the command line, from `--operator` (or `$JARVIS_OPERATOR`).
 
@@ -201,6 +230,7 @@ ros2 jarvis reject <execution-id> --note "not now: maintenance"
 ros2 jarvis cancel <execution-id> --reason "..."
 ros2 jarvis recover restart-lifecycle-node -a node=/lidar_driver -a component=lidar --dry-run
 ros2 jarvis mode                                # the recovery mode; DISABLED --reason "..." to stop
+ros2 jarvis maintenance lidar 2h --reason "..." # keep rules and the agent off a component (--end)
 ros2 jarvis rules                               # the rules and what they did
 ros2 jarvis rules dry-run <rule-id> [--off]     # shadow mode on (or off)
 ```

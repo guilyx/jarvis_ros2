@@ -318,7 +318,7 @@ flowchart TB
   G1{"1 · Mode<br/>ENABLED / DRY_RUN / DISABLED"} -->|"DISABLED"| REJ["REJECTED"]
   G1 --> G2{"2 · Plan known<br/>+ params valid"}
   G2 -->|"no"| REJ
-  G2 --> G3{"3 · Requester allowed<br/>allowed_requesters · agent_policy"}
+  G2 --> G3{"3 · Requester allowed<br/>allowed_requesters · agent_policy<br/>maintenance windows"}
   G3 -->|"no"| REJ
   G3 --> G4{"4 · Preconditions<br/>guard on faults/state"}
   G4 -->|"false"| REJ
@@ -337,6 +337,8 @@ flowchart TB
 ```
 
 Each gate result is stored on the execution for the audit trail. In `DRY_RUN` mode every gate runs, but steps are only **simulated**, and events carry `attrs.dry_run=true`.
+
+**Maintenance windows** (gate 3): an operator puts a component under maintenance for a while (`~/set_maintenance` on the recovery node: component, `duration_s` up to a week, operator, reason; 0 ends it). Until it ends, a request from a `RULE` or the `AGENT` whose `component` argument names it is rejected: "lidar is under maintenance until … (alice): only operators act on it". `OPERATOR` and `PLAN` requests pass (a ladder already under way goes on). A request without a `component` argument is not affected: plans that act on a component take it as a parameter, as the shipped ones do. Windows are in the orchestrator's persisted state (they survive a restart, and one that ended while Jarvis was down ends when it starts), in `/jarvis/executions` (`maintenance[]`), and on the event stream: `jarvis.maintenance.started` / `jarvis.maintenance.ended` (kind `OPERATOR`, `source.component` the component, `attrs.until`, `attrs.operator`, `attrs.reason`). Starting one again renews it. The gateway also silences `notify` deliveries about the component (an event whose `source.component` is under maintenance: not sent, recorded as silenced).
 
 **Agent autonomy** (gate 3 + gate 7): `effective = min(deployment agent.autonomy, plan.agent_policy)`.
 

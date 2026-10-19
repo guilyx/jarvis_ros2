@@ -184,12 +184,24 @@ def execution_to_dict(x):
     }
 
 
+def maintenance_to_dict(m):
+    """A Maintenance message: a component rules and the agent keep off until `until`."""
+    return {
+        "component": m.component,
+        "since": iso8601(m.since),
+        "until": iso8601(m.until),
+        "operator": m.operator_name,
+        "reason": m.reason,
+    }
+
+
 def executions_to_dict(msg):
-    """An ExecutionArray: {mode, executions, recent}."""
+    """An ExecutionArray: {mode, executions, recent, maintenance}."""
     return {
         "mode": msg.mode,
         "executions": [execution_to_dict(x) for x in msg.executions],
         "recent": [execution_to_dict(x) for x in msg.recent],
+        "maintenance": [maintenance_to_dict(m) for m in msg.maintenance],
     }
 
 

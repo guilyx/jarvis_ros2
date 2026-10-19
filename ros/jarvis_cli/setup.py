@@ -8,6 +8,7 @@ VERBS = {
     "plans": "PlansVerb",
     "recover": "RecoverVerb",
     "mode": "ModeVerb",
+    "maintenance": "MaintenanceVerb",
     "approve": "ApproveVerb",
     "reject": "RejectVerb",
     "cancel": "CancelVerb",

@@ -232,6 +232,24 @@ class Mode(BaseModel):
     cancel_running: bool = False
 
 
+class MaintenanceWindow(Open):
+    component: str
+    since: str = ""
+    until: str
+    operator: str = ""
+    reason: str = ""
+
+
+class MaintenanceList(Open):
+    maintenance: list[MaintenanceWindow] = Field(default_factory=list)
+
+
+class MaintenanceRequest(BaseModel):
+    component: str = Field(min_length=1, max_length=128)
+    minutes: float = Field(30, gt=0, le=7 * 24 * 60, description="how long (at most a week)")
+    reason: str = Field("", max_length=500)
+
+
 class RuleState(BaseModel):
     enabled: bool | None = None
     dry_run: bool | None = None

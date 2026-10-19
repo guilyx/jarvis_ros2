@@ -27,6 +27,7 @@ from jarvis_interfaces.srv import (
     ListRules,
     QueryEvents,
     ReloadConfig,
+    SetMaintenance,
     SetRecoveryMode,
     SetRuleState,
 )
@@ -65,6 +66,7 @@ SERVICES = {
     "decide": (DecideApproval, "recovery/decide"),
     "cancel": (CancelExecution, "recovery/cancel"),
     "mode": (SetRecoveryMode, "recovery/set_mode"),
+    "maintenance": (SetMaintenance, "recovery/set_maintenance"),
     "plans": (ListPlans, "recovery/list_plans"),
     "plans_reload": (ReloadConfig, "recovery/reload"),
     "rules": (ListRules, "rule_engine/list_rules"),
@@ -272,6 +274,16 @@ class RosPort(JarvisPort):
             "mode", mode=mode, operator_name=operator, reason=reason, cancel_running=cancel_running
         )
         return CommandResult(r.success, r.message, {"previous_mode": r.previous_mode})
+
+    async def set_maintenance(self, component, duration_s, operator, reason=""):
+        r = await self._call(
+            "maintenance",
+            component=component,
+            duration_s=float(duration_s),
+            operator_name=operator,
+            reason=reason,
+        )
+        return CommandResult(r.success, r.message)
 
     async def list_plans(self):
         r = await self._call("plans")

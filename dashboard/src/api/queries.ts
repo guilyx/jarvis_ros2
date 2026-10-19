@@ -383,6 +383,20 @@ export const useSetMode = () =>
     [["recoveries"], ["plans"], ["audit"]],
   );
 
+export const useStartMaintenance = () =>
+  useCommand(
+    (body: { component: string; minutes: number; reason: string }) =>
+      unwrap<Outcome>(client.POST("/api/v1/maintenance", { body })),
+    [["audit"]],
+  );
+
+export const useEndMaintenance = () =>
+  useCommand(
+    (component: string) =>
+      unwrap<Outcome>(client.DELETE("/api/v1/maintenance/{component}", { params: { path: { component } } })),
+    [["audit"]],
+  );
+
 export const useSetRuleState = () =>
   useCommand(
     ({ id, ...body }: { id: string; enabled?: boolean; dry_run?: boolean; reason: string }) =>

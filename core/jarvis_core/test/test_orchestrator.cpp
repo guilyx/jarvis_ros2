@@ -737,6 +737,84 @@ TEST_F(OrchestratorTest, DryRunSimulatesEveryStepAndTouchesNothing)
   EXPECT_EQ(submit(r).state, ExecState::Rejected) << "a dry run requested while ENABLED";
 }
 
+TEST_F(OrchestratorTest, MaintenanceKeepsRulesAndTheAgentOffAComponent)
+{
+  load(kRestart);
+  auto r = o_->set_maintenance("relay", 30 * kMinute, "alice", "recalibrating", now_);
+  log(r.effects);
+  ASSERT_TRUE(r.success) << r.message;
+  ASSERT_EQ(o_->maintenance().count("relay"), 1u);
+  const auto started = std::find_if(events_.begin(), events_.end(), [](const Event & e) {
+    return e.code == "jarvis.maintenance.started";
+  });
+  ASSERT_NE(started, events_.end());
+  EXPECT_EQ(started->kind, Kind::Operator);
+  EXPECT_EQ(started->source.component, "relay");
+  EXPECT_EQ(attr(*started, "operator"), "alice");
+  EXPECT_EQ(attr(*started, "reason"), "recalibrating");
+  EXPECT_EQ(attr(*started, "until"), format_iso8601(now_ + 30 * kMinute));
+
+  // A rule and the agent are turned away from the relay; an operator is not.
+  const auto rule = submit("restart", {{"node", "/relay"}}, Requester::Rule);
+  EXPECT_EQ(rule.state, ExecState::Rejected);
+  EXPECT_EQ(
+    rule.reason, "relay is under maintenance until " + format_iso8601(now_ + 30 * kMinute) +
+                   " (alice): only operators act on it: recalibrating");
+  EXPECT_FALSE(exec(rule.execution_id).gates.back().passed);
+  EXPECT_EQ(exec(rule.execution_id).gates.back().gate, "requester");
+  EXPECT_EQ(submit("restart", {{"node", "/relay2"}}, Requester::Agent).state, ExecState::Rejected);
+  const auto other =
+    submit("restart", {{"node", "/camera"}, {"component", "camera"}}, Requester::Rule);
+  EXPECT_EQ(other.state, ExecState::Running) << "another component: " << other.reason;
+  const auto op = submit("restart", {{"node", "/relay3"}}, Requester::Operator);
+  EXPECT_EQ(op.state, ExecState::Running) << op.reason;
+
+  // The window wakes the node when it ends, then the rule may act again.
+  ASSERT_TRUE(o_->next_deadline());
+  EXPECT_LE(*o_->next_deadline(), now_ + 30 * kMinute);
+  tick(31 * kMinute);
+  EXPECT_TRUE(o_->maintenance().empty());
+  const auto ended = std::find_if(events_.begin(), events_.end(), [](const Event & e) {
+    return e.code == "jarvis.maintenance.ended";
+  });
+  ASSERT_NE(ended, events_.end());
+  EXPECT_EQ(ended->message, "maintenance of relay ended: expired");
+  EXPECT_EQ(submit("restart", {{"node", "/relay4"}}, Requester::Rule).state, ExecState::Running);
+
+  // Ended by hand; what can't be done says why.
+  log(o_->set_maintenance("relay", kHour, "alice", "", now_).effects);
+  r = o_->set_maintenance("relay", 0, "bob", "", now_);
+  log(r.effects);
+  EXPECT_TRUE(r.success);
+  EXPECT_EQ(events_.back().code, "jarvis.maintenance.ended");
+  EXPECT_EQ(events_.back().message, "maintenance of relay ended: ended by bob");
+  EXPECT_TRUE(o_->maintenance().empty());
+  EXPECT_FALSE(o_->set_maintenance("relay", 0, "bob", "", now_).success) << "not under maintenance";
+  EXPECT_FALSE(o_->set_maintenance("", kHour, "bob", "", now_).success);
+  EXPECT_FALSE(o_->set_maintenance("relay", 8 * 24 * kHour, "bob", "", now_).success);
+}
+
+TEST_F(OrchestratorTest, MaintenanceSurvivesARestartAndEndsWhileDown)
+{
+  load(kRestart);
+  log(o_->set_maintenance("relay", 10 * kMinute, "alice", "new firmware", now_).effects);
+  const auto saved = o_->snapshot();
+  ASSERT_EQ(saved.at("maintenance").size(), 1u);
+
+  load(kRestart);
+  log(o_->restore(saved, now_ + kMinute));
+  ASSERT_EQ(o_->maintenance().count("relay"), 1u);
+  EXPECT_EQ(o_->maintenance().at("relay").reason, "new firmware");
+  EXPECT_EQ(o_->maintenance().at("relay").by, "alice");
+
+  load(kRestart);
+  events_.clear();
+  log(o_->restore(saved, now_ + kHour));
+  EXPECT_TRUE(o_->maintenance().empty()) << "it ended while Jarvis was down";
+  ASSERT_FALSE(events_.empty());
+  EXPECT_EQ(events_.back().code, "jarvis.maintenance.ended");
+}
+
 TEST_F(OrchestratorTest, TheKillSwitchStopsEverything)
 {
   load(std::string(kRestart) + R"(

@@ -137,6 +137,20 @@ struct FaultView
   std::string state;  ///< PENDING, ACTIVE, LATCHED, CLEARED
 };
 
+/// A component under maintenance: until `until`, rules and the agent keep their hands off it (their
+/// recoveries with that `component` argument are rejected); operators still act.
+struct Maintenance
+{
+  std::string component;
+  Timestamp since{0};
+  Timestamp until{0};
+  std::string by;  ///< the operator who started it
+  std::string reason;
+};
+
+void to_json(nlohmann::json & j, const Maintenance & m);
+void from_json(const nlohmann::json & j, Maintenance & m);
+
 struct OrchestratorConfig
 {
   std::string robot_id{"robot"};
@@ -209,6 +223,14 @@ public:
     bool cancel_running, Timestamp now);
   RecoveryMode mode() const { return mode_; }
 
+  /// Puts `component` under maintenance for `duration` (renewing a window replaces it), or ends
+  /// it with a zero duration. At most a week.
+  CommandResult set_maintenance(
+    const std::string & component, Duration duration, const std::string & operator_name,
+    const std::string & reason, Timestamp now);
+  /// Components under maintenance, by name.
+  const std::map<std::string, Maintenance> & maintenance() const { return maintenance_; }
+
   const Execution * find(const std::string & execution_id) const;
   /// Executions still in play: waiting, running, or failed with their ladder in progress.
   std::vector<Execution> live() const;
@@ -280,6 +302,10 @@ private:
     Live & l, std::string_view phase, Severity severity, std::string message, Attributes extra,
     Timestamp at, Effects & out, std::string code = "");
   void changed(const Live & l, Effects & out);
+  void expire_maintenance(Timestamp now, Effects & out);
+  void maintenance_event(
+    const Maintenance & m, bool started, const std::string & who, const std::string & why,
+    Timestamp at, Effects & out);
   Event make_event(
     Kind kind, std::string code, Severity severity, std::string message, Timestamp at) const;
 
@@ -292,6 +318,7 @@ private:
   std::map<std::string, std::deque<Timestamp>> attempts_;  ///< rate-limit key -> start times
   std::map<std::string, FaultView> faults_;                ///< open faults by fault_id
   std::map<std::string, AttrValue> states_;                ///< STATE code -> latest value
+  std::map<std::string, Maintenance> maintenance_;         ///< by component
   std::deque<std::pair<std::uint64_t, Event>> recent_;     ///< lookback for wait_for
   std::uint64_t event_count_{0};
   std::uint64_t serial_{0};

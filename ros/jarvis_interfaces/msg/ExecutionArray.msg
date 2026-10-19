@@ -3,3 +3,4 @@ builtin_interfaces/Time stamp
 string mode                          # ENABLED, DRY_RUN or DISABLED
 Execution[] executions               # still in play: waiting, running, or failed with a ladder running
 Execution[] recent                   # recently settled, oldest first
+Maintenance[] maintenance            # components rules and the agent keep off

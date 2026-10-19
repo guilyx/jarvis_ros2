@@ -51,6 +51,8 @@ decimal string everywhere: a uint64 does not fit a JavaScript number. Tokens go 
 | `GET /recoveries` · `GET /recoveries/{id}` | viewer | Mode, live and recent executions (steps, gates), history |
 | `POST /recoveries/{id}:approve` · `:reject` · `:cancel` | operator | Approval flow / cancel |
 | `PUT /recovery/mode` | admin | `ENABLED` / `DRY_RUN` / `DISABLED` (kill switch), `cancel_running` |
+| `GET /maintenance` | viewer | Components under maintenance: `component`, `since`, `until`, `operator`, `reason` |
+| `POST /maintenance` · `DELETE /maintenance/{component}` | operator | Put a component under maintenance (`component`, `minutes` ≤ 10080, `reason`; again: renews it) · end it now. Rules and the agent keep off it; `notify` deliveries about it are silenced |
 | `GET /insights` · `GET /insights/{id}` | viewer | Agent insights (payload decoded), with the events they cite |
 | `POST /agent/ask` | operator | `{incident_id?, question?}` → SSE: `progress` ({stage, detail}) as the agent works, then `insight` or `error`; 503 without the agent |
 | `GET /stats?hours=24` | viewer | KPIs (below), open faults by severity, event rate, top codes, plans |

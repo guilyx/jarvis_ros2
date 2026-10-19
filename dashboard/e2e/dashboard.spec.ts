@@ -70,6 +70,30 @@ test("the kill switch goes through a reason, and the stream shows it", async ({ 
   }
 });
 
+test("an operator puts a component under maintenance, then ends it", async ({ page }) => {
+  await page.goto("/events?kind=OPERATOR");
+  await expect(page.getByTestId("live-status")).toHaveText("LIVE");
+  await page.getByRole("button", { name: "Start maintenance" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("textbox", { name: "Component" }).fill("e2e-arm");
+  await dialog.getByRole("combobox", { name: "For" }).selectOption("15");
+  await dialog.getByRole("textbox", { name: "Reason" }).fill("e2e: new gripper");
+  await dialog.getByRole("button", { name: "Start maintenance" }).click();
+  await expect(dialog).toBeHidden();
+
+  const banner = page.getByTestId("maintenance");
+  await expect(banner).toContainText("e2e-arm under maintenance until");
+  await expect(banner).toContainText("e2e: new gripper");
+  await expect(
+    page.getByTestId("event-row").filter({ hasText: "jarvis.maintenance.started" }).first(),
+  ).toBeVisible();
+  await banner.getByRole("button", { name: "End maintenance of e2e-arm" }).click();
+  await expect(banner).toBeHidden();
+  await expect(
+    page.getByTestId("event-row").filter({ hasText: "jarvis.maintenance.ended" }).first(),
+  ).toBeVisible();
+});
+
 test("an operator runs a plan in dry run and follows it", async ({ page }) => {
   await page.goto("/recovery");
   await page.getByRole("button", { name: "Run plan…" }).click();

@@ -1,0 +1,9 @@
+# Puts a component under maintenance for duration_s (at most a week; again renews it), or ends it
+# with duration_s = 0.
+string component
+float64 duration_s
+string operator_name
+string reason
+---
+bool success
+string message

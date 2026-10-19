@@ -126,6 +126,7 @@ Operators use the same gates:
 ```bash
 ros2 jarvis recover restart-lifecycle-node -a node=/scan_relay -a component=lidar --dry-run
 ros2 jarvis mode DISABLED            # kill switch (DRY_RUN: decide everything, move nothing)
+ros2 jarvis maintenance lidar 2h    # working on it: rules and the agent keep off, pages silenced
 ros2 jarvis executions --steps       # what runs, what waits for approval, what just finished
 ```
 

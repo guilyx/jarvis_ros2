@@ -1,0 +1,39 @@
+# The docking demo's plan. Its steps call Nav2's docking server and AMCL with the generic
+# actuators: the types are named here, and checked when the recovery node loads this file.
+schema: jarvis.plans/v1
+plans:
+  - id: dock-and-charge
+    description: Dock with Nav2's docking server, re-seed localization at the dock, wait for the charge.
+    params:
+      dock: { type: string, default: home, description: a dock of the docking server's database }
+    locks: [nav2]
+    allowed_requesters: [RULE, OPERATOR, AGENT]
+    agent_policy: supervised
+    preconditions: { faults_inactive: ["safety.*"] }
+    max_attempts: { count: 3, per: 1h }
+    timeout: 2m
+    steps:
+      - id: dock
+        action: action.goal
+        with:
+          action: /dock_robot
+          type: nav2_msgs/action/DockRobot
+          goal: { use_dock_id: true, dock_id: "{{ params.dock }}", navigate_to_staging_pose: true }
+          expect: { success: true, error_code: 0 }
+        timeout: 1m
+      - id: relocalize
+        action: service.call
+        with:
+          service: /set_initial_pose
+          type: nav2_msgs/srv/SetInitialPose
+          request:                      # the dock is a known pose
+            pose:
+              header: { frame_id: map }
+              pose: { pose: { position: { x: 0.0, y: 0.0 }, orientation: { z: 1.0, w: 0.0 } } }
+        timeout: 5s
+      - id: charging
+        action: wait_for
+        with: { fault: { code: power.battery.low }, state: CLEARED }
+        timeout: 20s
+    on_failure:
+      - escalate: operator

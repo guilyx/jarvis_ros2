@@ -143,7 +143,7 @@ class RosPort(JarvisPort):
             else:
                 self._backlog += n
         if behind:
-            self._node.get_logger().warn(
+            self._node.get_logger().warning(
                 f"behind the event stream: {self.dropped} events dropped so far", throttle_duration_sec=10.0
             )
             return

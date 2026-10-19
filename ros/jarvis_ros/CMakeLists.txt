@@ -15,17 +15,20 @@ find_package(lifecycle_msgs REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rcl_interfaces REQUIRED)
+find_package(rcpputils REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(rosbag2_interfaces REQUIRED)
+find_package(rosidl_typesupport_introspection_cpp REQUIRED)
 find_package(std_srvs REQUIRED)
 
-# Conversions, type adapters and state files, shared by every Jarvis node.
+# Conversions, type adapters, state files and run-time typed messages, shared by every Jarvis node.
 add_library(jarvis_ros SHARED
   src/config_dir.cpp
   src/conversions.cpp
+  src/message.cpp
   src/state_file.cpp
 )
 target_include_directories(jarvis_ros PUBLIC
@@ -37,15 +40,18 @@ target_link_libraries(jarvis_ros PUBLIC
   nlohmann_json::nlohmann_json
   rclcpp::rclcpp
   rclcpp_lifecycle::rclcpp_lifecycle
+  rcpputils::rcpputils
+  rosidl_typesupport_introspection_cpp::rosidl_typesupport_introspection_cpp
   ${builtin_interfaces_TARGETS}
   ${jarvis_interfaces_TARGETS}
 )
 
 # Built-in actuators (pluginlib plugins of jarvis_ros::Actuator, see actuators.xml).
-add_library(jarvis_actuators SHARED src/actuators.cpp)
+add_library(jarvis_actuators SHARED src/actuators.cpp src/generic_actuators.cpp)
 target_link_libraries(jarvis_actuators PUBLIC
   jarvis_ros
   pluginlib::pluginlib
+  rclcpp_action::rclcpp_action
   ${lifecycle_msgs_TARGETS}
   ${rcl_interfaces_TARGETS}
   ${rosbag2_interfaces_TARGETS}
@@ -108,11 +114,16 @@ if(BUILD_TESTING)
   ament_add_gtest(test_conversions test/test_conversions.cpp)
   target_link_libraries(test_conversions jarvis_ros)
 
+  ament_add_gtest(test_message test/test_message.cpp)
+  target_link_libraries(test_message jarvis_ros ${diagnostic_msgs_TARGETS} ${lifecycle_msgs_TARGETS} ${rcl_interfaces_TARGETS})
+
   ament_add_gtest(test_state_file test/test_state_file.cpp)
   target_link_libraries(test_state_file jarvis_ros)
 
   ament_add_gtest(test_actuators test/test_actuators.cpp TIMEOUT 120)
-  target_link_libraries(test_actuators jarvis_ros pluginlib::pluginlib ${std_srvs_TARGETS})
+  target_link_libraries(test_actuators
+    jarvis_ros pluginlib::pluginlib rclcpp_action::rclcpp_action ${lifecycle_msgs_TARGETS} ${std_srvs_TARGETS}
+  )
 
   # Own ROS domain: packages are tested in parallel and launch tests share node names.
   add_launch_test(test/test_fault_flow.launch.py TIMEOUT 120 ENV ROS_DOMAIN_ID=61)
@@ -122,6 +133,7 @@ endif()
 ament_export_include_directories(include/${PROJECT_NAME})
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(
-  builtin_interfaces jarvis_core jarvis_interfaces nlohmann_json pluginlib rclcpp rclcpp_lifecycle
+  builtin_interfaces jarvis_core jarvis_interfaces nlohmann_json pluginlib rclcpp rclcpp_lifecycle rcpputils
+  rosidl_typesupport_introspection_cpp
 )
 ament_package()

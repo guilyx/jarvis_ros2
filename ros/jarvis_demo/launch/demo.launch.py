@@ -14,7 +14,8 @@ it from other machines). Its demo settings let anyone in as admin: never use the
 
 `foxglove:=true` also starts foxglove_bridge on ws://localhost:8765 (the Docker demo does).
 
-Use nav2_sim.launch.py for the same demo on a simulated TurtleBot 4 with Nav2.
+Use nav2_sim.launch.py for the same demo on a simulated TurtleBot 4 with Nav2, and docking.launch.py
+for a low battery that sends the robot to its dock.
 """
 
 import os
@@ -40,7 +41,7 @@ def generate_launch_description():
             "robot_id": arg("robot_id"),
             "data_dir": arg("data_dir"),
             "catalog": str(DEMO / "config" / "demo_faults.yaml"),
-            "rules": str(DEMO / "config" / "rules"),
+            "rules": arg("rules"),
             "plans": arg("plans"),
             "recovery_mode": arg("recovery_mode"),
             "blackbox_topics": "/scan /jarvis/event_batches",
@@ -59,6 +60,16 @@ def generate_launch_description():
                 "data_dir", default_value=os.environ.get("JARVIS_DATA", "~/.local/share/jarvis/demo")
             ),
             DeclareLaunchArgument("fake_lidar", default_value="true", description="Publish /scan_raw"),
+            DeclareLaunchArgument(
+                "base",
+                default_value="false",
+                description="A robot base: battery, docking server, initial pose (docking.launch.py)",
+            ),
+            DeclareLaunchArgument(
+                "rules",
+                default_value=str(DEMO / "config" / "rules"),
+                description="Directory of rules (jarvis.rules/v1)",
+            ),
             DeclareLaunchArgument(
                 "plans",
                 default_value=str(BRINGUP / "config" / "plans"),
@@ -91,6 +102,13 @@ def generate_launch_description():
                 executable="scan_relay",
                 namespace="demo",
                 parameters=[{"autostart": True, "input_topic": "/scan_raw", "output_topic": "/scan"}],
+                output="screen",
+            ),
+            Node(
+                package="jarvis_demo",
+                executable="fake_base",
+                namespace="demo",
+                condition=IfCondition(arg("base")),
                 output="screen",
             ),
             Node(

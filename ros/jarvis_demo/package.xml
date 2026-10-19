@@ -3,7 +3,7 @@
 <package format="3">
   <name>jarvis_demo</name>
   <version>0.1.0</version>
-  <description>Jarvis demo: lidar relay with fault injection, fault injector, and launch files with and without a Nav2 simulation.</description>
+  <description>Jarvis demo: lidar relay with fault injection, a robot base to dock, fault injector, and launch files with and without a Nav2 simulation.</description>
   <maintainer email="erwin.lejeune15@gmail.com">Erwin L.</maintainer>
   <license>Apache-2.0</license>
   <url type="website">https://github.com/guilyx/jarvis_ros2</url>
@@ -22,6 +22,7 @@
   <exec_depend>jarvis_reporter</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>nav2_msgs</exec_depend>
   <exec_depend>rcl_interfaces</exec_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>

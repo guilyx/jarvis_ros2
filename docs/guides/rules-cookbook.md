@@ -34,6 +34,7 @@ The language in full is [05 · Rules and recovery](../design/05-rules-and-recove
   11. [A plan that waits for a human](#11-a-plan-that-waits-for-a-human)
   12. [One at a time: locks and queues](#12-one-at-a-time-locks-and-queues)
   13. [What the agent may do](#13-what-the-agent-may-do)
+  14. [Any service or action, no actuator to write](#14-any-service-or-action-no-actuator-to-write)
 - [Gotchas](#gotchas)
 
 ## Rules
@@ -488,6 +489,63 @@ An `autonomous` request below the robot's `min_confidence` waits for approval in
 `autonomous` for plans that can't make things worse (clear costmaps, a snapshot); `allowed_requesters`
 without `AGENT` keeps the agent out of a plan entirely.
 
+### 14. Any service or action, no actuator to write
+
+`service.call` and `action.goal` take the type by name: a vendor driver's reset service, Nav2's
+docking server, AMCL. The request (or goal) is YAML with the type's fields; `expect` lists
+fields the response (or result) must hold.
+
+```yaml
+schema: jarvis.plans/v1
+plans:
+  - id: dock-and-charge
+    description: Dock with Nav2's docking server, re-seed localization at the dock, wait for the charge.
+    params:
+      dock: { type: string, default: home }
+    locks: [nav2]
+    preconditions: { faults_inactive: ["safety.*"] }
+    timeout: 2m
+    steps:
+      - id: dock
+        action: action.goal
+        with:
+          action: /dock_robot
+          type: nav2_msgs/action/DockRobot
+          goal: { use_dock_id: true, dock_id: "{{ params.dock }}" }
+          expect: { success: true, error_code: 0 }
+        timeout: 1m                       # a timeout cancels the goal
+      - id: relocalize
+        action: service.call
+        with:
+          service: /set_initial_pose
+          type: nav2_msgs/srv/SetInitialPose
+          request:
+            pose:
+              header: { frame_id: map }
+              pose: { pose: { position: { x: 0.0, y: 0.0 }, orientation: { z: 1.0, w: 0.0 } } }
+        timeout: 5s
+      - id: charging
+        action: wait_for
+        with: { fault: { code: power.battery.low }, state: CLEARED }
+        timeout: 20s
+    on_failure:
+      - escalate: operator
+```
+
+- **Checked when the plans load.** The recovery node loads each type and checks the request, the
+  goal and `expect` against it: an unknown type, a misspelt field (`dock_idd`), a string where a
+  number goes, an integer out of range fail the load, with the field named. Templates are checked
+  once rendered, when the step runs.
+- **What succeeds.** A service step succeeds when the response holds `expect`; an action step when
+  the result is `SUCCEEDED` and holds `expect`. Without `expect`, a response or result with a
+  boolean `success` must say `true` (`expect: {}` accepts anything). The step's message is the
+  response's `message` or `error_msg`, or the response itself.
+- **Fields left out keep their defaults** from the `.msg`. Numbers compare as numbers, and nested
+  fields as maps: `expect: { status: { code: 0 } }`.
+- **The type's package must be installed** where Jarvis runs (`nav2_msgs` here). The demo runs
+  this plan: `ros2 launch jarvis_demo docking.launch.py`, then
+  `ros2 param set /demo/base inject drain`.
+
 ## Gotchas
 
 - **Quote what must stay text.** YAML reads `attrs.value: true` as a boolean and `attrs.id: 007`
@@ -507,8 +565,8 @@ without `AGENT` keeps the agent out of a plan entirely.
 - **Shadow fires count.** A rule in `dry_run` uses up its `cooldown` and `max_fires` and can be
   suppressed, as it would live.
 - **Lint checks the plans, not the robot.** It doesn't know whether `/lidar_driver` exists, and it
-  doesn't check an actuator's `with` arguments: the recovery node checks those when it loads the
-  plans (and refuses a plan it can't run). `lint --actuators ...` checks against the actuators you
+  doesn't check an actuator's `with` arguments (nor `service.call` fields against their type): the
+  recovery node checks those when it loads the plans (and refuses a plan it can't run). `lint --actuators ...` checks against the actuators you
   actually load.
 - **Lint stops at the first parse error of a directory**: fix it and run it again.
 - **One directory each.** `--rules` and `--plans` take one directory; ids must be unique across

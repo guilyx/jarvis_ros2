@@ -68,6 +68,17 @@ class TestBringup(unittest.TestCase):
             for info in cls.node.get_subscriptions_info_by_topic("/jarvis/event_batches")
         ):
             rclpy.spin_once(cls.node, timeout_sec=0.1)
+        # Subscribed is not buffered yet: send one more event through the stream (a warning, via
+        # the rosout bridge) and give the black box a moment to take its batch.
+        deadline = time.time() + 60.0
+        while time.time() < deadline and not any(e.message == "black box warm-up" for e in cls.events):
+            cls.node.get_logger().warning("black box warm-up")
+            until = time.time() + 1.0
+            while time.time() < until:
+                rclpy.spin_once(cls.node, timeout_sec=0.1)
+        until = time.time() + 1.0
+        while time.time() < until:
+            rclpy.spin_once(cls.node, timeout_sec=0.1)
 
     @classmethod
     def tearDownClass(cls):

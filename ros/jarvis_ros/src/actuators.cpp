@@ -6,6 +6,7 @@
 //   service.trigger, service.set_bool, service.empty   std_srvs
 //   param.set                                  rcl_interfaces SetParameters
 //   bag.snapshot                               rosbag2 snapshot service
+// service.call and action.goal, for any type, are in generic_actuators.cpp.
 
 #include <algorithm>
 #include <lifecycle_msgs/msg/state.hpp>

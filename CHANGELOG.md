@@ -28,7 +28,9 @@ robots, with history, a dashboard and an agent that explains what happened.
   guards, cooldowns, rate limits and shadow mode.
 - Recovery plans behind seven gates (mode, requester, preconditions, rate limits, locks,
   approvals, four-eyes by default) with verification steps and escalation ladders; a kill switch.
-- Actuators for lifecycle nodes, services, parameters, black-box snapshots and Nav2.
+- Actuators for lifecycle nodes, services, parameters, black-box snapshots and Nav2; and for any
+  service or action, of a type named in the plan (`service.call`, `action.goal`), checked against
+  the type when the plans load.
 - `ros2 jarvis lint` and `backtest`: check rules before they ship, replay recordings through them.
 
 ### History, dashboard and API

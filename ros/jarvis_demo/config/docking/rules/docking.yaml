@@ -1,0 +1,20 @@
+# The docking demo (launch/docking.launch.py): a low battery sends the robot to its dock, through
+# Nav2's docking server. Spec: docs/design/05-rules-and-recovery.md.
+schema: jarvis.rules/v1
+rules:
+  - id: battery-low-dock
+    description: The battery is low and not charging. Dock, and wait for the charge to start.
+    when:
+      event: { kind: FAULT_STATE, code: power.battery.low, attrs.state: ACTIVE }
+    guard: { faults_inactive: ["safety.*"] }
+    then:
+      - recover: { plan: dock-and-charge, args: { dock: home } }
+    policy: { cooldown: 30s, max_fires: { count: 3, per: 1h } }
+
+  # Same as jarvis_bringup/config/rules/core.yaml (rules directories don't include each other yet).
+  - id: escalation-notify
+    description: Tell the operators when recovery gives up on an incident.
+    when:
+      event: { kind: RECOVERY, attrs.phase: ESCALATED, attrs.dry_run: false }
+    then:
+      - notify: { channel: operators, message: "{{ event.message }}" }

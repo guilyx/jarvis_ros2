@@ -41,6 +41,7 @@
     actuators:                    # pluginlib, base class jarvis_ros::Actuator; add
       - jarvis_ros::LifecycleActuator   # jarvis_nav2::Nav2Actuator on a Nav2 robot
       - jarvis_ros::ServiceActuator
+      - jarvis_ros::GenericActuator     # service.call, action.goal: any type
       - jarvis_ros::ParamActuator
       - jarvis_ros::BagActuator
 

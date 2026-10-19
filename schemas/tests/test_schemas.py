@@ -81,10 +81,15 @@ def test_the_demo_catalog_repeats_the_default_one():
         assert rules.get(rule["id"]) == rule, rule["id"]
 
 
-def test_the_demo_rules_repeat_the_default_ones():
+@pytest.mark.parametrize(
+    "rules_dir",
+    sorted(p for p in (REPO / "ros/jarvis_demo/config").glob("**/rules") if p.is_dir()),
+    ids=lambda p: str(p.relative_to(REPO)),
+)
+def test_the_demo_rules_repeat_the_default_ones(rules_dir):
     default = yaml.safe_load((REPO / "ros/jarvis_bringup/config/rules/core.yaml").read_text())
     demo = {}
-    for path in (REPO / "ros/jarvis_demo/config/rules").glob("*.yaml"):
+    for path in rules_dir.glob("*.yaml"):
         demo.update(_by_key(yaml.safe_load(path.read_text())["rules"], "id"))
     for rule in default["rules"]:
         assert demo.get(rule["id"]) == rule, rule["id"]

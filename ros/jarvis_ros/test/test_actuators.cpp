@@ -6,11 +6,14 @@
 
 #include <gtest/gtest.h>
 
+#include <jarvis_interfaces/action/analyze.hpp>
 #include <lifecycle_msgs/msg/state.hpp>
+#include <lifecycle_msgs/srv/change_state.hpp>
 #include <memory>
 #include <optional>
 #include <pluginlib/class_loader.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <string>
@@ -181,6 +184,157 @@ TEST_F(ActuatorsTest, ACancelledAttemptNeverReports)
   a->start(attempt, [&reported](bool, const std::string &) { reported = true; });
   spin_until([] { return false; }, 0.3);
   a->cancel(attempt);
+  spin_until([] { return false; }, 0.3);
+  EXPECT_FALSE(reported);
+}
+
+TEST_F(ActuatorsTest, ServiceCallSendsAnyTypedRequest)
+{
+  using Srv = lifecycle_msgs::srv::ChangeState;
+  std::optional<Srv::Request> received;
+  auto srv = plain_->create_service<Srv>(
+    "/test/typed",
+    [&received](const std::shared_ptr<Srv::Request> req, std::shared_ptr<Srv::Response> res) {
+      received = *req;
+      res->success = req->transition.label == "activate";
+    });
+  auto a = actuator("jarvis_ros::GenericActuator");
+  EXPECT_EQ(a->actions(), (std::vector<std::string>{"service.call", "action.goal"}));
+  const nlohmann::json base{{"service", "/test/typed"}, {"type", "lifecycle_msgs/srv/ChangeState"}};
+
+  auto args = base;
+  args["request"] = {{"transition", {{"id", 3}, {"label", "activate"}}}};
+  auto ok = run(a, "service.call", args);
+  ASSERT_TRUE(ok);
+  EXPECT_TRUE(ok->ok) << ok->message;
+  EXPECT_EQ(ok->message, R"(/test/typed: {"success":true})");
+  ASSERT_TRUE(received);
+  EXPECT_EQ(received->transition.id, 3);
+
+  // A response with a boolean `success` must say true, unless the plan expects otherwise.
+  args["request"] = {{"transition", {{"label", "shutdown"}}}};
+  auto refused = run(a, "service.call", args);
+  ASSERT_TRUE(refused);
+  EXPECT_FALSE(refused->ok);
+  EXPECT_EQ(refused->message, "/test/typed: response.success is false, expected true");
+  args["expect"] = nlohmann::json::object();
+  auto anything = run(a, "service.call", args);
+  ASSERT_TRUE(anything);
+  EXPECT_TRUE(anything->ok) << anything->message;
+
+  // Rendered arguments that don't fit the type fail the step, before anything is sent.
+  args["request"] = {{"transition", {{"id", "three"}}}};
+  auto bad = run(a, "service.call", args);
+  ASSERT_TRUE(bad);
+  EXPECT_FALSE(bad->ok);
+  EXPECT_EQ(bad->message, "request.transition.id: expects an integer, not \"three\"");
+}
+
+TEST_F(ActuatorsTest, GenericStepsAreCheckedWhenThePlansLoad)
+{
+  auto a = actuator("jarvis_ros::GenericActuator");
+  const nlohmann::json srv{{"service", "/x"}, {"type", "lifecycle_msgs/srv/ChangeState"}};
+  auto with = [](nlohmann::json w, const std::string & key, nlohmann::json v) {
+    w[key] = std::move(v);
+    return w;
+  };
+  EXPECT_EQ(a->check("service.call", srv), std::nullopt);
+  EXPECT_EQ(
+    a->check("service.call", with(srv, "request", {{"transition", {{"id", "{{ params.id }}"}}}})),
+    std::nullopt);
+  EXPECT_EQ(
+    a->check("service.call", with(srv, "request", {{"transitionn", {}}})).value_or("ok"),
+    "request: lifecycle_msgs/srv/ChangeState_Request has no field 'transitionn' (it has: "
+    "transition)");
+  EXPECT_EQ(
+    a->check("service.call", with(srv, "expect", {{"succes", true}})).value_or("ok"),
+    "expect: lifecycle_msgs/srv/ChangeState_Response has no field 'succes' (it has: success)");
+  EXPECT_NE(a->check("service.call", with(srv, "type", "lifecycle_msgs/srv/Nope")), std::nullopt);
+  EXPECT_NE(a->check("service.call", with(srv, "type", "{{ params.type }}")), std::nullopt);
+  EXPECT_NE(a->check("service.call", {{"service", "/x"}}), std::nullopt) << "no type";
+
+  const nlohmann::json goal{{"action", "/x"}, {"type", "jarvis_interfaces/action/Analyze"}};
+  EXPECT_EQ(a->check("action.goal", with(goal, "goal", {{"question", "why?"}})), std::nullopt);
+  EXPECT_EQ(
+    a->check("action.goal", with(goal, "goal", {{"questionn", "why?"}})).value_or("ok"),
+    "goal: jarvis_interfaces/action/Analyze_Goal has no field 'questionn' (it has: incident_id, "
+    "question, requester)");
+  EXPECT_EQ(a->check("action.goal", with(goal, "expect", {{"success", true}})), std::nullopt);
+  EXPECT_NE(
+    a->check("action.goal", with(goal, "type", "lifecycle_msgs/srv/ChangeState")), std::nullopt);
+}
+
+TEST_F(ActuatorsTest, ActionGoalWaitsForTheResult)
+{
+  using Analyze = jarvis_interfaces::action::Analyze;
+  using Handle = rclcpp_action::ServerGoalHandle<Analyze>;
+  std::shared_ptr<Handle> pending;
+  auto server = rclcpp_action::create_server<Analyze>(
+    plain_, "/test/analyze",
+    [](const rclcpp_action::GoalUUID &, std::shared_ptr<const Analyze::Goal> goal) {
+      return goal->question == "reject" ? rclcpp_action::GoalResponse::REJECT
+                                        : rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+    },
+    [](std::shared_ptr<Handle>) { return rclcpp_action::CancelResponse::ACCEPT; },
+    [&pending](std::shared_ptr<Handle> handle) {
+      auto result = std::make_shared<Analyze::Result>();
+      const auto & question = handle->get_goal()->question;
+      if (question == "slow") {
+        pending = handle;  // finished by the test
+        return;
+      }
+      result->success = question != "fail";
+      result->message = result->success ? "answered: " + question : "no such incident";
+      result->insight_json = "{}";
+      if (result->success) {
+        handle->succeed(result);
+      } else {
+        handle->abort(result);
+      }
+    });
+  auto a = actuator("jarvis_ros::GenericActuator");
+  auto goal = [](const std::string & question) {
+    return nlohmann::json{
+      {"action", "/test/analyze"},
+      {"type", "jarvis_interfaces/action/Analyze"},
+      {"goal", {{"question", question}}}};
+  };
+
+  auto answered = run(a, "action.goal", goal("why?"));
+  ASSERT_TRUE(answered);
+  EXPECT_TRUE(answered->ok) << answered->message;
+  EXPECT_EQ(answered->message, "/test/analyze: answered: why?");
+
+  auto aborted = run(a, "action.goal", goal("fail"));
+  ASSERT_TRUE(aborted);
+  EXPECT_FALSE(aborted->ok);
+  EXPECT_EQ(aborted->message, "/test/analyze: the goal was aborted: no such incident");
+
+  auto rejected = run(a, "action.goal", goal("reject"));
+  ASSERT_TRUE(rejected);
+  EXPECT_FALSE(rejected->ok);
+  EXPECT_EQ(rejected->message, "/test/analyze rejected the goal");
+
+  auto args = goal("why?");
+  args["expect"] = {{"insight_json", "x"}};
+  auto unexpected = run(a, "action.goal", args);
+  ASSERT_TRUE(unexpected);
+  EXPECT_FALSE(unexpected->ok);
+  EXPECT_EQ(
+    unexpected->message,
+    R"(/test/analyze: result.insight_json is "{}", expected "x" (answered: why?))");
+
+  // A step timeout cancels the goal on the server, and nothing is reported.
+  const auto attempt = make("action.goal", goal("slow"));
+  bool reported = false;
+  a->start(attempt, [&reported](bool, const std::string &) { reported = true; });
+  spin_until([&pending] { return pending != nullptr; }, 5.0);
+  ASSERT_TRUE(pending);
+  spin_until([] { return false; }, 0.2);  // the goal response reaches the actuator
+  a->cancel(attempt);
+  spin_until([&pending] { return pending->is_canceling(); }, 5.0);
+  EXPECT_TRUE(pending->is_canceling());
+  pending->canceled(std::make_shared<Analyze::Result>());
   spin_until([] { return false; }, 0.3);
   EXPECT_FALSE(reported);
 }

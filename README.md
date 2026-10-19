@@ -79,6 +79,8 @@ ros2 run jarvis_demo inject tour                # and in a third: every scenario
 ```
 
 With Nav2 and Gazebo installed, `nav2_sim.launch.py` runs the same demo on a simulated TurtleBot 4.
+`docking.launch.py` is a low battery instead: Jarvis docks the robot through Nav2's `DockRobot`
+action, from a plan that names the type (`ros2 param set /demo/base inject drain`).
 
 ## Use it on your robot
 
@@ -277,7 +279,7 @@ both. A nightly soak runs the stack for 15 minutes at 500 events/s
 |---------|--------------|
 | [`core/jarvis_core`](core/jarvis_core) | ROS-free C++ domain: event hub, fault lifecycle, incidents, catalog, rule engine, recovery orchestrator |
 | [`ros/jarvis_interfaces`](ros/jarvis_interfaces) | Messages, services and the `ExecuteRecovery` action |
-| [`ros/jarvis_ros`](ros/jarvis_ros) | Event hub, fault manager, rule engine and recovery lifecycle components; built-in actuators (lifecycle, std_srvs, parameters, bag snapshot); `jarvis_load` |
+| [`ros/jarvis_ros`](ros/jarvis_ros) | Event hub, fault manager, rule engine and recovery lifecycle components; built-in actuators (lifecycle, std_srvs, parameters, bag snapshot, any service or action by type); `jarvis_load` |
 | [`ros/jarvis_cli`](ros/jarvis_cli) | `ros2 jarvis`: faults, rules, recovery, approvals, kill switch, bag export, lint and backtest |
 | [`ros/jarvis_nav2`](ros/jarvis_nav2) | Nav2 actuators: lifecycle manager, costmaps, cancel and send goals |
 | [`ros/jarvis_reporter`](ros/jarvis_reporter) | C++ and Python client libraries for apps |

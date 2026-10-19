@@ -133,6 +133,35 @@ def test_what_operators_keep_doing_becomes_a_rule():
     assert suggest(History(EVENTS), 24, min_runs=4, now=T0)["suggestions"] == []
 
 
+def test_a_run_answers_the_root_not_the_symptoms_it_opened():
+    # The relay hangs: its topic goes stale (ERROR, names the node) and its rate drops (WARN), in
+    # one incident. Whichever opened last, the operators answered the stale topic.
+    def symptom(s, state, fault_id, incident, muted_by=""):
+        e = fault(s, state, fault_id, "lidar", "", incident)
+        e["code"], e["severity"] = "diag.scan_relay.output_rate", "WARN"
+        e["attrs"] = {"fault_id": fault_id, "state": state, **({"muted_by": muted_by} if muted_by else {})}
+        return e
+
+    def root(s, state, fault_id, incident):
+        return {**fault(s, state, fault_id, "lidar", "/demo/scan_relay", incident), "severity": "ERROR"}
+
+    events = [
+        root(0, "ACTIVE", "r1", "i1"),
+        symptom(2, "ACTIVE", "s1", "i1"),
+        recovery(20, "STARTED", "x1", args=LIDAR, incident="i1"),
+        root(30, "CLEARED", "r1", "i1"),
+        symptom(30, "CLEARED", "s1", "i1"),
+        # the symptom first this time, and muted by the root
+        symptom(100, "ACTIVE", "s2", "i2", muted_by="r2"),
+        root(101, "ACTIVE", "r2", "i2"),
+        recovery(130, "STARTED", "x2", operator="bob", args=LIDAR),
+    ]
+    [s] = suggest(History(events), 24, now=T0)["suggestions"]
+    assert s["code"] == "sensor.scan.stale" and s["runs"] == 2
+    assert s["args"]["node"] == "{{ event.attrs.node }}"
+    assert [r["after_s"] for r in s["evidence"]] == [20, 29]
+
+
 def test_what_a_rule_already_does_is_not_suggested(tmp_path):
     (tmp_path / "robot.yaml").write_text(
         yaml.safe_dump(

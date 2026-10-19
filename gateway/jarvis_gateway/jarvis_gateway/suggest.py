@@ -26,6 +26,7 @@ import yaml
 from jarvis_gateway.backtest import MAX_EVENTS
 
 OPEN = ("ACTIVE", "LATCHED")
+SEVERITY = {"DEBUG": 0, "INFO": 1, "WARN": 2, "ERROR": 3, "CRITICAL": 4}
 ENDED = ("SUCCEEDED", "FAILED", "ABORTED", "REJECTED", "EXPIRED")
 MAX_SUGGESTIONS = 20
 MAX_EVIDENCE = 20
@@ -60,17 +61,31 @@ def template(args, fault):
 
 
 def _answered(recovery, args, open_faults):
-    """The fault an operator's recovery answered, or None."""
-    faults = list(open_faults.values())
+    """The fault an operator's recovery answered, or None. The candidates: the open faults of its
+    incident, else those its args name, else the only open fault. A hang opens its symptoms too
+    (the relay's rate drops with its topic), so of the candidates, the likeliest root: not muted,
+    the one that explains most of the args, the most severe, the first to open."""
+    faults = list(open_faults.values())  # in the order they opened
+    named = {v for v in args.values() if v}
+
+    def explained(f):
+        return len(named & ({_component(f)} | {str(v) for v in _attrs(f).values()}))
+
     incident = recovery.get("correlation_id", "")
-    same = [f for f in faults if incident and f.get("correlation_id") == incident]
-    if same:
-        return same[-1]
-    named = set(v for v in args.values() if v)
-    hits = [f for f in faults if _component(f) in named or named & set(map(str, _attrs(f).values()))]
-    if hits:
-        return hits[-1]
-    return faults[0] if len(faults) == 1 else None
+    candidates = [f for f in faults if incident and f.get("correlation_id") == incident]
+    candidates = candidates or [f for f in faults if explained(f)]
+    if not candidates:
+        return faults[0] if len(faults) == 1 else None
+    opened = {id(f): i for i, f in enumerate(faults)}
+    return max(
+        candidates,
+        key=lambda f: (
+            not _attrs(f).get("muted_by"),
+            explained(f),
+            SEVERITY.get(f.get("severity"), 0),
+            -opened[id(f)],
+        ),
+    )
 
 
 def covered(rules_dir):
@@ -131,7 +146,7 @@ def suggest(history, hours, rules_dir="", min_runs=2, now=None):
         if e.get("kind") == "FAULT_STATE":
             key = attrs.get("fault_id") or f"{e.get('code')}@{_component(e)}"
             if attrs.get("state") in OPEN:
-                open_faults[key] = e
+                open_faults.setdefault(key, e)  # as it went active: when, and with what
             elif attrs.get("state") == "CLEARED":
                 open_faults.pop(key, None)
             continue

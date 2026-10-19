@@ -25,6 +25,8 @@
     vda5050: { version: "3.0", errors: [...] }   # Jarvis's faults as VDA 5050 errors (vda5050.py)
     fleet:                          # other robots' gateways, side by side in the dashboard (fleet.py)
       - { name: amr-2, url: http://amr-2.local:8080, token_env: JARVIS_AMR2_TOKEN }
+    # or, with the history the robots upload (lake_upload_to), on the Fleet page:
+    # fleet: { robots: [...], history: s3://acme-robots/jarvis }
 
 Tokens can also come from $JARVIS_GATEWAY_TOKENS ("token:name:role,..."), to keep them out of files.
 docs/guides/security.md puts TLS and single sign-on together.

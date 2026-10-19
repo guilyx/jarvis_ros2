@@ -203,7 +203,7 @@ def test_an_unreachable_target_is_not_the_lakes_error(data_dir, tmp_path):
 
 def test_the_target_never_shows_credentials():
     assert upload.redact("s3://key:secret@bucket/fleet?endpoint_override=minio:9000&scheme=http") == (
-        "s3://bucket/fleet?endpoint_override=minio%3A9000&scheme=http"
+        "s3://bucket/fleet?endpoint_override=minio:9000&scheme=http"
     )
     assert (
         upload.redact("s3://bucket/x?access_key=a&secret_key=b&region=eu-west-3")
@@ -223,6 +223,35 @@ def test_the_fleet_answers_across_robots(tmp_path, target):
     rows = con.execute("SELECT robot, code FROM fault_episodes ORDER BY robot, code").fetchall()
     assert ("amr-8", "sensor.scan.stale") in rows
     assert con.execute("SELECT count(DISTINCT robot) FROM incidents").fetchone() == (2,)
+
+
+def test_the_fleet_summary_for_the_dashboard(tmp_path, target):
+    for robot in ("amr-7", "amr-8"):
+        upload.Uploader(converted_lake(tmp_path / robot, robot), target, robot).run()
+    from conftest import T0
+
+    summary = fleet.summary(target, hours=48, now=T0 + datetime.timedelta(days=1))
+    assert summary["bucket_s"] == 3600 and summary["window"]["until"] == "2026-10-15T23:50:00Z"
+    amr7 = summary["robots"][0]
+    assert [r["robot"] for r in summary["robots"]] == ["amr-7", "amr-8"]
+    assert amr7["history_until"] == "2026-10-15T00:24:00Z"
+    assert (amr7["faults_confirmed"], amr7["incidents_opened"], amr7["incidents_escalated"]) == (2, 2, 1)
+    assert (amr7["mttr_s"], amr7["auto_recovery_rate"], amr7["recovery_success_rate"]) == (600.0, 0.5, 0.5)
+    top = {c["code"]: c for c in summary["top_codes"]}
+    assert top["sensor.scan.stale"]["robots"] == 2 and top["sensor.scan.stale"]["robot_names"] == [
+        "amr-7",
+        "amr-8",
+    ]
+    assert {(t["bucket"], t["robot"]) for t in summary["trend"]} == {
+        (b, r) for b in ("2026-10-14T23:00:00Z", "2026-10-15T00:00:00Z") for r in ("amr-7", "amr-8")
+    }
+    # Outside the window: the robots are there (history_until says how far it goes), their numbers zero.
+    later = fleet.summary(target, hours=24, now=T0 + datetime.timedelta(days=10))
+    assert (
+        [r["events"] for r in later["robots"]] == [0, 0] and later["top_codes"] == [] and later["trend"] == []
+    )
+    assert later["robots"][0]["mttr_s"] is None and later["robots"][0]["auto_recovery_rate"] is None
+    assert fleet.bucket_for(24 * 7) == 86400
 
 
 def test_the_cli_uploads_and_queries_the_fleet(data_dir, target, capsys):
@@ -253,6 +282,8 @@ def test_the_cli_uploads_and_queries_the_fleet(data_dir, target, capsys):
         "recoveries",
     ]
     assert lines[1].startswith("amr-7")
+    assert cli.main(["fleet", target, "--summary", "--hours", "1"]) == 0
+    assert [r["robot"] for r in json.loads(capsys.readouterr().out)["robots"]] == ["amr-7"]
     assert cli.main(["upload"]) == 2, "where to?"
 
 
@@ -272,3 +303,22 @@ def test_s3(data_dir):
     assert up.pending() == []
     con = fleet.connect(target)
     assert con.execute("SELECT robot, count(*) FROM incidents GROUP BY robot").fetchall() == [("amr-9", 2)]
+
+
+def test_made_up_history_for_demo_robots(tmp_path):
+    from jarvis_lake import demo_history
+
+    until = datetime.datetime(2026, 10, 19, 12, tzinfo=datetime.UTC)
+    target = f"file://{tmp_path / 'fleet'}"
+    files = demo_history.write(target, ["amr-7", "amr-8"], days=2, until=until)
+    assert files and all("/demo_history_" in f for f in files)
+    assert demo_history.events(["amr-7"], 2, until) == demo_history.events(["amr-7"], 2, until), "a seed"
+    summary = fleet.summary(target, hours=48, now=until)
+    amr7, amr8 = summary["robots"]
+    assert amr8["faults_confirmed"] > amr7["faults_confirmed"], "amr-8 has a flaky lidar"
+    assert amr7["incidents_opened"] and amr7["recoveries_finished"] and amr7["mttr_s"] > 0
+    assert all(r["history_until"] < "2026-10-19T12:00:00Z" for r in summary["robots"]), (
+        "nothing after `until`"
+    )
+    con = fleet.connect(target)
+    assert con.execute("SELECT count(*) FROM incidents WHERE resolved_at IS NULL").fetchone() == (0,)

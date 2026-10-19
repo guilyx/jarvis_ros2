@@ -208,6 +208,38 @@ function api(role: "viewer" | "operator") {
         });
       case "/api/v1/plans":
         return json({ mode: "ENABLED", plans: [] });
+      case "/api/v1/fleet/history":
+        if (role === "viewer") return json({ detail: "no fleet history here" }, 404);
+        return json({
+          target: "s3://fleet/history",
+          hours: Number(url.searchParams.get("hours")),
+          window: { since: "2026-10-12T00:00:00Z", until: "2026-10-19T00:00:00Z" },
+          bucket_s: 86400,
+          robots: ["amr-2", "bot-7"].map((robot, i) => ({
+            robot,
+            history_until: "2026-10-18T23:00:00Z",
+            events: 100,
+            warnings_or_worse: 40,
+            faults_confirmed: i ? 4 : 31,
+            mttr_s: 90,
+            incidents_opened: 12,
+            incidents_escalated: 2,
+            recoveries_finished: 10,
+            auto_recovery_rate: 0.8,
+            recovery_success_rate: 0.9,
+          })),
+          top_codes: [
+            {
+              code: "sensor.scan.stale",
+              episodes: 20,
+              robots: 2,
+              robot_names: ["amr-2", "bot-7"],
+              mttr_s: 12,
+            },
+          ],
+          trend: [{ bucket: "2026-10-18T00:00:00Z", robot: "amr-2", faults: 5 }],
+          updated_at: Date.now() / 1000,
+        });
       case "/api/v1/system":
         return json({
           version: "0.1.0",
@@ -384,6 +416,28 @@ describe("dashboard", () => {
     expect(waiting).toHaveTextContent("(behind)");
     expect(screen.getByText(/OSError: unreachable/)).toBeInTheDocument();
     expect(screen.getByText("2 file(s)")).toBeInTheDocument(); // lost before upload
+  });
+
+  it("shows the fleet's history: the worst robot first, what costs the fleet most", async () => {
+    const calls = api("operator");
+    renderApp("/fleet");
+    const history = await screen.findByTestId("fleet-history");
+    const rows = await within(history).findAllByTestId("fleet-history-robot");
+    expect(rows.map((r) => r.firstChild?.textContent)).toEqual(["amr-2", "bot-7"]);
+    expect(rows[0]).toHaveTextContent("31");
+    expect(within(history).getByTestId("fleet-history-code")).toHaveTextContent(
+      "sensor.scan.stale20amr-2, bot-7",
+    );
+    expect(within(history).getByText("s3://fleet/history")).toBeInTheDocument();
+    await userEvent.click(within(history).getByRole("tab", { name: "30 d" }));
+    await waitFor(() => expect(calls.some((c) => c.path === "/api/v1/fleet/history")).toBe(true));
+  });
+
+  it("says how to set up the fleet's history when there is none", async () => {
+    api("viewer");
+    renderApp("/fleet");
+    const history = await screen.findByTestId("fleet-history");
+    expect(await within(history).findByText(/No fleet history here/)).toBeInTheDocument();
   });
 
   it("hides commands from viewers", async () => {

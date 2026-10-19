@@ -15,6 +15,17 @@ The gateway asks each robot's gateway (its health, open faults and recovery mode
 at once, within `timeout_s`; a robot that doesn't answer is shown offline, with why. A token (a
 viewer's is enough) comes from the environment variable `token_env`, so it stays out of the file.
 This gateway's own robot comes first, from its own state.
+
+The fleet's history (roadmap 9.3): where the robots upload theirs (jarvis_lake.upload), read in
+place with the lake's views, for the dashboard's Fleet page:
+
+    fleet:
+      robots: [...]
+      history: s3://acme-robots/jarvis          # credentials: the gateway's environment (AWS_...)
+
+    GET /api/v1/fleet/history?hours=168  ->  {robots: [...], top_codes: [...], trend: [...]}
+
+It reads the uploaded Parquet at most once a minute per window (`History`), off the event loop.
 """
 
 import asyncio
@@ -23,6 +34,10 @@ import os
 import time
 
 import httpx
+import pyarrow
+import pyarrow.fs as pafs
+from jarvis_lake import fleet as lake_fleet
+from jarvis_lake import upload
 
 SEVERITY_ORDER = ("CRITICAL", "ERROR", "WARN", "INFO", "DEBUG")
 OPEN = ("PENDING", "ACTIVE", "LATCHED")
@@ -43,6 +58,7 @@ class Robot:
 class Settings:
     robots: list = dataclasses.field(default_factory=list)  # [Robot]
     timeout_s: float = 3.0
+    history: str = ""  # where the robots upload their history (jarvis_lake.upload), if they do
 
     @classmethod
     def load(cls, raw):
@@ -59,7 +75,36 @@ class Settings:
         names = [r.name for r in robots]
         if len(set(names)) != len(names):
             raise ValueError("fleet: robot names must be unique")
-        return cls(robots=robots, timeout_s=float(raw.get("timeout_s", 3.0)))
+        history = str(raw.get("history") or "")
+        if history:
+            try:
+                pafs.FileSystem.from_uri(history)
+            except (ValueError, pyarrow.ArrowException) as e:
+                raise ValueError(f"fleet.history: {upload.redact(history)}: {e}") from e
+        return cls(robots=robots, timeout_s=float(raw.get("timeout_s", 3.0)), history=history)
+
+
+class History:
+    """The fleet's uploaded history, summarized per window and kept for `ttl_s`: the Fleet page
+    refreshes, the bucket is read once a minute."""
+
+    def __init__(self, target, ttl_s=60.0, clock=time.monotonic):
+        self.target = target
+        self.ttl_s = ttl_s
+        self.clock = clock
+        self._cache = {}  # hours -> (when, summary)
+        self._lock = asyncio.Lock()
+
+    async def summary(self, hours):
+        async with self._lock:
+            cached = self._cache.get(hours)
+            if cached and self.clock() - cached[0] < self.ttl_s:
+                return cached[1]
+            summary = await asyncio.to_thread(lake_fleet.summary, self.target, hours)
+            summary["target"] = upload.redact(self.target)
+            summary["updated_at"] = time.time()
+            self._cache[hours] = (self.clock(), summary)
+            return summary
 
 
 def summarize(faults, mode="UNKNOWN"):

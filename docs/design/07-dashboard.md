@@ -252,7 +252,11 @@ time, flapping faults (3+ confirm-clear cycles), recovery effectiveness per plan
 The robots this gateway lists (`fleet` in gateway.yaml) and itself, one card each, the ones that
 need someone first: online, open faults by severity, the worst one, incidents, the recovery mode; a
 link to the robot's own dashboard. Read-only, asked from each robot's gateway every 5 s
-([guide](../guides/fleet.md)).
+([guide](../guides/fleet.md)). Below, the fleet's **history**, from what the robots upload
+(`fleet.history`): per robot over 24 h, 7 or 30 days, confirmed faults, MTTR, incidents and
+escalations, the share recovered without a person, recovery success, how far its history goes; a
+stacked chart of confirmed faults per robot per day (hour); the fault codes that cost the fleet
+most, with the robots they hit.
 
 ## 3. UX principles
 

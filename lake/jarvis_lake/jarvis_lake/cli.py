@@ -11,6 +11,7 @@
     jarvis-lake retention [--dry-run]
     jarvis-lake upload [--dry-run]  upload what is complete now (--upload-to), then exit
     jarvis-lake fleet URI [SQL]     the fleet's uploaded history: one line per robot, or a query
+    jarvis-lake demo-history URI    a made-up week of history for demo robots, to try the above
 
 The data directory is --data-dir, else $JARVIS_DATA, else ~/.local/share/jarvis (as the bringup).
 With --upload-to (an s3:// or file:// URI), `run` also uploads the lake's Parquet, and with
@@ -24,7 +25,7 @@ import os
 import pathlib
 import sys
 
-from jarvis_lake import analytics, fleet, lake, storage, upload
+from jarvis_lake import analytics, demo_history, fleet, lake, storage, upload
 from jarvis_lake.service import LakeService
 
 GIB = 1 << 30
@@ -118,7 +119,17 @@ def cmd_sql(args):
 
 
 def cmd_fleet(args):
+    if args.summary:
+        _print(fleet.summary(args.target, args.hours))
+        return 0
     _rows(fleet.connect(args.target).execute(args.query or fleet.SUMMARY), args.format)
+    return 0
+
+
+def cmd_demo_history(args):
+    robots = [r for r in args.robots.split(",") if r]
+    files = demo_history.write(args.target, robots, args.days, seed=args.seed)
+    print(f"{len(files)} file(s) of made-up history for {', '.join(robots)} in {upload.redact(args.target)}")
     return 0
 
 
@@ -261,7 +272,16 @@ def parser():
     s.add_argument("target", help="where the robots upload: s3://bucket/prefix, file:///mnt/share")
     s.add_argument("query", nargs="?", default="", help="SQL over the views (default: one line per robot)")
     s.add_argument("--format", choices=("table", "csv", "json"), default="table")
+    s.add_argument("--summary", action="store_true", help="the dashboard's fleet history, as JSON")
+    s.add_argument("--hours", type=float, default=168.0, help="the summary's window")
     s.set_defaults(func=cmd_fleet)
+
+    s = sub.add_parser("demo-history", help="made-up history for demo robots (never a real fleet's storage)")
+    s.add_argument("target", help="where demo robots upload: s3://bucket/prefix, file:///tmp/fleet")
+    s.add_argument("--robots", default="amr-1,amr-2,amr-3")
+    s.add_argument("--days", type=float, default=7.0)
+    s.add_argument("--seed", type=int, default=7)
+    s.set_defaults(func=cmd_demo_history)
     return p
 
 

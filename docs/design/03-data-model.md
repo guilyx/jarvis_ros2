@@ -363,6 +363,7 @@ Attribute[] freeze_frame
 | `/jarvis/rule_engine/reload` · `/jarvis/recovery/reload` | `ReloadConfig` | `validate_only` → `success, revision, errors[]` |
 | `/jarvis/rule_engine/set_rule_state` | `SetRuleState` | `rule_id, enabled, dry_run` → `success, message` |
 | `/jarvis/recovery/set_mode` | `SetRecoveryMode` | `mode (ENABLED/DRY_RUN/DISABLED), operator_name, reason` → `success, previous_mode` |
+| `/jarvis/recovery/set_maintenance` | `SetMaintenance` | `component, duration_s (0: end it, at most a week), operator_name, reason` → `success, message` |
 | `/jarvis/recovery/decide` | `DecideApproval` | `execution_id, approve, operator_name, note` → `success, message` |
 
 ### Actions

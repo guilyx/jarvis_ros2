@@ -8,7 +8,7 @@
     scripts/version.py 1.2.0        set it everywhere, and date the changelogs' Forthcoming sections
 
 Where it lives: every package.xml, the Python packages' setup.py and __version__, the core's
-CMake project() and the dashboard's package.json (and its lockfile).
+CMake project(), and the package.json (and lockfile) of the dashboard and the Foxglove panel.
 """
 
 import argparse
@@ -21,6 +21,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SKIP = {"build", "install", "log", "node_modules", ".git"}
 SEMVER = re.compile(r"\d+\.\d+\.\d+")
+NPM = ("dashboard", "foxglove/jarvis-panel")
 
 
 def files(pattern):
@@ -45,10 +46,10 @@ def current():
     for path, pattern in places():
         m = re.search(pattern, path.read_text())
         found[path.relative_to(ROOT)] = m.group(1) if m else None
-    dashboard = json.loads((ROOT / "dashboard/package.json").read_text())
-    lock = json.loads((ROOT / "dashboard/package-lock.json").read_text())
-    found[pathlib.Path("dashboard/package.json")] = dashboard["version"]
-    found[pathlib.Path("dashboard/package-lock.json")] = lock["version"]
+    for package in NPM:
+        for name in ("package.json", "package-lock.json"):
+            path = pathlib.Path(package, name)
+            found[path] = json.loads((ROOT / path).read_text())["version"]
     return found
 
 
@@ -57,16 +58,17 @@ def set_version(version):
         text = path.read_text()
         m = re.search(pattern, text)
         path.write_text(text[: m.start(1)] + version + text[m.end(1) :])
-    for name in ("package.json", "package-lock.json"):
-        path = ROOT / "dashboard" / name
-        text = path.read_text()
-        # The package's own version: the first "version" key (and, in the lockfile, the root
-        # package's under "packages"), never a dependency's.
-        count = 2 if name == "package-lock.json" else 1
-        text = re.sub(r'("version": ")[^"]+(")', rf"\g<1>{version}\g<2>", text, count=count)
-        path.write_text(text)
+    for package in NPM:
+        for name in ("package.json", "package-lock.json"):
+            path = ROOT / package / name
+            text = path.read_text()
+            # The package's own version: the first "version" key (and, in the lockfile, the root
+            # package's under "packages"), never a dependency's.
+            count = 2 if name == "package-lock.json" else 1
+            text = re.sub(r'("version": ")[^"]+(")', rf"\g<1>{version}\g<2>", text, count=count)
+            path.write_text(text)
     today = datetime.date.today().isoformat()
-    for path in [*files("CHANGELOG.rst"), ROOT / "CHANGELOG.md"]:
+    for path in [*files("CHANGELOG.rst"), ROOT / "CHANGELOG.md", ROOT / "foxglove/jarvis-panel/CHANGELOG.md"]:
         text = path.read_text()
         if path.suffix == ".rst":
             heading = f"{version} ({today})"

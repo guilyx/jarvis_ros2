@@ -9,7 +9,7 @@ release workflow builds and publishes the rest.
 
 ```bash
 git checkout -b release-X.Y.Z origin/main
-python3 scripts/version.py X.Y.Z      # every package.xml, setup.py, __version__, CMake, dashboard;
+python3 scripts/version.py X.Y.Z      # every package.xml, setup.py, __version__, CMake, dashboard, panel;
                                       # and "Forthcoming" -> "X.Y.Z (today)" in every changelog
 git diff                              # versions and changelog headings only
 ```
@@ -33,7 +33,8 @@ The [release workflow](.github/workflows/release.yml) then:
 2. builds and pushes the Docker images, with an SBOM and build provenance:
    - `ghcr.io/<owner>/jarvis:X.Y.Z` and `:X.Y`: Jarvis (`docker/Dockerfile`, target `runtime`);
    - `ghcr.io/<owner>/jarvis-demo:X.Y.Z` and `:X.Y`: with the demo robot (target `demo`);
-3. creates the GitHub release, its notes taken from CHANGELOG.md.
+3. creates the GitHub release, its notes taken from CHANGELOG.md, with the Foxglove panel
+   (`guilyx.jarvis-panel-X.Y.Z.foxe`, built and tested from the tag) attached.
 
 Each image is built for amd64 and arm64, each on a runner of that architecture, and tagged as one
 image: `docker pull` takes the robot's. The first time, make the packages public on GitHub

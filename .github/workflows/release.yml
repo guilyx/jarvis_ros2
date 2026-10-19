@@ -1,8 +1,9 @@
 name: Release
 
 # Pushing a tag vX.Y.Z (RELEASING.md) publishes that version: the Docker images on GitHub's
-# container registry, and a GitHub release with the notes from CHANGELOG.md. The tag must match
-# the version of every package (scripts/version.py), and CHANGELOG.md must have its section.
+# container registry, and a GitHub release with the notes from CHANGELOG.md and the Foxglove panel
+# (.foxe). The tag must match the version of every package (scripts/version.py), and CHANGELOG.md
+# must have its section.
 
 on:
   push:
@@ -140,14 +141,39 @@ jobs:
             | jq -r '[.manifests[].platform | select(.os == "linux") | .architecture] | sort | join(",")')"
           [ "${platforms}" = "amd64,arm64" ] || { echo "::error::platforms: ${platforms}"; exit 1; }
 
+  panel:
+    name: Foxglove panel (.foxe)
+    needs: verify
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: foxglove/jarvis-panel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: foxglove/jarvis-panel/package-lock.json
+      - run: npm ci && npm test && npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-panel
+          path: foxglove/jarvis-panel/*.foxe
+          if-no-files-found: error
+
   release:
     name: GitHub release
-    needs: [verify, manifests]
+    needs: [verify, manifests, panel]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: jarvis-panel
+          path: panel
       - name: Release notes from CHANGELOG.md
         run: |
           awk -v v="${{ needs.verify.outputs.version }}" '
@@ -170,5 +196,10 @@ jobs:
             echo "docker pull ghcr.io/${owner}/jarvis:${{ needs.verify.outputs.version }}        # Jarvis"
             echo "docker pull ghcr.io/${owner}/jarvis-demo:${{ needs.verify.outputs.version }}   # with the demo robot"
             echo '```'
+            echo
+            echo "### Foxglove panel"
+            echo
+            echo "Drag the attached \`.foxe\` onto Foxglove or Lichtblick (docs/guides/foxglove.md)."
           } > body.md
-          gh release create "${GITHUB_REF_NAME}" --title "Jarvis ${GITHUB_REF_NAME}" --notes-file body.md --verify-tag
+          gh release create "${GITHUB_REF_NAME}" --title "Jarvis ${GITHUB_REF_NAME}" --notes-file body.md --verify-tag \
+            panel/*.foxe

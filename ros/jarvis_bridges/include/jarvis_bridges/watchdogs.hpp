@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <rmw/types.h>
+
 #include <deque>
 #include <jarvis_core/types.hpp>
 #include <lifecycle_msgs/msg/transition_event.hpp>
@@ -97,6 +99,44 @@ private:
 
   NodeWatchConfig config_;
   std::map<std::string, Track> nodes_;
+};
+
+// -- QoS watchdog ---------------------------------------------------------------------------------
+
+/// A publisher or a subscription of a topic, as the graph reports it.
+struct QosEndpoint
+{
+  std::string node;  ///< fully qualified
+  rmw_qos_profile_t qos;
+};
+
+struct TopicEndpoints
+{
+  std::vector<QosEndpoint> publishers;
+  std::vector<QosEndpoint> subscriptions;
+};
+
+/// A publisher and a subscription whose QoS cannot match (rmw's own check: a best-effort publisher
+/// and a reliable subscription, a volatile publisher and a transient-local subscription, ...) never
+/// exchange a message, and nothing in ROS says so. Per topic, `ros.topic.qos_incompatible` while
+/// any of its pairs cannot match, on the topic (`/front/scan`: `front_scan`); it clears once none is left (the QoS
+/// fixed, or an endpoint gone). Pairs that only may not match (a policy left to the system) are not
+/// faults.
+class QosWatchdog
+{
+public:
+  explicit QosWatchdog(Severity severity = Severity::Error) : severity_(severity) {}
+
+  /// `graph`: the endpoints of every topic checked, by name.
+  std::vector<Event> tick(Timestamp now, const std::map<std::string, TopicEndpoints> & graph);
+
+  /// Why a publisher and a subscription cannot match, empty if they can.
+  static std::string incompatibility(
+    const rmw_qos_profile_t & publisher, const rmw_qos_profile_t & subscription);
+
+private:
+  Severity severity_;
+  std::map<std::string, std::string> raised_;  ///< topic -> the mismatches raised
 };
 
 // -- lifecycle ------------------------------------------------------------------------------------

@@ -50,7 +50,7 @@ ARGUMENTS = {
     "params_file": (str(SHARE / "config" / "jarvis.yaml"), "Parameters of the Jarvis components"),
     "use_sim_time": ("false", "Use /clock"),
     "autostart": ("true", "Configure and activate the lifecycle components on startup"),
-    "bridges": ("true", "Bridge /diagnostics, /rosout, action goal status, lifecycle and watchdogs"),
+    "bridges": ("true", "Bridge /diagnostics, /rosout, action goal status, lifecycle, QoS and watchdogs"),
     "medkit": ("false", "Bring the faults of ros2_medkit's fault manager into Jarvis (jarvis_medkit)"),
     "medkit_fault_manager": ("/fault_manager", "Node of ros2_medkit's fault manager"),
     "record": ("true", "Record /jarvis/** to MCAP"),
@@ -164,6 +164,7 @@ def _setup(context):
             ("LifecycleBridge", "lifecycle"),
             ("TopicWatchdogBridge", "topic_watchdog"),
             ("NodeWatchdogBridge", "node_watchdog"),
+            ("QosWatchdogBridge", "qos_watchdog"),
         ):
             nodes.append(
                 ComposableNode(

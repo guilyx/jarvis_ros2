@@ -16,8 +16,8 @@ a dashboard and an agent that explains what happened.
   batches (`/jarvis/event_batches`, each within 5 ms), and one message per event on
   `/jarvis/events` for whoever reads it.
 - Faults from your nodes (`jarvis_reporter`, C++ and Python) and, without any code, from
-  `/diagnostics`, `/rosout`, action status, lifecycle transitions, silent or slow topics and
-  missing nodes.
+  `/diagnostics`, `/rosout`, action status, lifecycle transitions, silent or slow topics,
+  missing nodes, and subscriptions whose QoS their publisher cannot match (they get nothing).
 - A fault catalog: debounce, heal, latch, severity floors, root cause and muted symptoms,
   incidents, freeze frames, a black-box recording when a fault confirms, and a runbook per code.
 - Crash durability: open faults, incidents and pending approvals survive a restart; a recording

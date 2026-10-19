@@ -3,6 +3,10 @@
 
 #include "jarvis_bridges/watchdogs.hpp"
 
+#include <rmw/qos_profiles.h>
+
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <lifecycle_msgs/msg/state.hpp>
@@ -50,6 +54,15 @@ bool can_follow(std::uint8_t known, std::uint8_t start)
     default:  // a primary state
       return start == known;
   }
+}
+
+/// The component of a topic's QoS faults: the whole name, so /front/scan and /rear/scan stay apart.
+std::string topic_component(std::string_view topic)
+{
+  while (!topic.empty() && topic.front() == '/') {
+    topic.remove_prefix(1);
+  }
+  return to_segment(topic);
 }
 
 }  // namespace
@@ -189,6 +202,115 @@ std::vector<Event> NodeWatchdog::tick(Timestamp now, const std::set<std::string>
       e.message = name + " is not on the graph (for " + seconds(now - t.last_seen) + ")";
     }
     out.push_back(std::move(e));
+  }
+  return out;
+}
+
+// -- QoS watchdog ---------------------------------------------------------------------------------
+
+std::string QosWatchdog::incompatibility(
+  const rmw_qos_profile_t & publisher, const rmw_qos_profile_t & subscription)
+{
+  rmw_qos_compatibility_type_t compatibility = RMW_QOS_COMPATIBILITY_OK;
+  char reason[512] = {0};
+  if (
+    rmw_qos_profile_check_compatible(
+      publisher, subscription, &compatibility, reason, sizeof(reason)) != RMW_RET_OK ||
+    compatibility != RMW_QOS_COMPATIBILITY_ERROR) {
+    return {};
+  }
+  // "ERROR: Best effort publisher and reliable subscription;ERROR: ..." -> "best effort publisher
+  // and reliable subscription; ..."
+  std::string out;
+  std::string_view rest(reason);
+  while (!rest.empty()) {
+    const auto end = rest.find(';');
+    std::string_view part = rest.substr(0, end);
+    rest = end == std::string_view::npos ? std::string_view() : rest.substr(end + 1);
+    if (const auto colon = part.find(": "); colon != std::string_view::npos) {
+      part.remove_prefix(colon + 2);
+    }
+    if (part.empty()) {
+      continue;
+    }
+    std::string text(part);
+    text[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(text[0])));
+    out += (out.empty() ? "" : "; ") + text;
+  }
+  return out.empty() ? "incompatible QoS" : out;
+}
+
+std::vector<Event> QosWatchdog::tick(
+  Timestamp now, const std::map<std::string, TopicEndpoints> & graph)
+{
+  std::vector<Event> out;
+  std::set<std::string> seen;
+  for (const auto & [topic, endpoints] : graph) {
+    std::vector<std::string> pairs;
+    std::string first_pub;
+    std::string first_sub;
+    std::string first_reason;
+    for (const auto & sub : endpoints.subscriptions) {
+      for (const auto & pub : endpoints.publishers) {
+        const std::string reason = incompatibility(pub.qos, sub.qos);
+        if (reason.empty()) {
+          continue;
+        }
+        if (pairs.empty()) {
+          first_pub = pub.node;
+          first_sub = sub.node;
+          first_reason = reason;
+        }
+        pairs.push_back(pub.node + " -> " + sub.node + ": " + reason);
+      }
+    }
+    if (pairs.empty()) {
+      continue;
+    }
+    seen.insert(topic);
+    std::sort(pairs.begin(), pairs.end());
+    std::string signature;
+    for (const auto & p : pairs) {
+      signature += p + '\n';
+    }
+    auto & raised = raised_[topic];
+    if (raised == signature) {
+      continue;
+    }
+    raised = signature;
+    Event e;
+    e.stamp = now;
+    e.kind = Kind::FaultRaise;
+    e.code = "ros.topic.qos_incompatible";
+    e.severity = severity_;
+    e.source.component = topic_component(topic);
+    e.attrs["topic"] = topic;
+    e.attrs["publisher"] = first_pub;
+    e.attrs["subscription"] = first_sub;
+    e.attrs["reason"] = first_reason;
+    e.attrs["pairs"] = static_cast<std::int64_t>(pairs.size());
+    e.message = topic + ": " + first_sub + " gets nothing from " + first_pub + " (" + first_reason +
+                ")" +
+                (pairs.size() > 1 ? ", and " + std::to_string(pairs.size() - 1) + " more pair" +
+                                      (pairs.size() > 2 ? "s" : "")
+                                  : "");
+    out.push_back(std::move(e));
+  }
+  for (auto it = raised_.begin(); it != raised_.end();) {
+    if (seen.count(it->first) != 0) {
+      ++it;
+      continue;
+    }
+    Event e;
+    e.stamp = now;
+    e.kind = Kind::FaultClear;
+    e.code = "ros.topic.qos_incompatible";
+    e.severity = Severity::Info;
+    e.source.component = topic_component(it->first);
+    e.attrs["topic"] = it->first;
+    e.message = it->first + ": its publishers and subscriptions match again";
+    out.push_back(std::move(e));
+    it = raised_.erase(it);
   }
   return out;
 }

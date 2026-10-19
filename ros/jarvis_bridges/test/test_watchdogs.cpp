@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <gtest/gtest.h>
+#include <rmw/qos_profiles.h>
 
 #include <jarvis_bridges/watchdogs.hpp>
 #include <lifecycle_msgs/msg/state.hpp>
 #include <lifecycle_msgs/msg/transition.hpp>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -227,4 +229,91 @@ TEST(LifecycleTranslator, ABaselineNeverOverridesATransition)
     << "a GetState reply older than a transition";
   EXPECT_EQ(base_name("/a/b/c/"), "c");
   EXPECT_EQ(base_name("plain"), "plain");
+}
+
+// -- QoS watchdog ---------------------------------------------------------------------------------
+
+namespace
+{
+
+rmw_qos_profile_t transient_local()
+{
+  rmw_qos_profile_t qos = rmw_qos_profile_default;
+  qos.durability = RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
+  return qos;
+}
+
+}  // namespace
+
+TEST(QosWatchdog, KnowsWhichProfilesCannotMatch)
+{
+  const auto reliable = rmw_qos_profile_default;
+  const auto best_effort = rmw_qos_profile_sensor_data;
+  EXPECT_EQ(
+    QosWatchdog::incompatibility(best_effort, reliable),
+    "best effort publisher and reliable subscription");
+  EXPECT_EQ(QosWatchdog::incompatibility(reliable, best_effort), "");  // it gets what it asks for
+  EXPECT_EQ(QosWatchdog::incompatibility(reliable, reliable), "");
+  EXPECT_NE(
+    QosWatchdog::incompatibility(reliable, transient_local()).find("volatile"), std::string::npos);
+  EXPECT_EQ(QosWatchdog::incompatibility(transient_local(), reliable), "");
+}
+
+TEST(QosWatchdog, RaisesPerTopicUntilTheEndpointsMatch)
+{
+  QosWatchdog dog;
+  std::map<std::string, TopicEndpoints> graph;
+  graph["/front/scan"] = {
+    {{"/lidar_driver", rmw_qos_profile_sensor_data}},
+    {{"/slam", rmw_qos_profile_default}, {"/viewer", rmw_qos_profile_sensor_data}}};
+  graph["/odom"] = {{{"/base", rmw_qos_profile_default}}, {{"/slam", rmw_qos_profile_default}}};
+
+  auto out = dog.tick(kT0, graph);
+  ASSERT_EQ(out.size(), 1u);
+  EXPECT_EQ(out[0].kind, Kind::FaultRaise);
+  EXPECT_EQ(out[0].code, "ros.topic.qos_incompatible");
+  EXPECT_EQ(out[0].severity, Severity::Error);
+  EXPECT_EQ(out[0].source.component, "front_scan");
+  EXPECT_EQ(attr(out[0], "topic"), "/front/scan");
+  EXPECT_EQ(attr(out[0], "publisher"), "/lidar_driver");
+  EXPECT_EQ(attr(out[0], "subscription"), "/slam");
+  EXPECT_EQ(attr(out[0], "pairs"), "1");
+  EXPECT_EQ(
+    out[0].message,
+    "/front/scan: /slam gets nothing from /lidar_driver (best effort publisher and reliable "
+    "subscription)");
+  // The same mismatch again: nothing new.
+  EXPECT_TRUE(dog.tick(kT0 + kSecond, graph).empty());
+
+  // Another subscription that cannot match: raised again, with the count.
+  graph["/front/scan"].subscriptions.push_back({"/mapper", transient_local()});
+  out = dog.tick(kT0 + 2 * kSecond, graph);
+  ASSERT_EQ(out.size(), 1u);
+  EXPECT_EQ(attr(out[0], "pairs"), "2");
+  EXPECT_NE(out[0].message.find(", and 1 more pair"), std::string::npos);
+
+  // Fixed: the subscriptions now ask for what the driver offers. Cleared.
+  graph["/front/scan"].subscriptions = {
+    {"/slam", rmw_qos_profile_sensor_data}, {"/mapper", rmw_qos_profile_sensor_data}};
+  out = dog.tick(kT0 + 3 * kSecond, graph);
+  ASSERT_EQ(out.size(), 1u);
+  EXPECT_EQ(out[0].kind, Kind::FaultClear);
+  EXPECT_EQ(out[0].source.component, "front_scan");
+  EXPECT_TRUE(dog.tick(kT0 + 4 * kSecond, graph).empty());
+}
+
+TEST(QosWatchdog, AnEndpointLeavingClearsIt)
+{
+  QosWatchdog dog(Severity::Warn);
+  std::map<std::string, TopicEndpoints> graph;
+  graph["/scan"] = {
+    {{"/lidar", rmw_qos_profile_sensor_data}}, {{"/slam", rmw_qos_profile_default}}};
+  auto out = dog.tick(kT0, graph);
+  ASSERT_EQ(out.size(), 1u);
+  EXPECT_EQ(out[0].severity, Severity::Warn);
+  EXPECT_EQ(out[0].source.component, "scan");
+  graph.erase("/scan");  // the subscriber went away: the topic has no pair left to check
+  out = dog.tick(kT0 + kSecond, graph);
+  ASSERT_EQ(out.size(), 1u);
+  EXPECT_EQ(out[0].kind, Kind::FaultClear);
 }

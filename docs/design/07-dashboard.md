@@ -226,7 +226,7 @@ Running
 │ wifi-then-localization        │   ●     │   ●     │ 2 (shadow) │ 09:21:40     │ —              │
 └───────────────────────────────┴─────────┴─────────┴────────────┴──────────────┴────────────────┘
 Detail: YAML (read-only) · match history · "Try changes in the rule lab"
-Rule lab (/rules/lab): YAML draft · window (1 h – 7 d) · Backtest → fires per rule (suppressed,
+Rule lab (/rules/lab): Build a rule (?mode=build: a form for trigger, guard, actions with plan args from the fault, policy, shadow mode → the YAML, backtested as if live) · YAML draft · window (1 h – 7 d) · Backtest → fires per rule (suppressed,
 cooled down, guard blocked) · timeline · fires with their cause events · recoveries (dry run) ·
 for a rule the robot runs, the decisions that differ from live · suggestions: what operators keep
 doing by hand, "Draft the rule"

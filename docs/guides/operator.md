@@ -178,6 +178,27 @@ same rule engine, with its other rules and its plans in dry run. You see:
   Unchanged, a rule makes the same decisions, event for event: that is how you know the replay
   can be trusted.
 
+**Build a rule** (*Rules → Build a rule*, or the rule lab's *Build a rule* tab) writes a rule
+from a form, no YAML:
+
+- **When**: a fault becoming `ACTIVE`, `LATCHED` or `CLEARED` (or any other event), by its code
+  (`*` globs, the catalog's codes are suggested), on one component or any. Optionally only when it
+  keeps happening: N times within a window.
+- **Unless**: a safety fault is open (`safety.*`), on by default.
+- **Then**, in order:
+  - run a plan; its arguments are filled from the fault where their names say what they are
+    (`component`, `node`, `topic`, `fault`), and suggest the other templates;
+  - notify a channel;
+  - open or escalate the incident;
+  - ask the agent.
+- **How often**: per component, a cooldown, at most N times per hour or day. **Shadow mode** is on
+  by default: the rule decides and nothing moves until you switch it off.
+- **Name**: the id follows the description until you change it.
+
+The YAML is shown as it is built. *Backtest* replays it as if it were live, so you see the recoveries
+it would ask for even in shadow mode. *Edit as YAML* opens it in the YAML tab, for what the form
+doesn't cover (sequences, absences, state guards, emitted events).
+
 **Suggestions.** When operators keep running the same plan by hand after the same fault, the rule
 lab says so: *What your operators keep doing by hand* lists the plan, the fault, how many times,
 by whom, on which components and how long after the fault they acted (the last 7 days, two runs

@@ -141,6 +141,36 @@ test("a rule's changes are backtested over the robot's history", async ({ page }
   await expect(page.getByTestId("lab-same")).toBeVisible();
 });
 
+test("a rule is built from a form, then edited as YAML", async ({ page }) => {
+  await page.goto("/rules");
+  await page.getByRole("link", { name: "Build a rule" }).click();
+  const builder = page.getByTestId("rule-builder");
+  // With suggestions (a datalist), a text field is a combobox.
+  await builder.getByRole("combobox", { name: "Code" }).fill("sensor.scan.stale");
+  await builder.getByRole("button", { name: "Run a plan" }).click();
+  await builder.getByRole("combobox", { name: "Plan" }).selectOption("restart-lifecycle-node");
+  // The plan's arguments come from the fault where their names say what they are.
+  await expect(builder.getByRole("combobox", { name: "Argument component" })).toHaveValue(
+    "{{ event.source.component }}",
+  );
+  await builder.getByRole("button", { name: "Notify" }).click();
+  await builder.getByRole("textbox", { name: "Description" }).fill("The lidar went quiet: restart its relay");
+
+  const yaml = builder.getByTestId("rule-builder-yaml");
+  await expect(yaml).toContainText("id: the-lidar-went-quiet-restart-its-relay");
+  await expect(yaml).toContainText(
+    "event: { kind: FAULT_STATE, code: sensor.scan.stale, attrs.state: ACTIVE }",
+  );
+  await expect(yaml).toContainText("plan: restart-lifecycle-node");
+  await expect(yaml).toContainText('- notify: { channel: operators, message: "{{ event.message }}" }');
+  await expect(builder.getByTestId("rule-builder-missing")).toHaveCount(0);
+
+  await builder.getByRole("button", { name: "Edit as YAML" }).click();
+  await expect(page.getByRole("textbox", { name: "Draft rules YAML" })).toHaveValue(
+    /plan: restart-lifecycle-node/,
+  );
+});
+
 test("a rule operators keep doing by hand is drafted in the rule lab", async ({ page }) => {
   // The suggestion itself is the gateway's (test_suggest.py): here, what the dashboard makes of one.
   const yaml =

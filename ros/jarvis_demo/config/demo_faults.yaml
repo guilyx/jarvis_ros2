@@ -61,6 +61,11 @@ faults:
   - code: ros.topic.qos_incompatible
     description: A subscription asks for QoS its publisher cannot match; no message reaches it.
     debounce: { persist: 2s }
+  - code: mqtt.device.offline
+    description: A device that reports over MQTT dropped off the network (its last will) or never came online.
+  - code: mqtt.broker.unreachable
+    description: Jarvis lost the MQTT broker; the devices behind it are not heard.
+    debounce: { persist: 5s }
   - code: ros.node.missing
     description: An expected node is not on the ROS graph (it crashed or never started).
     capture: { blackbox: true }

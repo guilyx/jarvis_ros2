@@ -148,6 +148,17 @@ export const useFault = (id: string) =>
       unwrap<FaultDetail>(client.GET("/api/v1/faults/{fault_id}", { params: { path: { fault_id: id } } })),
   });
 
+/** The fault catalog: the codes this robot knows, for pickers. */
+export const useCatalog = () =>
+  useQuery({
+    queryKey: ["catalog"],
+    staleTime: 300_000,
+    queryFn: () =>
+      unwrap<{ faults: { code: string; description: string; severity: string; latch: boolean }[] }>(
+        client.GET("/api/v1/catalog"),
+      ),
+  });
+
 /** The runbook of a fault code: Markdown, or null when its catalog entry has none. */
 export const useRunbook = (code: string) =>
   useQuery({

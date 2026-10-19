@@ -44,6 +44,8 @@ robots, with history, a dashboard and an agent that explains what happened.
   what differs from the live rule) before it goes live.
 - Rule suggestions: when operators keep running the same plan by hand after the same fault, the
   rule lab drafts the rule that would do it, and backtests it over their runs.
+- Build a rule from a form, no YAML: what triggers it, what it does (a plan's arguments from the
+  fault), how often, in shadow mode first; the rule lab backtests it.
 
 ### History, dashboard and API
 - The lake: recordings as Parquet, queried with DuckDB; KPIs, analytics, retention with a

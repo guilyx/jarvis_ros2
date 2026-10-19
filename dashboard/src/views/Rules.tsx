@@ -1,5 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router";
-import { FileCheck2, FlaskConical, RefreshCw } from "lucide-react";
+import { FileCheck2, FlaskConical, Hammer, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import {
   useReload,
@@ -114,6 +114,9 @@ export function Rules() {
       <PageHeader title="Rules">
         {can("admin") ? (
           <>
+            <Link to="/rules/lab" search={{ mode: "build" }} className={buttonStyle()}>
+              <Hammer size={14} /> Build a rule
+            </Link>
             <Link to="/rules/lab" search={{}} className={buttonStyle()}>
               <FlaskConical size={14} /> Rule lab
               {suggested ? (

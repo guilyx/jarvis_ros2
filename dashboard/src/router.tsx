@@ -75,7 +75,10 @@ const routes = [
     getParentRoute: () => root,
     path: "/rules/lab",
     component: RuleLab,
-    validateSearch: (s: Record<string, unknown>): RuleLabSearch => ({ rule: str(s.rule) }),
+    validateSearch: (s: Record<string, unknown>): RuleLabSearch => ({
+      rule: str(s.rule),
+      mode: s.mode === "build" || s.mode === "yaml" ? s.mode : undefined,
+    }),
   }),
   createRoute({ getParentRoute: () => root, path: "/rules/$ruleId", component: RuleDetail }),
   createRoute({

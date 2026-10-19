@@ -15,15 +15,19 @@ import {
   Td,
   Th,
 } from "@/components/domain";
+import { RuleBuilder } from "@/components/RuleBuilder";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Label, Select, Textarea } from "@/components/ui/input";
+import { Select, Textarea } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCan } from "@/lib/auth";
 import { ago, clock, dateTime, duration, toMs } from "@/lib/format";
 import { useTheme } from "@/lib/theme";
 
 export interface RuleLabSearch {
   rule?: string;
+  /** Build a rule from a form, or write YAML (the default). */
+  mode?: "build" | "yaml";
 }
 
 const WINDOWS = [
@@ -444,6 +448,7 @@ export function RuleLab() {
   const [text, setText] = useState(() => (search.rule ? "" : (readDraft() ?? STARTER)));
   const [hours, setHours] = useState(24);
   const [loaded, setLoaded] = useState<string | undefined>();
+  const [mode, setMode] = useState<"build" | "yaml">(search.mode ?? "yaml");
 
   // Opened from a rule ("Try changes"): its definition, once it is here.
   useEffect(() => {
@@ -457,9 +462,20 @@ export function RuleLab() {
     saveDraft(text);
     backtest.mutate({ yaml: text, hours });
   };
+  // The builder's rule: tried as it is, or edited further by hand.
+  const tryBuilt = (replay: string, keep: string) => {
+    setText(keep);
+    saveDraft(keep);
+    backtest.mutate({ yaml: replay, hours });
+  };
+  const editBuilt = (yaml: string) => {
+    setText(yaml);
+    setMode("yaml");
+  };
   // A suggestion: its draft, backtested over the window its runs are in.
   const draft = (s: Suggestion) => {
     const h = windowFor(s.first);
+    setMode("yaml");
     setText(s.yaml);
     setHours(h);
     saveDraft(s.yaml);
@@ -483,60 +499,76 @@ export function RuleLab() {
         changes on the robot; to deploy, put the rule in the robot's rules directory and reload.
       </p>
       <Suggestions onDraft={draft} />
-      <Card>
-        <CardBody className="space-y-3">
-          <Textarea
-            className="h-80 w-full"
-            aria-label="Draft rules YAML"
-            spellCheck={false}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) run();
-            }}
-          />
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <label>
-              <Label>Replay</Label>
-              <Select aria-label="Window" value={hours} onChange={(e) => setHours(Number(e.target.value))}>
-                {WINDOWS.map((w) => (
-                  <option key={w.hours} value={w.hours}>
-                    {w.label}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <div className="flex items-center gap-3">
-              {!can("admin") ? (
-                <span className="text-xs text-muted-fg">Backtests need the admin role.</span>
-              ) : null}
-              <Button
-                variant="default"
-                onClick={run}
-                disabled={backtest.isPending || !can("admin") || !text.trim()}
-                title="Ctrl+Enter"
-              >
-                <FlaskConical size={14} /> {backtest.isPending ? "Replaying…" : "Backtest"}
-              </Button>
-            </div>
-          </div>
-          <ErrorNote error={backtest.error ?? (search.rule ? from.error : null)} />
-          {b && !b.success ? (
-            <div className="text-sm text-red-400" data-testid="lab-invalid">
-              {b.message || "The draft has errors."}
-            </div>
-          ) : null}
-          {findings.length ? (
-            <ul className="space-y-1 text-sm" data-testid="lab-findings">
-              {findings.map((f, i) => (
-                <li key={i} className={f.level === "error" ? "text-red-400" : "text-amber-400"}>
-                  {f.level}: <Mono>{f.message}</Mono>
-                </li>
+      <Tabs value={mode} onValueChange={(v) => setMode(v as "build" | "yaml")}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <TabsList>
+            <TabsTrigger value="build">Build a rule</TabsTrigger>
+            <TabsTrigger value="yaml">YAML</TabsTrigger>
+          </TabsList>
+          <label className="flex items-center gap-2 text-sm">
+            <span className="text-muted-fg">Replay the</span>
+            <Select aria-label="Window" value={hours} onChange={(e) => setHours(Number(e.target.value))}>
+              {WINDOWS.map((w) => (
+                <option key={w.hours} value={w.hours}>
+                  {w.label}
+                </option>
               ))}
-            </ul>
-          ) : null}
-        </CardBody>
-      </Card>
+            </Select>
+            {!can("admin") ? (
+              <span className="text-xs text-muted-fg">Backtests need the admin role.</span>
+            ) : null}
+          </label>
+        </div>
+        <TabsContent value="build" className="mt-3">
+          <RuleBuilder
+            onBacktest={tryBuilt}
+            onEdit={editBuilt}
+            busy={backtest.isPending}
+            canRun={can("admin")}
+          />
+        </TabsContent>
+        <TabsContent value="yaml" className="mt-3">
+          <Card>
+            <CardBody className="space-y-3">
+              <Textarea
+                className="h-80 w-full"
+                aria-label="Draft rules YAML"
+                spellCheck={false}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) run();
+                }}
+              />
+              <div className="flex justify-end">
+                <Button
+                  variant="default"
+                  onClick={run}
+                  disabled={backtest.isPending || !can("admin") || !text.trim()}
+                  title="Ctrl+Enter"
+                >
+                  <FlaskConical size={14} /> {backtest.isPending ? "Replaying…" : "Backtest"}
+                </Button>
+              </div>
+            </CardBody>
+          </Card>
+        </TabsContent>
+      </Tabs>
+      <ErrorNote error={backtest.error ?? (search.rule ? from.error : null)} />
+      {b && !b.success ? (
+        <div className="text-sm text-red-400" data-testid="lab-invalid">
+          {b.message || "The draft has errors."}
+        </div>
+      ) : null}
+      {findings.length ? (
+        <ul className="space-y-1 text-sm" data-testid="lab-findings">
+          {findings.map((f, i) => (
+            <li key={i} className={f.level === "error" ? "text-red-400" : "text-amber-400"}>
+              {f.level}: <Mono>{f.message}</Mono>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {b?.success ? <Results b={b} /> : null}
     </div>
   );

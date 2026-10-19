@@ -89,6 +89,19 @@ class Faults(Open):
     history: list[dict[str, Any]] | None = None
 
 
+class Vda5050Error(Open):
+    errorType: str
+    errorLevel: str
+    errorReferences: list[dict[str, str]] = Field(default_factory=list)
+    errorDescription: str = ""
+    errorHint: str | None = None
+
+
+class Vda5050Errors(Open):
+    version: str
+    errors: list[Vda5050Error]
+
+
 class FaultDetail(Open):
     fault: Fault | None = None
     episode: dict[str, Any] | None = None

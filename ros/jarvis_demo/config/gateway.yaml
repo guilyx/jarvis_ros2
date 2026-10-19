@@ -3,3 +3,9 @@ schema: jarvis.gateway/v1
 anonymous: { name: demo, role: admin }
 # A SOVD client in the browser, such as the ros2_medkit web UI on port 3000 (docs/guides/sovd.md).
 cors_origins: [http://localhost:3000, http://127.0.0.1:3000]
+# Jarvis's faults as the errors of a VDA 5050 state, for a fleet manager (docs/guides/vda5050.md):
+# curl localhost:8080/api/v1/vda5050/errors
+vda5050:
+  version: "3.0"
+  errors:
+    - { code: ros.action.navigate_to_pose.aborted, type: NODE_UNREACHABLE, level: CRITICAL }

@@ -294,6 +294,8 @@ Plan fields: `params` (`type: string | int | number | bool`, `required`, `defaul
 | `service.trigger` | jarvis_ros | `service` | `std_srvs/srv/Trigger`. `success=false` fails the step. |
 | `service.set_bool` | jarvis_ros | `service`, `data` | `std_srvs/srv/SetBool` |
 | `service.empty` | jarvis_ros | `service` | `std_srvs/srv/Empty` |
+| `service.call` | jarvis_ros | `service`, `type`, `request`, `expect` | Any service, of the type named (`pkg/srv/Name`). `request` sets its fields; the response must hold `expect` (default: `success: true` when it has a boolean `success`) |
+| `action.goal` | jarvis_ros | `action`, `type`, `goal`, `expect` | Any action (`pkg/action/Name`): sends the goal, waits for the result, which must be `SUCCEEDED` and hold `expect`. A step timeout cancels the goal |
 | `param.set` | jarvis_ros | `node`, `name`, `value` | `rcl_interfaces/srv/SetParameters` |
 | `bag.snapshot` | jarvis_ros | `service` | rosbag2 `~/snapshot` |
 | `nav2.manage_lifecycle` | jarvis_nav2 (plugin) | `manager`, `command` | `nav2_msgs/srv/ManageLifecycleNodes` (STARTUP / PAUSE / RESUME / RESET / SHUTDOWN) |
@@ -302,7 +304,9 @@ Plan fields: `params` (`type: string | int | number | bool`, `required`, `defaul
 | `nav2.navigate_to_pose` | jarvis_nav2 (plugin) | `pose: {x, y, yaw}`, `frame` (default map) | Sends a goal and waits for the result (e.g. go to dock); a step timeout cancels it |
 | `<vendor>.<name>` | **pluginlib** | plugin-defined | Custom actuators (`jarvis_ros::Actuator` base class) |
 
-Planned later: a generic `action.goal` and a generic typed `service.call` (via dynamic type support), `process.restart` (systemd over D-Bus), `bt.run` (BehaviorTree.CPP).
+`service.call` and `action.goal` load their types by name (C++ introspection type support, through `rclcpp::GenericClient` and `rclcpp_action::GenericClient`), so the recovery node checks `request`, `goal` and `expect` against them when it loads the plans: an unknown type or field, a value of the wrong type, an integer out of range fail the load. Templates are checked once rendered.
+
+Planned later: `process.restart` (systemd over D-Bus), `bt.run` (BehaviorTree.CPP).
 
 ## 9. The gates (admission control)
 

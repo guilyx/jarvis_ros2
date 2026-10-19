@@ -5,6 +5,9 @@
   <class type="jarvis_ros::ServiceActuator" base_class_type="jarvis_ros::Actuator">
     <description>service.trigger, service.set_bool and service.empty (std_srvs)</description>
   </class>
+  <class type="jarvis_ros::GenericActuator" base_class_type="jarvis_ros::Actuator">
+    <description>service.call and action.goal: any service or action, of a type named in the plan</description>
+  </class>
   <class type="jarvis_ros::ParamActuator" base_class_type="jarvis_ros::Actuator">
     <description>param.set (rcl_interfaces SetParameters)</description>
   </class>

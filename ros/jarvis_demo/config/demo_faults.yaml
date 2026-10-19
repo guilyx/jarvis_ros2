@@ -23,6 +23,10 @@ faults:
     latch: true
     incident: always
     capture: { blackbox: true }
+  - code: power.battery.low
+    description: The battery is low and not charging; the robot must reach its dock soon.
+    severity: WARN
+    debounce: { persist: 2s }
 
   # -- generic bridges (same as the default catalog) -----------------------------------------------
   - code: ros.log.error

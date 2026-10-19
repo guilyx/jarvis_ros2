@@ -10,6 +10,7 @@ import type {
   Fault,
   FaultEpisode,
   FaultTransition,
+  FleetHistory,
   FleetRobot,
   Flapping,
   HeatCell,
@@ -58,6 +59,17 @@ export const useFleet = () =>
     queryFn: () => unwrap<{ robots: FleetRobot[] }>(client.GET("/api/v1/fleet")),
     refetchInterval: 5_000,
     placeholderData: keepPreviousData,
+  });
+
+// The robots' uploaded history: the gateway reads it once a minute, a 404 says it isn't set up.
+export const useFleetHistory = (hours: number) =>
+  useQuery({
+    queryKey: ["fleet-history", hours],
+    queryFn: () =>
+      unwrap<FleetHistory>(client.GET("/api/v1/fleet/history", { params: { query: { hours } } })),
+    refetchInterval: 60_000,
+    placeholderData: keepPreviousData,
+    retry: false,
   });
 
 // -- events ------------------------------------------------------------------------------------------

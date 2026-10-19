@@ -50,6 +50,8 @@ class Gateway:
         self.clients = set()
         self.started_at = time.time()
         self.fleet_client = None  # an httpx.AsyncClient for the fleet view (tests); None: one per request
+        history = settings.fleet.history if settings.fleet else ""
+        self.fleet_history = fleet.History(history) if history else None
         self.backfilled = False
         self._tasks = []
         self._bag_cache = {}
@@ -208,6 +210,20 @@ def create_app(settings, port, notifier=None):
         }
         settings = gw.settings.fleet or fleet.Settings()
         return {"robots": await fleet.robots(settings, own, gw.fleet_client)}
+
+    @api.get("/fleet/history", response_model=models.FleetHistory, tags=["system"])
+    async def fleet_history(who=Depends(viewer), hours: float = Query(168.0, gt=0, le=24 * 366)):
+        """The fleet's uploaded history (`fleet.history` in gateway.yaml; docs/guides/fleet.md §4): per
+        robot, the window's numbers and how far its history goes; the fault codes that cost the fleet
+        most; confirmed faults per robot over time. Read at most once a minute per window."""
+        if gw.fleet_history is None:
+            raise HTTPException(
+                404, "no fleet history here: set fleet.history in gateway.yaml (docs/guides/fleet.md)"
+            )
+        try:
+            return await gw.fleet_history.summary(hours)
+        except Exception as e:  # noqa: BLE001 - the bucket unreachable, refused, a file unreadable: say why
+            raise HTTPException(502, f"cannot read the fleet's history: {type(e).__name__}: {e}") from e
 
     @api.get("/me", response_model=models.Me, tags=["system"])
     def me(who=Depends(viewer)):

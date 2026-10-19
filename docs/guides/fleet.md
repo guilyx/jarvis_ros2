@@ -140,3 +140,34 @@ $ ros2 run jarvis_lake jarvis-lake fleet s3://acme-robots/jarvis \
 
 `--format csv` or `json` for a spreadsheet or a script. Any tool that reads Parquet reads it too:
 DuckDB, Spark, Athena, a notebook with pandas.
+
+### In the dashboard
+
+Tell the gateway you look at the fleet from where the robots upload, with credentials that may
+read the bucket (in its environment), and its Fleet page shows the history under the robots' cards:
+
+```yaml
+fleet:
+  robots:
+    - { name: amr-08, url: http://amr-08.local:8080 }
+  history: s3://acme-robots/jarvis
+```
+
+Over 24 hours, 7 or 30 days:
+
+| | |
+|---|---|
+| Per robot, most faults first | Confirmed faults, MTTR, incidents and how many escalated, the share recovered without a person, the share of recoveries that worked, how far its history goes (what is not uploaded yet is not there) |
+| Confirmed faults per robot | A stacked bar per day (per hour over 24 h): which robot, when |
+| What costs the fleet most | The fault codes with the most episodes, the robots they hit, their MTTR |
+
+The gateway reads the bucket once a minute per window, off its event loop
+(`GET /api/v1/fleet/history?hours=168`, for any viewer). Without `fleet.history`, the page says how
+to set it up.
+
+To try it without a week of robots, write a made-up week for demo robots where they would upload,
+then point the gateway there (never at a real fleet's storage: it is made up):
+
+```bash
+ros2 run jarvis_lake jarvis-lake demo-history file:///tmp/fleet --robots amr-7,amr-8,amr-9 --days 7
+```

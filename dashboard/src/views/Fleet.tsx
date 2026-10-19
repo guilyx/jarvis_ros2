@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/cn";
 import { SEVERITY_STYLE } from "@/lib/severity";
+import { FleetHistory } from "./FleetHistory";
 
 const COUNTS = ["CRITICAL", "ERROR", "WARN"] as const;
 
@@ -143,6 +144,7 @@ export function Fleet() {
           (docs/guides/fleet.md).
         </Empty>
       ) : null}
+      <FleetHistory />
     </div>
   );
 }

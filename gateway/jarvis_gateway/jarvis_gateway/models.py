@@ -110,6 +110,45 @@ class Fleet(Open):
     robots: list[FleetRobot]
 
 
+class FleetHistoryRobot(Open):
+    robot: str
+    history_until: str | None = None  # its newest uploaded event: what is not uploaded yet is not here
+    events: int = 0
+    warnings_or_worse: int = 0
+    faults_confirmed: int = 0
+    mttr_s: float | None = None
+    incidents_opened: int = 0
+    incidents_escalated: int = 0
+    recoveries_finished: int = 0
+    auto_recovery_rate: float | None = None
+    recovery_success_rate: float | None = None
+
+
+class FleetHistoryCode(Open):
+    code: str
+    episodes: int
+    robots: int
+    robot_names: list[str] = Field(default_factory=list)
+    mttr_s: float | None = None
+
+
+class FleetHistoryPoint(Open):
+    bucket: str
+    robot: str
+    faults: int
+
+
+class FleetHistory(Open):
+    target: str  # where the robots upload (without credentials)
+    hours: float
+    window: dict[str, str]
+    bucket_s: int
+    robots: list[FleetHistoryRobot]
+    top_codes: list[FleetHistoryCode]
+    trend: list[FleetHistoryPoint]
+    updated_at: float  # when it was read (it is kept a minute)
+
+
 class Vda5050Error(Open):
     errorType: str
     errorLevel: str

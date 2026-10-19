@@ -1,12 +1,14 @@
 # Copyright 2026 Erwin L.
 # SPDX-License-Identifier: Apache-2.0
 """The fleet view: a robot at a glance, the settings, and GET /api/v1/fleet over real gateways (on
-the fake Jarvis), one that wants a token and one that is down."""
+the fake Jarvis), one that wants a token and one that is down; and the fleet's uploaded history."""
 
 import httpx
 import pytest
+from jarvis_gateway import fleet as fleet_module
 from jarvis_gateway.adapters.fake import FakeJarvis
 from jarvis_gateway.fleet import Robot, Settings, summarize
+from jarvis_lake import demo_history
 
 
 def fault(code, severity="ERROR", state="ACTIVE", muted_by="", incident="i-1", component="lidar"):
@@ -109,3 +111,47 @@ def test_the_fleet_view(make_gateway, monkeypatch):
 def test_no_fleet_is_this_robot_alone(gw):
     robots = gw.get("/api/v1/fleet")["robots"]
     assert len(robots) == 1 and robots[0]["local"]
+
+
+def test_the_fleets_history(make_gateway, tmp_path):
+    """GET /api/v1/fleet/history over what the robots uploaded (made up here, as a demo would)."""
+    target = f"file://{tmp_path / 'fleet'}"
+    demo_history.write(target, ["amr-7", "amr-8"], days=3)
+    ops = make_gateway(fleet=Settings.load({"robots": [], "history": target}))
+    history = ops.get("/api/v1/fleet/history", hours=72)
+    assert history["target"] == target and history["hours"] == 72 and history["bucket_s"] == 86400
+    assert [r["robot"] for r in history["robots"]] == ["amr-7", "amr-8"]
+    amr8 = history["robots"][1]
+    assert amr8["faults_confirmed"] > history["robots"][0]["faults_confirmed"], "amr-8's flaky lidar"
+    assert 0 <= amr8["recovery_success_rate"] <= 1 and amr8["history_until"].endswith("Z")
+    top = history["top_codes"][0]
+    assert top["episodes"] >= top["robots"] >= 1 and top["robot_names"]
+    assert {p["robot"] for p in history["trend"]} == {"amr-7", "amr-8"}
+    # Read at most once a minute per window: the Fleet page refreshes, the bucket is read once.
+    assert ops.get("/api/v1/fleet/history", hours=72)["updated_at"] == history["updated_at"]
+    assert ops.get("/api/v1/fleet/history", hours=24)["hours"] == 24
+    # A viewer may look; the window is bounded.
+    assert (
+        ops.client.get("/api/v1/fleet/history", headers={"Authorization": "Bearer v-token"}).status_code
+        == 200
+    )
+    assert ops.client.get("/api/v1/fleet/history?hours=0").status_code == 422
+
+
+def test_no_fleet_history_says_how(gw):
+    r = gw.client.get("/api/v1/fleet/history")
+    assert r.status_code == 404 and "fleet.history" in r.json()["detail"]
+
+
+def test_an_unreadable_history_is_an_error_with_why(make_gateway, tmp_path, monkeypatch):
+    def unreachable(target, hours):
+        raise OSError("AWS Error NETWORK_CONNECTION: Could not connect to server")
+
+    monkeypatch.setattr(fleet_module.lake_fleet, "summary", unreachable)
+    ops = make_gateway(fleet=Settings.load({"history": f"file://{tmp_path / 'fleet'}"}))
+    r = ops.client.get("/api/v1/fleet/history")
+    assert r.status_code == 502 and r.json()["detail"] == (
+        "cannot read the fleet's history: OSError: AWS Error NETWORK_CONNECTION: Could not connect to server"
+    )
+    with pytest.raises(ValueError, match="fleet.history"):
+        Settings.load({"history": "nope://x"})

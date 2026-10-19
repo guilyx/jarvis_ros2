@@ -409,6 +409,40 @@ export interface Health {
   lake?: LakeStatus | null;
 }
 
+/** GET /api/v1/fleet/history: the history the robots uploaded (docs/guides/fleet.md §4). */
+export interface FleetHistory {
+  target: string;
+  hours: number;
+  window: { since: string; until: string };
+  bucket_s: number;
+  robots: FleetHistoryRobot[];
+  top_codes: FleetHistoryCode[];
+  trend: { bucket: string; robot: string; faults: number }[];
+  updated_at: number; // unix seconds: when the gateway read it (it keeps it a minute)
+}
+
+export interface FleetHistoryRobot {
+  robot: string;
+  history_until: string | null; // its newest uploaded event
+  events: number;
+  warnings_or_worse: number;
+  faults_confirmed: number;
+  mttr_s: number | null;
+  incidents_opened: number;
+  incidents_escalated: number;
+  recoveries_finished: number;
+  auto_recovery_rate: number | null;
+  recovery_success_rate: number | null;
+}
+
+export interface FleetHistoryCode {
+  code: string;
+  episodes: number;
+  robots: number;
+  robot_names: string[];
+  mttr_s: number | null;
+}
+
 export interface FleetRobot {
   name: string;
   url: string; // its gateway (and dashboard); empty for this one

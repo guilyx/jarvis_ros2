@@ -243,6 +243,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/fleet/history": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Fleet History
+     * @description The fleet's uploaded history (`fleet.history` in gateway.yaml; docs/guides/fleet.md §4): per
+     *     robot, the window's numbers and how far its history goes; the fault codes that cost the fleet
+     *     most; confirmed faults per robot over time. Read at most once a minute per window.
+     */
+    get: operations["fleet_history_api_v1_fleet_history_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/health": {
     parameters: {
       query?: never;
@@ -1177,6 +1199,100 @@ export interface components {
     Fleet: {
       /** Robots */
       robots: components["schemas"]["FleetRobot"][];
+    } & {
+      [key: string]: unknown;
+    };
+    /** FleetHistory */
+    FleetHistory: {
+      /** Bucket S */
+      bucket_s: number;
+      /** Hours */
+      hours: number;
+      /** Robots */
+      robots: components["schemas"]["FleetHistoryRobot"][];
+      /** Target */
+      target: string;
+      /** Top Codes */
+      top_codes: components["schemas"]["FleetHistoryCode"][];
+      /** Trend */
+      trend: components["schemas"]["FleetHistoryPoint"][];
+      /** Updated At */
+      updated_at: number;
+      /** Window */
+      window: {
+        [key: string]: string;
+      };
+    } & {
+      [key: string]: unknown;
+    };
+    /** FleetHistoryCode */
+    FleetHistoryCode: {
+      /** Code */
+      code: string;
+      /** Episodes */
+      episodes: number;
+      /** Mttr S */
+      mttr_s?: number | null;
+      /** Robot Names */
+      robot_names?: string[];
+      /** Robots */
+      robots: number;
+    } & {
+      [key: string]: unknown;
+    };
+    /** FleetHistoryPoint */
+    FleetHistoryPoint: {
+      /** Bucket */
+      bucket: string;
+      /** Faults */
+      faults: number;
+      /** Robot */
+      robot: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /** FleetHistoryRobot */
+    FleetHistoryRobot: {
+      /** Auto Recovery Rate */
+      auto_recovery_rate?: number | null;
+      /**
+       * Events
+       * @default 0
+       */
+      events: number;
+      /**
+       * Faults Confirmed
+       * @default 0
+       */
+      faults_confirmed: number;
+      /** History Until */
+      history_until?: string | null;
+      /**
+       * Incidents Escalated
+       * @default 0
+       */
+      incidents_escalated: number;
+      /**
+       * Incidents Opened
+       * @default 0
+       */
+      incidents_opened: number;
+      /** Mttr S */
+      mttr_s?: number | null;
+      /**
+       * Recoveries Finished
+       * @default 0
+       */
+      recoveries_finished: number;
+      /** Recovery Success Rate */
+      recovery_success_rate?: number | null;
+      /** Robot */
+      robot: string;
+      /**
+       * Warnings Or Worse
+       * @default 0
+       */
+      warnings_or_worse: number;
     } & {
       [key: string]: unknown;
     };
@@ -2165,6 +2281,40 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Fleet"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  fleet_history_api_v1_fleet_history_get: {
+    parameters: {
+      query?: {
+        hours?: number;
+        token?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FleetHistory"];
         };
       };
       /** @description Validation Error */

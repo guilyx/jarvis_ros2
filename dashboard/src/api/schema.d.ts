@@ -345,6 +345,51 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/maintenance": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Maintenance
+     * @description Components under maintenance: rules and the agent keep off them, notifications about them
+     *     are not sent; operators still act.
+     */
+    get: operations["maintenance_api_v1_maintenance_get"];
+    put?: never;
+    /**
+     * Start Maintenance
+     * @description Puts a component under maintenance for `minutes` (again: renews it).
+     */
+    post: operations["start_maintenance_api_v1_maintenance_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/maintenance/{component}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /**
+     * End Maintenance
+     * @description Ends a component's maintenance now: rules and the agent may act on it again.
+     */
+    delete: operations["end_maintenance_api_v1_maintenance__component__delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/me": {
     parameters: {
       query?: never;
@@ -1255,6 +1300,53 @@ export interface components {
       incidents: {
         [key: string]: unknown;
       }[];
+    } & {
+      [key: string]: unknown;
+    };
+    /** MaintenanceList */
+    MaintenanceList: {
+      /** Maintenance */
+      maintenance?: components["schemas"]["MaintenanceWindow"][];
+    } & {
+      [key: string]: unknown;
+    };
+    /** MaintenanceRequest */
+    MaintenanceRequest: {
+      /** Component */
+      component: string;
+      /**
+       * Minutes
+       * @description how long (at most a week)
+       * @default 30
+       */
+      minutes: number;
+      /**
+       * Reason
+       * @default
+       */
+      reason: string;
+    };
+    /** MaintenanceWindow */
+    MaintenanceWindow: {
+      /** Component */
+      component: string;
+      /**
+       * Operator
+       * @default
+       */
+      operator: string;
+      /**
+       * Reason
+       * @default
+       */
+      reason: string;
+      /**
+       * Since
+       * @default
+       */
+      since: string;
+      /** Until */
+      until: string;
     } & {
       [key: string]: unknown;
     };
@@ -2271,6 +2363,111 @@ export interface operations {
         };
         content: {
           "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  maintenance_api_v1_maintenance_get: {
+    parameters: {
+      query?: {
+        token?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MaintenanceList"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  start_maintenance_api_v1_maintenance_post: {
+    parameters: {
+      query?: {
+        token?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MaintenanceRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Outcome"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  end_maintenance_api_v1_maintenance__component__delete: {
+    parameters: {
+      query?: {
+        token?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        component: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Outcome"];
         };
       };
       /** @description Validation Error */

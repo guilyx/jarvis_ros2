@@ -171,6 +171,7 @@
             <service>/jarvis/recovery/decide</service>
             <service>/jarvis/recovery/list_plans</service>
             <service>/jarvis/recovery/reload</service>
+            <service>/jarvis/recovery/set_maintenance</service>
             <service>/jarvis/recovery/set_mode</service>
             <service>/jarvis/rule_engine/list_rules</service>
             <service>/jarvis/rule_engine/reload</service>

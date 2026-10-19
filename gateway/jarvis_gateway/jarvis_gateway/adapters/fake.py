@@ -86,6 +86,7 @@ class FakeJarvis(JarvisPort):
         self.executions = {}  # execution_id -> execution
         self.recent = []
         self._announced = set()  # executions whose first event (with their args) went out
+        self.maintenance = {}  # component -> {component, since, until, operator, reason}
         self.mode = "ENABLED"
         self.plans = [dict(p) for p in DEFAULT_PLANS]
         self.rules = [dict(r) for r in DEFAULT_RULES]
@@ -132,8 +133,10 @@ class FakeJarvis(JarvisPort):
         causation="",
         payload=None,
         payload_schema="",
+        extra_attrs=None,  # attributes whose names clash with the parameters (component)
         **attrs,
     ):
+        attrs = {**(extra_attrs or {}), **attrs}
         self.seq += 1
         stamp = now_iso(self.clock)
         e = {
@@ -433,6 +436,55 @@ class FakeJarvis(JarvisPort):
         self._publish_executions()
         return CommandResult(True, f"{previous} -> {mode}", {"previous_mode": previous})
 
+    def under_maintenance(self, component):
+        """The component's maintenance window, if it has one that hasn't ended."""
+        now = now_iso(self.clock)
+        for c in [c for c, m in self.maintenance.items() if m["until"] <= now]:
+            m = self.maintenance.pop(c)
+            self._maintenance_event(m, False, "", "expired")
+        return self.maintenance.get(component)
+
+    def _maintenance_event(self, m, started, who, why):
+        code = "jarvis.maintenance.started" if started else "jarvis.maintenance.ended"
+        text = (
+            f"{m['component']} under maintenance until {m['until']} by {who}"
+            + (f": {m['reason']}" if m["reason"] else "")
+            if started
+            else f"maintenance of {m['component']} ended: {why}"
+        )
+        self.emit(
+            "OPERATOR",
+            code,
+            "INFO",
+            m["component"],
+            text,
+            extra_attrs={"component": m["component"]},
+            until=m["until"],
+            operator=m["operator"] if started else who,
+            **({"reason": m["reason"]} if m["reason"] else {}),
+        )
+        self._publish_executions()
+
+    async def set_maintenance(self, component, duration_s, operator, reason=""):
+        self.under_maintenance(component)  # what ended, ends first
+        if not component:
+            return CommandResult(False, "which component?")
+        if duration_s < 0 or duration_s > 7 * 86400:
+            return CommandResult(False, "maintenance lasts at most a week")
+        if duration_s == 0:
+            m = self.maintenance.pop(component, None)
+            if m is None:
+                return CommandResult(False, f"{component} is not under maintenance")
+            self._maintenance_event(m, False, operator, reason or f"ended by {operator}")
+            return CommandResult(True, f"maintenance of {component} ended")
+        now = self.clock() if self.clock else datetime.datetime.now(tz=datetime.UTC)
+        until = now_iso(lambda: now + datetime.timedelta(seconds=duration_s))
+        since = self.maintenance.get(component, {}).get("since") or now_iso(lambda: now)
+        m = {"component": component, "since": since, "until": until, "operator": operator, "reason": reason}
+        self.maintenance[component] = m
+        self._maintenance_event(m, True, operator, "")
+        return CommandResult(True, f"{component} under maintenance until {until}")
+
     async def list_plans(self):
         return [dict(p) for p in self.plans], self.mode
 
@@ -550,9 +602,11 @@ class FakeJarvis(JarvisPort):
                 )
                 plan = self.plans[0]
                 args = {"node": "/scan_relay", "component": "lidar", "fault": "ros.topic.stale"}
-                self._start(
-                    self._new_execution(plan, args, "RULE", "lidar-stale-restart", "", False, incident)
-                )
+                x = self._new_execution(plan, args, "RULE", "lidar-stale-restart", "", False, incident)
+                if held := self.under_maintenance("lidar"):
+                    self._finish(x, "REJECTED", f"lidar is under maintenance until {held['until']}")
+                else:
+                    self._start(x)
             elif phase == 5 and lidar and lidar["fault_id"] in self.faults:
                 self.heal(lidar["fault_id"], "/scan is back")
             elif phase == 11:
@@ -646,6 +700,7 @@ class FakeJarvis(JarvisPort):
                             "mode": self.mode,
                             "executions": list(self.executions.values()),
                             "recent": self.recent,
+                            "maintenance": list(self.maintenance.values()),
                         }
                     )
                 )

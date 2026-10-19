@@ -7,9 +7,11 @@ test plays a robot node (the producer enclave) and a person (the operator enclav
 - what is allowed works end to end: a producer's fault reaches the fault manager, an operator
   sees it, and so does the gateway (its enclave reads the stream);
 - what is not is refused by DDS: a producer cannot publish the stream (/jarvis/event_batches,
-  /jarvis/events) nor read it, and a participant whose enclave is not in the keystore cannot join at all.
+  /jarvis/events) nor read it, and a participant whose enclave is not in the keystore cannot join at all;
+- and, without DDS, the gateway's enclave allows every service and action the gateway calls.
 """
 
+import fnmatch
 import json
 import os
 import pathlib
@@ -18,10 +20,12 @@ import subprocess
 import sys
 import time
 import urllib.request
+import xml.etree.ElementTree as ET
 
 import pytest
 
 PARTICIPANT = pathlib.Path(__file__).with_name("security_participant.py")
+POLICY = pathlib.Path(__file__).parents[1] / "security" / "policy.xml"
 PORT = 8094
 CODE = "test.security.fault"
 SECURITY_ENV = ("ROS_SECURITY_KEYSTORE", "ROS_SECURITY_ENABLE", "ROS_SECURITY_STRATEGY")
@@ -125,3 +129,21 @@ def test_what_it_does_not_allow_is_refused(stack):
     assert forged["read_batches"].startswith("denied"), forged
     # An enclave the keystore does not have: no certificate, no participant.
     assert participant("/jarvis/intruder", "join")["join"].startswith("denied")
+
+
+def test_the_gateway_enclave_allows_what_the_gateway_calls():
+    # The gateway makes a client for every service it may call when it starts: under Enforce, one
+    # the policy does not allow fails the start, and the gateway shows nothing. Checked without DDS.
+    from jarvis_gateway.adapters.ros2 import SERVICES
+
+    enclave = ET.parse(POLICY).find(".//enclave[@path='/jarvis/gateway']")
+    allowed = [e.text for e in enclave.findall(".//services[@request='ALLOW']/service")]
+    calls = [e.text for e in enclave.findall(".//actions[@call='ALLOW']/action")]
+    missing = [
+        f"/jarvis/{name}"
+        for _, name in SERVICES.values()
+        if not any(fnmatch.fnmatchcase(f"/jarvis/{name}", a) for a in allowed)
+    ]
+    assert not missing, f"add to the gateway's enclave in {POLICY.name}: {missing}"
+    for action in ("/jarvis/recovery/execute", "/jarvis/agent/analyze"):
+        assert any(fnmatch.fnmatchcase(action, a) for a in calls), action

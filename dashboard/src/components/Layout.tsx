@@ -22,6 +22,7 @@ import { useLive } from "@/live/context";
 import type { LiveStatus } from "@/live/stream";
 import { cn } from "@/lib/cn";
 import { useTheme } from "@/lib/theme";
+import { MaintenanceBanner, MaintenanceButton } from "./Maintenance";
 import { ModeMenu } from "./ModeMenu";
 import { TokenDialog } from "./TokenDialog";
 
@@ -134,6 +135,7 @@ export function Layout() {
           <div className="flex items-center gap-4">
             <LiveIndicator />
             <ModeMenu />
+            <MaintenanceButton />
           </div>
           <div className="flex items-center gap-1">
             <Attention />
@@ -148,6 +150,7 @@ export function Layout() {
             <TokenDialog />
           </div>
         </header>
+        <MaintenanceBanner />
         <main className="min-h-0 flex-1 overflow-y-auto p-5">
           <Outlet />
         </main>

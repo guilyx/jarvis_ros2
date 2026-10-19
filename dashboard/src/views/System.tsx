@@ -140,9 +140,9 @@ export function System() {
               {[...s.notifications].reverse().map((d, i) => (
                 <tr key={i}>
                   <Td className="text-xs">{ago(new Date(d.at * 1000).toISOString())}</Td>
-                  <Td>{d.webhook}</Td>
+                  <Td>{d.webhook || "—"}</Td>
                   <Td className="text-xs">{d.channel}</Td>
-                  <Td className={d.ok ? "text-emerald-400" : "text-red-400"}>
+                  <Td className={d.ok ? "text-emerald-400" : d.silenced ? "text-amber-500" : "text-red-400"}>
                     {d.ok ? `delivered (${d.status})` : d.error}
                   </Td>
                   <Td className="text-right tabular">{d.attempts}</Td>

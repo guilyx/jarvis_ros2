@@ -95,6 +95,16 @@ class TestCli(unittest.TestCase):
         self.assertIn("REJECTED: recovery is DISABLED", out.stdout)
         jarvis("mode", "ENABLED")
 
+    def test_4b_maintenance(self):
+        out = jarvis("maintenance", "thing", "30m", "--reason", "recalibrating", "--operator", "dave")
+        self.assertIn("thing under maintenance until", out.stdout)
+        listed = jarvis("maintenance").stdout
+        self.assertIn("thing", listed)
+        self.assertIn("dave: recalibrating", listed)
+        self.assertIn("maintenance of thing ended", jarvis("maintenance", "thing", "--end").stdout)
+        self.assertIn("nothing under maintenance", jarvis("maintenance").stdout)
+        self.assertEqual(jarvis("maintenance", "thing", "--end", check=False).returncode, 1)
+
     def test_5_services_and_errors(self):
         self.assertIn("rules are valid", jarvis("rules", "reload", "--check").stdout)
         self.assertIn("plans are valid", jarvis("plans", "reload", "--check").stdout)

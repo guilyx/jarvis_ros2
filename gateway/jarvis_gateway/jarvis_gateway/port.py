@@ -77,6 +77,10 @@ class JarvisPort(abc.ABC):
     async def set_mode(self, mode, operator, reason="", cancel_running=False): ...
 
     @abc.abstractmethod
+    async def set_maintenance(self, component, duration_s, operator, reason=""):
+        """Puts a component under maintenance for duration_s, or ends it (0)."""
+
+    @abc.abstractmethod
     async def list_plans(self):
         """(plans, mode): plans as dicts (id, description, params, steps, ...)."""
 

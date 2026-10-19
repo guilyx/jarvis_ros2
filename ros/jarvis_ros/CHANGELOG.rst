@@ -9,4 +9,5 @@ Forthcoming
 * Built-in actuators: lifecycle transitions and restarts, std_srvs services, parameters, black-box snapshots.
 * Generic actuators (``jarvis_ros::GenericActuator``): ``service.call`` and ``action.goal`` drive any service or action of a type named in the plan, checked against the type when the plans load; ``jarvis_ros::MessageType`` builds and reads messages of types known at run time.
 * ``jarvis_load``: load generator for the running stack.
+* ``~/set_maintenance`` on the recovery node; the windows in ``/jarvis/executions``.
 * ``container.restart`` (Docker Engine API) and ``systemd.restart``: drivers that aren't lifecycle nodes, only the containers and units the recovery node allows (``containers.allowed``, ``systemd.allowed_units``).

@@ -28,6 +28,9 @@ robots, with history, a dashboard and an agent that explains what happened.
   guards, cooldowns, rate limits and shadow mode.
 - Recovery plans behind seven gates (mode, requester, preconditions, rate limits, locks,
   approvals, four-eyes by default) with verification steps and escalation ladders; a kill switch.
+- Maintenance windows: an operator puts one component under maintenance for a while (dashboard,
+  `ros2 jarvis maintenance`, the API). Rules and the agent keep off it, operators still act, and
+  notifications about it are silenced; it ends by itself and survives restarts.
 - Actuators for lifecycle nodes, services, parameters, black-box snapshots and Nav2; and for any
   service or action, of a type named in the plan (`service.call`, `action.goal`), checked against
   the type when the plans load.

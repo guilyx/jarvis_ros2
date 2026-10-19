@@ -17,6 +17,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   msg/StepProgress.msg
   msg/Execution.msg
   msg/ExecutionArray.msg
+  msg/Maintenance.msg
   msg/RuleStatus.msg
   msg/PlanInfo.msg
   srv/QueryEvents.srv
@@ -27,6 +28,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   srv/SetRuleState.srv
   srv/ListRules.srv
   srv/SetRecoveryMode.srv
+  srv/SetMaintenance.srv
   srv/DecideApproval.srv
   srv/CancelExecution.srv
   srv/CloseIncident.srv

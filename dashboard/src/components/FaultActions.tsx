@@ -4,15 +4,19 @@ import type { Fault } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { useCan } from "@/lib/auth";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { FaultMaintenance } from "./Maintenance";
 
 export function FaultActions({ fault }: { fault: Fault }) {
   const can = useCan();
   const ack = useAck();
   const clear = useClear();
-  if (!can("operator")) return null;
+  const component = fault.source.component;
+  const maintenance = component ? <FaultMaintenance component={component} /> : null;
+  if (!can("operator")) return maintenance;
   const latched = fault.state === "LATCHED";
   return (
     <div className="flex items-center gap-1.5">
+      {maintenance}
       {!fault.acknowledged ? (
         <ConfirmDialog
           trigger={

@@ -140,6 +140,16 @@ export interface ExecutionsSnapshot {
   mode: RecoveryMode;
   executions: Execution[];
   recent: Execution[];
+  maintenance?: Maintenance[];
+}
+
+/** A component under maintenance: rules and the agent keep off it, notifications about it are silenced. */
+export interface Maintenance {
+  component: string;
+  since: string;
+  until: string;
+  operator: string;
+  reason: string;
 }
 
 export type RecoveryMode = "ENABLED" | "DRY_RUN" | "DISABLED" | "UNKNOWN";
@@ -414,6 +424,8 @@ export interface Delivery {
   status: number | null;
   error: string;
   at: number;
+  /** not sent: its component is under maintenance */
+  silenced?: boolean;
 }
 
 export interface SystemInfo {

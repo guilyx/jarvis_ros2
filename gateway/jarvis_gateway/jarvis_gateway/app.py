@@ -46,6 +46,7 @@ class Gateway:
         self.catalog = Catalog(settings.catalog, settings.runbooks)
         self.metrics = Metrics()
         self.notifier = notifier or Notifier(settings.webhooks, on_delivery=self.metrics.on_delivery)
+        self.notifier.silenced = self.silenced
         self.clients = set()
         self.started_at = time.time()
         self.fleet_client = None  # an httpx.AsyncClient for the fleet view (tests); None: one per request
@@ -99,6 +100,17 @@ class Gateway:
 
     def lake_status(self):
         return storage.read_json(self.history.lake.layout.status, None)
+
+    def maintenance(self):
+        """The components under maintenance now, from the recovery node's snapshot."""
+        now = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%S")
+        return [m for m in (self.state.executions or {}).get("maintenance") or [] if m.get("until", "") > now]
+
+    def silenced(self, event):
+        """Why a notification about this event is not sent (its component is under maintenance), or None."""
+        component = (event.get("source") or {}).get("component", "")
+        m = next((m for m in self.maintenance() if component and m["component"] == component), None)
+        return f"{component} is under maintenance until {m['until']}" if m else None
 
     async def command(self, name, coro):
         """Runs a command against Jarvis: 409 when it refuses, 503 when it is not reachable."""
@@ -415,6 +427,24 @@ def create_app(settings, port, notifier=None):
         return await gw.command(
             "mode", gw.port.set_mode(body.mode, who.name, body.reason, body.cancel_running)
         )
+
+    @api.get("/maintenance", response_model=models.MaintenanceList, tags=["recovery"])
+    async def maintenance(who=Depends(viewer)):
+        """Components under maintenance: rules and the agent keep off them, notifications about them
+        are not sent; operators still act."""
+        return {"maintenance": gw.maintenance()}
+
+    @api.post("/maintenance", response_model=models.Outcome, tags=["recovery"])
+    async def start_maintenance(body: models.MaintenanceRequest, who=Depends(operator)):
+        """Puts a component under maintenance for `minutes` (again: renews it)."""
+        return await gw.command(
+            "maintenance", gw.port.set_maintenance(body.component, body.minutes * 60, who.name, body.reason)
+        )
+
+    @api.delete("/maintenance/{component}", response_model=models.Outcome, tags=["recovery"])
+    async def end_maintenance(component: str, who=Depends(operator)):
+        """Ends a component's maintenance now: rules and the agent may act on it again."""
+        return await gw.command("maintenance", gw.port.set_maintenance(component, 0, who.name))
 
     @api.get("/plans", response_model=models.Plans, tags=["recovery"])
     async def plans(who=Depends(viewer), hours: float = 24.0):

@@ -48,7 +48,7 @@ def generate_launch_description():
             "gateway": arg("gateway"),
             "gateway_host": arg("gateway_host"),
             "gateway_port": arg("gateway_port"),
-            "gateway_config": str(DEMO / "config" / "gateway.yaml"),
+            "gateway_config": arg("gateway_config"),
             "agent": arg("agent"),
         }.items(),
     )
@@ -73,6 +73,11 @@ def generate_launch_description():
             DeclareLaunchArgument("gateway", default_value="true", description="Serve API and dashboard"),
             DeclareLaunchArgument("gateway_host", default_value="127.0.0.1"),
             DeclareLaunchArgument("gateway_port", default_value="8080"),
+            DeclareLaunchArgument(
+                "gateway_config",
+                default_value=str(DEMO / "config" / "gateway.yaml"),
+                description="Gateway settings: a copy of the demo's, with a fleet to watch, say",
+            ),
             DeclareLaunchArgument("agent", default_value="true", description="Analyze what goes wrong"),
             jarvis,
             Node(
